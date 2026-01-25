@@ -1,0 +1,879 @@
+*Build me an aesthetically pleasing, minimalist UI app called "Afterword" using Flutter.** 
+
+### **1. Project Overview & Vibe**
+
+• **Target Platform:** **Android First**. (Build using Flutter for cross-platform potential, but optimize testing and release strictly for Android initially).
+
+• The app is a "Dead Man’s Switch" and "Digital Time Capsule." It addresses the core anxiety: *"What happens to my secrets if I die or disappear?"*
+
+• * **The Core Function:** Users set a "Check-in Timer" (Default: 30 Days). If they fail to open the app to reset the timer before it expires, the system automatically executes a pre-set protocol: either sending encrypted messages to specific beneficiaries or permanently destroying the data.
+
+• * **The Aesthetic:** The UI must be minimalist, cinematic, and high-trust. Use deep OLED blacks, warm ambers/golds, and clean, high-end sans-serif typography. It should feel like a secure Swiss bank vault or a flight recorder, not a social media app.
+
+• * **The Hero Interaction (The Pulse):** Instead of a standard button, the home screen features a "Breathing Ring" icon (a thin, abstract circle that slowly fades in and out).
+
+• * **Automatic Reset:** The timer MUST reset automatically in the background (`initState`) the moment the app is opened. The user is not required to touch anything.
+
+• * **Manual Reset:** The "Pulse" ring is there for psychological reassurance. If the user **Long Presses** the ring, it fills up visually, triggers a haptic vibration, and displays "Signal Verified." This confirms the timer has been reset.
+
+
+
+### **2. The Tech Stack (Zero-Cost Architecture)**
+
+• We must strictly adhere to this stack to ensure the app costs $0 to run until we generate revenue.
+
+• **Mobile App:** Flutter (Dart). **Android First**.
+
+• **Backend & Auth:** Supabase (Free Tier). Use PostgreSQL for the database and Supabase Auth for users.
+
+• **Authentication Method:** Google Sign-In ONLY.
+
+• **Storage:** Supabase Storage (for Audio/Images).
+
+• **Automation (The Heartbeat):** GitHub Actions running a Python script. This runs once every 24 hours to check user timers.
+
+• **Email Service:** Resend API (Free Tier). To deliver the final "Unlock" emails.
+
+• **Web Viewer:** A simple HTML/JS page hosted on Vercel (Free). This allows beneficiaries to decrypt and view messages in their browser.
+
+• **Payments:** RevenueCat. To handle Subscriptions and Lifetime purchases.
+
+• **Notifications:** `flutter_local_notifications` (Primary) + Firebase Cloud Messaging (Secondary).
+
+### **3. Core App Mechanics**
+
+• **The Master Timer:** Every user has one main countdown timer. It starts counting immediately upon account creation.
+
+• **Default Duration:** **30 Days** (Fixed for Free Users).
+
+
+• **User Identity:**
+• **Sender Name:** When signing up with Google, capture the default name but provide an **Editable Field** in Settings called "Sender Name." The user can change this to something recognizable like "Dad" or "Honey." This name is used in the Subject Line of final emails (e.g., "Message from Dad") to prevent them from looking like spam.
+• **Account Retention:** We never delete the User Profile (the account row in the database). We only delete the Vault Data. This allows users to return years later, log in via Google, and start fresh without re-registering.
+
+
+• **The Vault (One-to-Many Routing):**
+• Users can add multiple "Items" to their vault.
+• **Per-Item Logic:** Each item acts independently. The user must assign a specific Beneficiary Email for *each* item. (e.g., Bank Info sends to Wife; Confession sends to Brother).
+• **Validation:** If the Item Action is set to "Send," the user cannot save the item without entering a valid email address.
+• **Abuse Protection:** Rate limit creation to **max 1 item every 5 seconds** (client + server).
+• **Per-Letter Cap:** Silently cap each plaintext item at **50,000 characters** to prevent crashes (no UI counter).
+
+
+
+### **4. Security Architecture (The Trust Layer)**
+
+• **App Lock:** Integrate `local_auth`. The app must require 6 digit PIN authentication immediately upon launch or resume.
+
+• **Client-Side Encryption (Zero Knowledge):** Use `flutter_sodium` or AES-256. All text and audio must be encrypted *on the device* before being uploaded. The server (and the Admin) must never see raw data.
+
+• **Encrypted Metadata:** The `recipient_email` column in the database must be encrypted. Only the Python automation script should be able to decrypt this to send the email. This prevents database admins from snooping on who the beneficiaries are.
+
+• **Integrity Check (HMAC Binding):**
+• *The Problem:* Preventing a malicious Admin from swapping a beneficiary's email in the database to their own email to steal the data.
+• *The Solution:* When the user saves an item, the App must generate a "Signature" of the `(EncryptedData + RecipientEmail)` using a hidden, device-generated key (stored in secure storage).
+• *The Verification:* The Python script checks this Signature before sending. If the Admin changed the email in the database, the Signature will not match.
+• *The Consequence:* If a mismatch is detected, the script must **DELETE the data immediately** (Safety Protocol). Do not send the compromised data.
+
+
+• **Anti-Hack Policies:** Use Supabase Row Level Security (RLS). The database must reject file uploads if the user does not have a valid "Pro" or "Lifetime" status.
+
+### **5. Pricing Plans & Features**
+
+• **Free Plan:**
+• **Limit:** Max 3 Text Items.
+• **Mode:** "Send" Mode Only (Standard Legacy).
+• **Timer:** **Fixed at 30 Days.** (User cannot change this).
+• **Warning System:** Relies on **Local Push Notifications ONLY.** No email warnings.
+
+• **Pro Monthly ($1.99/mo) or Annual ($19.99/yr):**
+• **Limit:** Unlimited Text Items.
+• **Feature:** **"Protocol Zero" (Destruction Mode).** This allows the user to set items to *Delete* instead of *Send* here email is not required as data will get deleted after the duration chose if user stays inactive.
+• **Feature:** **Custom Timers.** User can unlock the timer settings and adjust their check-in frequency from 7 days **up to 365 days (1 Year)**.
+• **Warning System:** Local Push + **Server-Side Email Warning.** This is the "Fail-Safe" for paid users.
+
+• **Lifetime Access ($99.99 One-Time):**
+• Includes ALL Pro features (Unlimited Text, Destruction Mode, Custom Timers up to 1 year).
+• **Feature:** **Audio Vault.**
+• **Audio Limit:** To prevent storage abuse, Lifetime users have a "Time Bank" of **10 Minutes Total**. They can record multiple files, but the total duration cannot exceed 10 minutes. If the limit is reached, disable the record button.
+
+
+
+### **6. Notification Strategy (Hybrid Model)**
+
+• To save costs, we rely on the phone's internal clock for most warnings, but provide a premium email backup for paid users.
+
+• **Local Notifications (For Everyone):** When the user checks in, the app cancels old alerts and schedules new local notifications for Day 10 ("Status: Secure"), Day 20 ("Reminder"), and Day 27 ("URGENT").
+
+• **Server Email (Paid Only):** If the user ignores all local alerts, the Python Script sends a "Final Warning" email on **Day 29**—but ONLY if the user is on a Paid Plan. The email is sent to user on same email they used during google auth sign in
+
+### **7. Automation Logic (The Python Script)**
+
+• The script runs every 24 hours via GitHub Actions. It follows this exact logic:
+
+• **Pass 1: The Warning (Day 29)**
+• Check: Is the user due for a check-in within 24 hours?
+• Filter: Is the user on a **Paid Plan** (Pro/Lifetime)? AND Is their Vault **Not Empty**?
+• *Action:* If yes, decrypt their email and send the "Final Warning." If they are Free or Empty, do nothing.
+
+• **Pass 2: The Execution (Day 30+)**
+• Check: Has the user timer expired? AND Is the Vault **Not Empty**?
+• *If Action is "Send":* Verify the HMAC Signature. If valid, decrypt the Recipient Email and send the message via Resend. The message includes the Link to the Web Viewer and the Decryption Key. Update the item status to `SENT`.
+• *If Action is "Destroy":* Immediately **DELETE** the row from the database. Do **not** send any email. The data simply vanishes.
+
+• **Pass 3: The Cleanup (Day 8 Post-Send)**
+• Check: Find items marked `SENT` that are older than 7 days.
+• *Action:* Hard Delete these rows and files permanently.
+
+
+
+### **8. User Return Scenarios (The "Lazarus" Logic)**
+
+• What happens if a user returns to the app *after* the timer expired?
+
+• **Case 1: User returns during the 7-Day Grace Period (Data was Sent)**
+• The user logs in. Show a "History" tab with the items marked as `SENT`.
+• Make these items **Read-Only**. The user can View them or Delete them, but cannot Edit them (since they were already emailed).
+• Allow the user to click the "Pulse" ring to reset the timer and start creating **new** items.
+
+• **Case 2: User returns after Day 8 (Data is Deleted)**
+• The user logs in. The Vault is empty.
+• Show a log entry: "Protocol Executed on [Date]. Data permanently erased."
+• The User Account is **still active**. They do not need to sign up again. They simply reset the timer and start fresh with a new vault.
+
+
+
+### **9. The Web Viewer (Vercel)**
+
+• This is a static HTML/JS page.
+
+• **Function:** It takes the Decryption Key (typed by the beneficiary), fetches the encrypted blob from Supabase, and uses Javascript to decrypt it **inside the browser**.
+
+• **Download:** Include a button allowing the beneficiary to download the decrypted Text (.txt) or Audio (.mp3) file to save the memory.
+
+
+
+
+###Important Things:###
+
+
+1: How to handle "Multiple Vaults" & Editing
+• Don't overcomplicate it. You don't want "Multiple Timers" (that is confusing). I want One Timer Per user (The Heartbeat) that controls Multiple Boxes.
+
+• The Architecture:
+
+• The User (Master Lock): The user has one check-in timer (e.g., "I am alive").
+
+• The Items (The Boxes): Inside the app, the user sees a list. They can add as many "Items" as they want.
+
+• Item 1: Text Note ("Crypto Keys") -> Set to: Destroy.
+
+• Item 2: Audio ("For Wife") -> Set to: Send to Wife.
+
+• Item 3: Text Note ("Secret recipe") -> Set to: Send to Brother.
+
+
+2: How "Edit/Delete" works with Encryption: Since everything is encrypted, you can't just "edit a word."
+
+• Unlock: User clicks the item. App decrypts it locally so they can see it.
+
+• Edit: User types new text.
+
+• Save: The App re-encrypts the whole thing (generating a new random noise blob) and overwrites the old row in Supabase.
+
+• Delete: Simple. The App tells Supabase DELETE FROM vault_entries WHERE id = XYZ. It is gone forever.
+
+
+3: Preventing "Mods" (Anti-Tamper Strategy)
+• Worried someone will download your APK, modify it to bypass the "Payment" screen, or try to steal data.
+
+• The Truth: You cannot 100% prevent someone from modifying the APK (e.g., WhatsApp mods exist). BUT, you can make it useless for them.
+
+• Rule 1: Logic on Server (The Golden Rule).
+
+• Never put logic like if (user_paid) { unlock_audio } solely in the app code.
+
+• Instead, use Row Level Security (RLS) in Supabase.
+
+• Policy: "Only allow INSERT into audio_table if user.subscription_status = 'premium'."
+
+• If a modded app tries to upload audio for a free user, Supabase will reject it with a 403 Forbidden error. The server is the gatekeeper.
+
+• Rule 2: Flutter Obfuscation.
+
+• When you build the app for release, use the --obfuscate flag. It turns your readable code into unreadable gibberish (symbols), making it very hard for hackers to reverse-engineer.
+
+• Command: flutter build apk --obfuscate --split-debug-info=/<project-name>/<directory>
+
+
+
+4: The Timer tracks YOU, not the files.
+
+• Think of it like a **building with a security guard.**
+
+• * The **Timer** is the Guard.
+• * The **Files** (Texts/Audios) are the boxes in the secure room.
+• * The **Creation Date** doesn't matter.
+
+### **How it works in practice:**
+
+• 1. **Day 1:** You sign up and set your timer to **30 Days**. You add a text note ("Bank Password").
+• * *System says:* "Okay, if I don't see Tejasvi by **Day 31**, I unlock everything."
+
+• 2. **Day 15:** You open the app to add a new note ("Love letter").
+• * *The Magic:* Just by opening the app, **the Timer resets**.
+• * *System says:* "Oh, Tejasvi is here! He is alive. I am resetting the countdown. Now everything is safe until **Day 45** (Day 15 + 30)."
+
+
+
+### **So, does it matter if I create them days apart?**
+
+• **No.**
+• Every time you open the app to add, edit, or just look at your vault, you are telling the system "I am still here." This protects **ALL** your items instantly.
+
+• It doesn't matter if you wrote a note 2 years ago or 2 minutes ago. As long as you checked in *recently*, the guard keeps the door locked.
+
+---
+
+• The Python script only looks at the **User Table**. If `Tejasvi` is "Late," it executes the action for **Item 1, 2, and 3** all at once.
+
+
+5: Can users add multiple beneficiary emails?
+• Yes. The best way to do this is "Per Item" rather than "Per Profile."
+
+• Instead of having just one "Main Beneficiary" for the whole account, allow the user to define the recipient for each specific secret.
+
+• Item 1 (Bank Passwords): Send to wife@example.com
+
+• Item 2 (Crypto Keys): Send to brother@gmail.com
+
+• Item 3 (Confession): Send to bestfriend@yahoo.com
+
+
+6: NO email is needed in case users choose destruction after xyz time (paid users)
+
+
+7: The timer starts as soon as the Gmail account is made (Sign Up).
+
+• Here is why, and how it handles "Empty Vaults":
+
+• 1. The Technical Reason (Simplicity)
+• When a user signs in with Google, your app creates a row in the profiles database table.
+
+• That row has a column: last_check_in.
+
+• By default, this is set to NOW() (the moment of sign-up).
+
+• Therefore, the countdown starts immediately from Day 1.
+
+• 2. The "Empty Vault" Scenario
+• You might be wondering: "What if they sign up, add nothing, and then forget the app? Will it send a blank email to no one?"
+
+• No. Your Python script handles this automatically with the logic we defined:
+
+• The Timer runs out (User is "Late").
+
+• The Script looks for Vault Items.
+
+• If Vault is Empty: The script finds 0 items to send. It simply marks the user as "Inactive" and does nothing. No emails are sent. No one is bothered.
+
+
+8: 1. "Even if note is deleted, it doesn't affect the timer?"
+• Correct. The timer watches YOU, not your notes.
+
+• You can add 50 notes and delete all of them. The timer keeps ticking based on when you last logged in. It doesn't care if the vault is full or empty.
+
+• 2. "If they delete everything, script sends nothing?"
+• Correct. This prevents the "Empty Email" embarrassment.
+
+• Scenario: You set a timer. You add a note. You get angry and delete the note. You disappear.
+
+• Result: The timer runs out. The script wakes up. It looks inside your vault and sees 0 Items. It shuts down without sending a single email.
+
+• 3. "If they make a note on Day 29, does the timer restart?"
+• Correct. This is the core "Check-in" mechanic.
+
+• Day 1: Timer starts (30 Days left).
+
+• Day 29: You open the app to write a new note.
+
+• The Magic: As soon as the app opens, it updates your last_check_in to Now.
+
+• Result: Your new deadline is 30 Days from today. You are safe until Day 59.
+
+
+9: This is the final set of "Edge Case" questions that define the difference between a buggy app and a professional platform.
+
+• Here is exactly how we handle the **Decryption Key**, **Editing**, **Post-Death Cleanup**, and the **"False Alarm"** scenario.
+
+### **1. The "Trust" Problem: Can *I* (the Admin) unlock their data?**
+
+• **The Hard Truth:** If your Python script needs to email the key to the beneficiary, then your system **must** technically have access to that key.
+
+• * **"What if I unlock it?"** Yes, technically, if you are a malicious admin with full database access and the encryption keys, you *could*.
+• * **How to protect yourself (and the user):** You implement **"Encryption at Rest"** for the Key itself.
+• * **The Setup:** The User's device generates a random **Data Key**. This key encrypts their secret.
+• * **The Storage:** You do **not** store the Data Key plainly in Supabase. You encrypt the *Key itself* using a **Master Server Secret** (which you hide in GitHub Secrets, not the database).
+• * **The Result:** If you look at your Supabase database, you see:
+• * `Secret_Message`: `ksjdf8723kjsd...` (Gibberish)
+• * `Decryption_Key`: `98234lkjfsd...` (Gibberish)
+
+
+• * **The Safety:** You cannot read it just by looking at the table. The only thing that can read it is the **Python Script** during the official execution process. This prevents "accidental" snooping.
+
+
+### **2. What if the user Edits or Deletes?**
+
+• This is standard "CRUD" (Create, Read, Update, Delete) logic, but with security rules.
+
+• **User Edits Text:** The App decrypts the old text -> User types new text -> App re-encrypts it -> Overwrites the row in Supabase.
+
+• **User Edits Email:** Simple update to the `recipient_email` column.
+
+• **User Deletes Item:**
+• **Text:** Instantly `DELETE` the row. It is gone forever.
+• **Audio:** Instantly `DELETE` the file from Storage bucket **AND** the row from the database.
+• **Safety:** You don't keep backups of deleted user data. Once they delete, it must be truly gone.
+
+
+### **3. The "Death" Lifecycle: What happens *after* the email sends?**
+
+• We need a clean "Cleanup Protocol" so you aren't storing dead people's data forever (and paying for it).
+
+• **The Timeline:**
+
+• 1. **Day 0 (Deadline):** Script runs. Detects user is late.
+• 2. **Action:** Sends the Email with the Key + Link.
+• 3. **Immediate Step:** The script updates the item status from `Active` to `Sent` (or `Released`).
+• 4. **Day 7 (The Grace Period):** We keep the data for **7 Days** just in case the email went to Spam and the beneficiary needs us to resend it.
+• 5. **Day 8 (The Purge):** The script runs a "Cleanup" job. It finds all items marked `Sent` > 7 days ago.
+• * It **permanently deletes** the encrypted text/audio files.
+• * It **keeps** the User Profile (row) but marks it as `Archived`.
+• * *Why keep the profile?* So if the user (who might not be dead, just in a coma) wakes up 6 months later, they can log in and see: *"Status: Account Archived. Messages Sent on Jan 22."*
+
+
+
+### **4. The "False Alarm" (The User comes back alive)**
+
+• Suppose the user was just stranded on an island, missed the deadline, and the emails were sent.
+
+• **Scenario:** Emails sent on Monday. User logs in on Wednesday.
+• **Login:** They **CAN** still log in. We never delete their account/login ability, only the *Vault Data*.
+• **The View:** They see an empty vault (or a log saying "Sent to Wife").
+• **The Reset:**
+• They click "I AM ALIVE."
+• The system sets their status back to `Active`.
+• The Timer resets.
+• They can create **new** notes.
+• *Note:* The old notes are gone (sent/scheduled for delete). They cannot "un-send" the email, but they can secure their account for the future.
+
+---
+
+### **Final Updated Logic 
+
+> **6. Security & Cleanup Protocols (CRITICAL)**
+> * **Key Storage (The "Blind Admin" Rule):**
+> * The `decryption_key` for each vault item must be stored in the database **Encrypted**, using a `SERVER_SECRET` (AES) that is stored ONLY in **GitHub Secrets** and the **Flutter App Build Env**. It must NOT be visible as plain text in the Supabase Table.
+> * *Goal:* I (the admin) should see only gibberish in the database. Only the App (for the user) and the Script (for the beneficiary) can unlock it.
+> 
+**If the data is still on the server (Day 1-7), the user SHOULD be able to see it.**
+
+### **The Correct "Lazarus" Logic (User Comes Back Alive)**
+
+• If the user logs in **after** the email was sent (Monday) but **before** the 7-day deletion (Next Monday):
+
+• 1. **Login:** They log in successfully.
+• 2. **The Dashboard:** They see a big **Red Alert**: *"Protocol Executed on Monday. Emails have been sent."*
+• 3. **The Data:**
+• * **Old Logic (Wrong):** Vault is empty.
+• * **New Logic (Correct):** They see their items marked as **"SENT / ARCHIVED"**.
+• * **Can they edit?** **No.** (It’s already emailed; editing now changes nothing for the recipient).
+• * **Can they view?** **Yes.** (It’s still on the server).
+• * **Can they delete?** **Yes.** (If they want to scrub it immediately before the 7-day auto-purge).
+
+> **6. Security & Cleanup Protocols (CORRECTED)**
+> * **Post-Send Retention (7-Day Wipe):**
+> * When the script sends the data to the beneficiary, change the Vault Item status from `ACTIVE` to `SENT`.
+> * **Do not delete immediately.** Keep the encrypted data for **7 Days**.
+> * **Auto-Deletion Job:** Create a scheduled job that runs daily: `DELETE FROM vault_entries WHERE status = 'SENT' AND sent_at < (NOW() - 7 DAYS)`.
+> 
+> 
+> * **The "Lazarus" Scenario (User Returns Early):**
+> * If a user logs in **during the 7-day retention period**:
+> * **Do NOT show an empty vault.**
+> * Show the `SENT` items in a "History" or "Archive" section.
+> * **Restriction:** Make these items **Read-Only** (since they were already emailed). The user can view them or delete them, but cannot edit them.
+> * **Reset:** Allow the user to click "I AM ALIVE" to reset their timer and start creating **new** `ACTIVE` items for the future.
+
+
+• Now the logic holds up:
+
+• * **Monday:** Sent.
+• * **Wednesday:** User logs in -> Sees "Sent" items (Read Only).
+• * **Next Monday:** Data is deleted forever -> Vault History shows "Expired/Deleted."
+
+
+10: The Data (Vault Items): Ephemeral. If the timer dies, the data dies (after 7 days). 
+
+• The User (Account): Permanent. Their login, their name, and their "Active/Inactive" status stays in your database forever (unless they manually choose "Delete Account").
+
+
+11: keep an option for user to choose to permanently delete account which wipes all data
+
+
+12: The "Day 8+" Scenario (After Permanent Deletion)
+• Scenario: The user was gone for 40 days. The email was sent. The 7-day grace period passed. The data was scrubbed. The user logs in on Day 45.
+
+• Can they create new stuff? YES.
+
+• Do we delete their account? NO. Never delete the account (the profiles row).
+
+• What do they see?
+
+• They see a Clean Slate.
+
+• Ideally, show a "History Log" or "Activity" tab that says: "Protocol Executed on [Date]. Data permanently erased."
+
+• They click "Reset Timer" and start over from scratch with a fresh vault.
+
+• This is critical because it retains your user base. Even if they "died" (digitally), they can be "reborn" as a customer without signing up again.
+
+
+13: ONLY send email warning before data is sent or deleted to paid users but in case vault is empty, there is no point, only send even if one data exists
+
+
+
+14: 1. The "Destroy" Action (Protocol Zero)
+• "If we delete rows immediately, doesn't it delete data?"
+
+• YES. That is the point.
+
+• Who uses this? Journalists, activists, or people with secrets they never want anyone to see (e.g., private chats, incriminating documents).
+
+• The Goal: If they get arrested or die, they want this data to vanish from the face of the earth.
+
+• The Outcome: The script deletes the row. No email is sent. The data is gone forever. Beneficiaries get nothing.
+
+• 2. The "Send" Action (Legacy Mode)
+• "And how will we send beneficiary all data?"
+
+• This is the opposite of Destroy.
+
+• The Outcome: The script DOES NOT delete the data immediately.
+
+• The Step: It changes the status to SENT.
+
+• The Email: It sends the Encryption Key and a Link to the beneficiary.
+
+• The Deletion: It waits 7 Days, then deletes the data.
+
+• 3. The Vercel Site (The "Magic Decoder")
+• "How will the Vercel site be like?"
+
+• You cannot just email the beneficiary the data directly because it is encrypted.
+
+• If you email them the text, it looks like this: U2FsdGVkX1+98234...
+
+• Your grandma/wife cannot read that.
+
+• The Solution: The Vercel Website is a Secure Viewer.
+
+• What the Beneficiary Sees (The User Flow):
+
+• The Email:
+
+• "Tejasvi has left you a secure message. To view it, click the link below and enter this Security Key: BLUE-HORSE-99" [ OPEN VAULT ] (Button)
+
+• The Website (Vercel):
+
+• They click the link. It opens view.afterword-app.com.
+
+• The Look: Very clean. Black background. A white box in the center.
+
+• The Prompt: "Please enter the Security Key from your email."
+
+• The Magic (Decryption):
+
+• They type BLUE-HORSE-99.
+
+• They hit "Unlock."
+
+• Crucial Tech Part: The website takes the Encrypted Data from your server, mixes it with the Key they just typed, and decrypts it right there in their browser.
+
+• The Reveal: The gibberish turns into: "Hey honey, the bank account password is..." or plays the Audio file.
+
+
+15: Can the Admin (You) see the Beneficiary Email?
+• "Else I'll just edit emails to mine"
+
+• The Risk: You are right. If the database shows recipient_email: wife@gmail.com in plain text, a corrupt employee (or you) could change it to me@hacker.com, wait for the timer, and steal the key.
+
+• The Fix: Encrypt the Metadata (The "Blind Courier" System). We will instruct the developer to Encrypt the Email Address before saving it to the database.
+
+• How it works:
+
+• App: User types wife@gmail.com. App encrypts it -> U2FsdGVkX1... -> Saves to DB.
+
+• Database: You (looking at the dashboard) only see gibberish. You cannot edit it because you don't know the encryption format.
+
+• The Script: The Python script has a special "Master Key" (hidden in GitHub Secrets). It decrypts the email only for the split second it needs to send the message via Resend.
+
+• Result: You cannot see who the recipient is, and you cannot edit it to your own email without breaking the encryption.
+
+• 2. Is the Audio Encrypted?
+• Yes. It is white noise.
+
+• The Process:
+
+• Record: The app records the voice note (e.g., .m4a).
+
+• Scramble: Before uploading, the app takes the file's "bytes" and scrambles them using AES encryption.
+
+• Upload: The file uploaded to Supabase is basically a block of static noise.
+
+• The Protection: If you (Admin) download the file and try to play it in VLC Player, it will say "File Corrupted / Error." It is unplayable without the key.
+
+• 3. Can the Beneficiary Download?
+• Yes. On the Vercel "Web Viewer," once the Javascript decrypts the data, we will generate a temporary Download Button.
+
+• Text: "Download as .txt"
+
+• Audio: "Download as .mp3"
+
+
+16: he Vulnerability: You are 100% correct. If you (the Admin) have access to the database, you could technically:
+
+• Go to the vault_entries table.
+
+• Find a row with recipient_email (Encrypted).
+
+• Delete that string and paste your own encrypted email string.
+
+• Wait for the script to run.
+
+• The script sends the "Key" and "Data Link" to YOU instead of the wife.
+
+• The Fix: "Cryptographic Binding" (The Wax Seal) We prevent this by making the Data and the Email inseparable. We use a technique called HMAC (Hash-Based Message Authentication Code).
+
+• How "Binding" Stops You (The Admin)
+• When the User's App (Flutter) saves an item, it does a special math calculation on the phone:
+
+• The Formula: It takes the Encrypted_Data + Recipient_Email and mixes them together using the User's Password (which you don't have).
+
+• Signature = Hash(Data + Email + User_Secret)
+
+• The Storage: It saves this Signature in the database row.
+
+• The Check (Your Script): When your Python script tries to send the email, it runs the same math:
+
+• It looks at the Email in the DB.
+
+• It looks at the Data in the DB.
+
+• It calculates the Signature.
+
+• The Trap: If YOU changed the Email in the database, the Signature will not match.
+
+• The Result: The script sees the mismatch, logs "TAMPERING DETECTED," and refuses to send the email.
+
+• Conclusion: You can destroy the data (by messing with the table), but you cannot steal it (redirect it), because you cannot generate a valid Signature for your new email address without the user's password.
+
+
+17: Restricting the "Warning Email" to Paid Users does two things:
+
+• Reduces your costs to almost $0. (Free users cost you literally nothing now).
+
+• Creates a powerful upsell. "Don't trust your phone notifications? Get the Email Fail-Safe for $1.99."
+
+• Here are the answers to your questions and the final polish for the developer.
+
+• 1. Can I keep the Email Reminder for Paid Users only?
+• Yes.
+
+• Free Users: Rely 100% on Local Notifications. If their battery dies or they ignore the notification, the protocol executes. It is "High Risk, Free Reward."
+
+• Paid Users (Pro/Lifetime): Get the Server-Side Email Warning. This is the "Insurance Policy." Even if their phone is lost in a river, they get the email on their laptop.
+
+• 2. Should I add more features?
+• No. Stop. Your app is currently Perfectly Balanced.
+
+• It solves one problem (Dead Man's Switch).
+
+• It has three distinct tiers (Text, Destruction, Audio).
+
+• It is simple to build.
+
+• If you add more:
+
+• GPS Tracking: Privacy nightmare. Users will trust you less.
+
+• Social Verifiers: Too complex. "My friend didn't verify me!" -> Bugs.
+
+• Video: Too expensive for storage.
+
+• Stick to the current plan. Launch it. Get 10,000 users. Then ask them what they want.
+
+• 3. The "I AM ALIVE" Button (Aesthetic Upgrade)
+• You are right. "I AM ALIVE" feels a bit panic-inducing. Let's make it Cinematic and Abstract.
+
+• The Concept: "The Pulse"
+
+• Name: Don't use text. Use a visual.
+
+• The Icon: A simple, thin Ring or Fingerprint icon in the center of the screen.
+
+• Animation: It "breathes" (slowly fades in and out) with an Amber glow.
+
+• Action: Long Press (Hold) to check in.
+
+• Why Long Press? It feels intentional. A tap is accidental. A hold is a conscious choice.
+
+• Feedback: As they hold, the ring fills up. When full -> Haptic Vibration -> "Signal Received." 
+
+
+Finally This:
+
+I asked an expert what could possibly go wrong with my app, here is the list.
+
+So, make sure to keep my app safe.
+
+
+# A → Z: Everything that can go wrong (no fixes)
+
+## A
+
+* **Admin abuse** — privileged person edits DB, changes recipient, reads metadata.
+* **API abuse** — unauthenticated or abused endpoints used to enumerate or dump data.
+* **Account takeover** — OAuth/credentials stolen, attacker controls account.
+* **Automation abuse** — attacker triggers or manipulates the python automation.
+* **Asymmetric key mismanagement** — private keys exposed or mixed up.
+* **Aging backups leakage** — old backups contain keys/plaintext.
+* **Ambiguous state transitions** — items stuck in limbo (PENDING/FAILED/etc).
+* **Availability outages** — services (Supabase/Resend/Vercel) down.
+
+## B
+
+* **Backup resurrection** — deleted data returns from restores.
+* **Brute-force on web viewer** — guessing decryption keys or tokens.
+* **Broken idempotence** — repeated script runs cause duplication or lost state.
+* **Business-logic bugs** — wrong users get access from logic errors.
+* **Billing fraud** — payment/service abuse or chargebacks.
+* **Broken crypto libs** — vulnerable or outdated cryptography libs used.
+
+## C
+
+* **Credential leakage** — secrets in logs, CI, or builds.
+* **Clock/timestamp attacks** — time tampering on device or server.
+* **Canonicalization mismatch** — HMACs fail due to different encoding.
+* **Cross-site scripting (XSS)** on web viewer.
+* **Cross-origin (CORS) misconfig** allowing data access.
+* **Corrupted uploads** — partial or malformed encrypted data stored.
+* **Concurrent edits** causing inconsistent HMAC/versions.
+
+## D
+
+* **Double-send** — email sent twice due to race or replay.
+* **Data-remnant in caches** — CDN, browser cache, or proxies keep copies.
+* **Deleted-but-backed-up** — “deleted” items present in snapshots.
+* **Destructive automation bug** — mass-delete due to bad filter.
+* **Disclosure via email headers** — sensitive metadata in message headers.
+* **Dependency compromise** — malicious npm/pip package in build.
+
+## E
+
+* **Endpoint exposure** — admin or internal endpoints reachable publicly.
+* **Encryption misuse** — wrong mode/IV/nonce reuse or absent AEAD.
+* **Escrow/ownership ambiguity** — who legally controls keys/data.
+* **Email spoofing** — attackers forge emails to beneficiaries.
+* **Error logging leaks** — stack traces contain secrets.
+
+## F
+
+* **Forked workflows / replayed CI** — attacker replays historical GitHub Actions.
+* **Failed rollbacks** — partial rollbacks leave system inconsistent.
+* **File orphaning** — storage objects without DB rows.
+* **Flooding / DoS** — create accounts/upload floods to exhaust resources.
+* **Forensic traces** — inadequate audit trail for incident review.
+
+## G
+
+* **Git secrets leakage** — secrets committed to repo or PRs.
+* **Garbage collection gaps** — deleted objects persist in cold storage.
+* **Granularity mistakes** — overly broad DB privileges or policies.
+* **Geo-jurisdiction exposure** — storing data in wrong legal region.
+
+## H
+
+* **HMAC key compromise** — attacker forges signatures or bypasses binding.
+* **Hijacked webhook** — attacker intercepts or fakes webhook calls.
+* **Human error** — support staff accidentally changes data.
+* **Hard-coded secrets** in mobile builds or frontend bundles.
+
+## I
+
+* **Idempotency failures** — non-repeat-safe operations produce double actions.
+* **Injection vulnerabilities** — SQL/command injection in inputs or scripts.
+* **Insider social engineering** — staff tricked into exposing access.
+* **Insecure temporary files** on device/server containing plaintext.
+
+## J
+
+* **Jurisdictional contradiction** — data laws conflict across regions.
+* **JWT misuse** — poorly validated tokens accepted, allowing impersonation.
+* **Job scheduling mistakes** — cron / GitHub Actions mis-timed or misconfigured.
+
+## K
+
+* **Key rotation breakage** — rotated keys render stored data unreadable.
+* **KMS compromise** — KMS account hijacked exposing key material.
+* **Key leakage in CI logs** — secrets printed in build logs.
+
+## L
+
+* **Leaked decryption keys in email** — keys sent in subject/body or URL.
+* **Liveness checks tampered** — attacker manipulates “I am alive” signal.
+* **Lack of monitoring** — automation fails silently with no alerts.
+* **Local-device compromise** — rooted/jailbroken phone exposing keys.
+
+## M
+
+* **MitM during transport** — TLS misconfig allowing interception.
+* **Malformed ciphertext** — decryption fails unexpectedly and is unrecoverable.
+* **Metadata leakage** — filenames, sizes, counts reveal secrets.
+* **Missing consent/legal docs** — legal exposure for irrevocable deletes.
+
+## N
+
+* **Nonce/IV reuse** causing ciphertext compromises.
+* **Noisy telemetry leaks** — analytics reveal usage/patterns.
+* **Notification abuse** — spamming or notification content leaking state.
+* **Network partition** leading to split-brain on status updates.
+
+## O
+
+* **Orphaned DB rows** referencing removed objects.
+* **Over-privileged service accounts** used by automation.
+* **Operational blindspots** — no SLOs, no on-call, no runbooks.
+* **Open redirect** on web viewer leading to phishing.
+
+## P
+
+* **Phishing of beneficiaries** imitating Afterword emails.
+* **Presigned URL errors** — long-lived or public URLs granting access.
+* **Permission misconfig** in Supabase buckets exposing files.
+* **Payment system failure** causing incorrect access changes.
+
+## Q
+
+* **Quota exhaustion** — storage/email limits reached due to abuse.
+* **Quality/consistency drift** — test coverage misses edge cases.
+* **Query performance collapse** — script slow or times out on large data.
+
+## R
+
+* **Replay attacks** — automation replay or message replay causes re-exec.
+* **Race conditions** — edit vs automation causes wrong payloads sent.
+* **Resend provider failure** — email provider outage without detect.
+* **RLS bypass** — Row-Level Security misconfigured allowing reads/writes.
+
+## S
+
+* **Supply chain compromise** — malicious dependency in build chain.
+* **Script RCE potential** — unsafe deserialization or shell invocation.
+* **Side-channel leaks** — timing/padding/oracle attacks revealing plaintext.
+* **Socket/exposed DB ports** accessible publicly.
+* **Snooping by cloud admins** — privileged cloud staff access.
+
+## T
+
+* **Time calculation bugs** — off-by-one-day, DST, timezone errors.
+* **Tamper detection false positives** — canonicalization mismatch causing false alarms.
+* **Third-party data leak** — analytics or plugins leak PII.
+* **Token brute force** — insufficient token entropy or rate limits.
+
+## U
+
+* **Unauthorized mass deletes** — accidental or malicious bulk deletions.
+* **Unencrypted metadata** — emails/recipient stored plaintext.
+* **Unvalidated inputs** causing injection or malformed actions.
+* **Unrecoverable corruption** — bad writes permanently corrupting data.
+
+## V
+
+* **Version skew** — app and script have incompatible crypto/version behavior.
+* **Vulnerability windows** — long delays between vulnerability discovery and patch.
+* **Visibility gaps** — no audit trail for specific destructive ops.
+* **Vendor lock-in failure modes** — provider outage impacting core flows.
+
+## W
+
+* **Weak randomness** — predictable tokens or keys.
+* **Wrong side-effects** — send triggers deletion due to bad flag logic.
+* **Web viewer XSS/CSP bypass** exposing decrypted content.
+* **Webhook replay or forged webhook** executing unauthorized flows.
+
+## X
+
+* **XML external entity (XXE)** through any XML parsing in stack.
+* **X-Forwarded-For spoofing** causing incorrect IP-based logic.
+* **XSS via beneficiary input** (if any rich text allowed).
+
+## Y
+
+* **Year/Date edge cases** — leap years, leap seconds causing expiry mismatch.
+* **Young users / minors** storing sensitive material without guardian consent.
+* **Yielding to dependency failures** — system silently tolerates degraded crypto libs.
+
+## Z
+
+* **Zero-day exploit** in any dependency leading to mass compromise.
+* **Zombie processes** replaying old automation actions after restore.
+* **Zone misconfiguration** — DNS mispointing exposing staging/prod.
+* **Zero-visibility admin actions** — no logging of who triggered destructive ops.
+
+MAKE SURE ALL RISKS ARE WORKED UPON TOO:
+
+Risk #1: Version skew (App vs Script)
+
+If Flutter encrypts one way and Python decrypts slightly differently:
+
+Boom → permanent data loss
+
+No recovery
+
+Users rage
+
+🔥 Risk #2: Time bugs
+
+DST. Timezones. Device clock lies.
+
+You already did the right thing by:
+
+Trusting server time for execution
+
+Using device only for local reminders
+
+But be strict:
+
+last_check_in must be server-side timestamp
+
+script must treat time as UTC-only
+
+No exceptions.
+
+🔥 Risk #3: Web Viewer brute force
+
+Humans choose trash keys unless you force entropy.
+
+If someone can:
+
+Guess keys
+
+Hammer the viewer
+
+Then encryption means nothing.
+
+
+
+
+
