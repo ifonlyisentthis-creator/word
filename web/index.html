@@ -26,104 +26,131 @@
     <div class="background">
       <div class="glow glow--one"></div>
       <div class="glow glow--two"></div>
+      <div class="glow glow--three"></div>
       <div class="gridlines"></div>
     </div>
 
     <div class="page">
       <header class="site-header">
-        <div class="logo">Afterword</div>
+        <div class="logo">
+          <span class="logo__mark">Afterword</span>
+          <span class="logo__tag">Secure legacy protocol</span>
+        </div>
         <nav class="nav">
-          <a href="#how">How it works</a>
+          <a href="#overview">Overview</a>
+          <a href="#value">Why Afterword</a>
           <a href="#security">Security</a>
+          <a href="#protocol">Protocol</a>
           <a href="#plans">Plans</a>
           <a href="#faq">FAQ</a>
         </nav>
-        <a class="button ghost" href="#plans">Get the app</a>
+        <div class="header-actions">
+          <a class="button ghost" href="mailto:hello@afterword-app.com">
+            Talk to us
+          </a>
+          <a class="button primary" href="#plans">Get the app</a>
+        </div>
       </header>
 
       <main>
-        <section class="hero">
-          <div class="hero__content">
-            <span class="eyebrow">Secure legacy protocol</span>
-            <h1>When you stop checking in, Afterword delivers what matters.</h1>
+        <section id="overview" class="hero">
+          <div class="hero__copy">
+            <span class="eyebrow">Zero-knowledge legacy vault</span>
+            <h1>
+              When the heartbeat stops, your words arrive exactly as you
+              intended.
+            </h1>
             <p>
-              Afterword is a private vault for the words, instructions, and
-              voice notes you never want to lose. Everything stays encrypted on
-              your device. If your check-in timer expires, your protocol sends
-              or destroys your vault exactly as you set it.
+              Afterword is a premium vault for the messages, instructions, and
+              voice notes you never want lost. Encryption happens on-device.
+              When your timer expires, your protocol sends or destroys every
+              item exactly as you set it.
             </p>
             <div class="hero__actions">
-              <a class="button primary" href="#plans">Explore plans</a>
-              <a class="button ghost" href="#security">See the security</a>
+              <a class="button primary" href="#plans">Start with Afterword</a>
+              <a class="button ghost" href="#protocol">See the protocol</a>
             </div>
             <div class="hero__stats">
               <div class="stat card">
-                <h3>30-day default timer</h3>
-                <p>Customizable up to 365 days on Pro & Lifetime.</p>
+                <h3>30-day default heartbeat</h3>
+                <p>Extend up to 365 days with Pro and Lifetime.</p>
               </div>
               <div class="stat card">
-                <h3>Zero-knowledge encryption</h3>
-                <p>Messages are encrypted before they ever leave your phone.</p>
+                <h3>End-to-end encryption</h3>
+                <p>Your data stays encrypted from device to storage.</p>
+              </div>
+              <div class="stat card">
+                <h3>Recipient-safe viewer</h3>
+                <p>Beneficiaries unlock with a private security key.</p>
               </div>
             </div>
+            <div class="signal-row">
+              <span class="signal">AES-256 encryption</span>
+              <span class="signal">HMAC integrity seal</span>
+              <span class="signal">Zero-knowledge storage</span>
+            </div>
           </div>
-          <div class="hero__visual card">
+          <div class="hero__panel card">
+            <span class="panel__eyebrow">Protocol preview</span>
             <div class="pulse">
               <div class="pulse__ring"></div>
               <div class="pulse__core"></div>
               <span>Hold to check in</span>
             </div>
-            <div class="hero__summary">
-              <p>
-                The heartbeat keeps your vault locked. If it stops, the
-                protocol executes.
-              </p>
-              <div class="chip-row">
-                <span class="chip">Send to someone</span>
-                <span class="chip">Destroy forever</span>
-                <span class="chip">Audio vault</span>
+            <div class="panel__details">
+              <div class="detail">
+                <span class="detail__label">Timer</span>
+                <p>Default 30 days with premium extensions.</p>
               </div>
+              <div class="detail">
+                <span class="detail__label">Outcome</span>
+                <p>Send or destroy each item automatically.</p>
+              </div>
+              <div class="detail">
+                <span class="detail__label">Access</span>
+                <p>view.afterword-app.com unlocks sent items only.</p>
+              </div>
+            </div>
+            <div class="panel__note">
+              <h4>Always private</h4>
+              <p>Afterword never sees your plaintext or security keys.</p>
             </div>
           </div>
         </section>
 
-        <section id="how" class="section">
+        <section id="value" class="section">
           <div class="section__header">
-            <span class="eyebrow">How it works</span>
-            <h2>The Afterword protocol, step by step.</h2>
+            <span class="eyebrow">Built for high stakes</span>
+            <h2>Everything a premium legacy vault should deliver.</h2>
             <p>
-              One timer controls every item. Check in before it expires and
-              nothing is released.
+              Your protocol controls the message lifecycle, while encryption and
+              tamper seals keep the vault untouchable.
             </p>
           </div>
-          <div class="grid">
-            <article class="card step reveal">
-              <h3>1. Set your timer</h3>
-              <p>
-                Choose a check-in cadence. The default is 30 days, adjustable
-                on Pro and Lifetime.
-              </p>
+          <div class="feature-grid">
+            <article class="card feature reveal">
+              <h3>Zero-knowledge encryption</h3>
+              <p>Keys are generated on your device and never leave it.</p>
             </article>
-            <article class="card step reveal">
-              <h3>2. Add vault entries</h3>
-              <p>
-                Write messages, add recipients, or record audio. Everything is
-                encrypted on your device.
-              </p>
+            <article class="card feature reveal">
+              <h3>Protocol Zero</h3>
+              <p>Destroy vault items instead of sending when required.</p>
             </article>
-            <article class="card step reveal">
-              <h3>3. Stay secure</h3>
-              <p>
-                Open Afterword and hold the pulse to reset the timer. Your vault
-                stays locked and private.
-              </p>
+            <article class="card feature reveal">
+              <h3>Recipient-safe viewer</h3>
+              <p>Unlock sent items with a private key, no login required.</p>
             </article>
-            <article class="card step reveal">
-              <h3>4. Protocol executes</h3>
-              <p>
-                If you miss the deadline, Afterword sends or destroys each item
-                based on your instructions.
-              </p>
+            <article class="card feature reveal">
+              <h3>Automated warnings</h3>
+              <p>Pro users receive a final email warning before execution.</p>
+            </article>
+            <article class="card feature reveal">
+              <h3>Audio vault</h3>
+              <p>Lifetime members get a 10 minute encrypted audio bank.</p>
+            </article>
+            <article class="card feature reveal">
+              <h3>Integrity seals</h3>
+              <p>HMAC signatures detect tampering and protect recipients.</p>
             </article>
           </div>
         </section>
@@ -131,36 +158,65 @@
         <section id="security" class="section">
           <div class="section__header">
             <span class="eyebrow">Security model</span>
-            <h2>Built so even the admin can’t peek.</h2>
+            <h2>Built so even the admin cannot peek.</h2>
+            <p>
+              Your device encrypts every message, email, and audio file before
+              upload. The server only stores ciphertext.
+            </p>
           </div>
-          <div class="grid grid--security">
-            <article class="card reveal">
-              <h3>Client-side encryption</h3>
-              <p>
-                Your device generates a random key for every entry and encrypts
-                the data before upload. The server only sees ciphertext.
-              </p>
-            </article>
+          <div class="security-grid">
             <article class="card reveal">
               <h3>Encrypted recipients</h3>
-              <p>
-                Recipient emails are encrypted, so database admins cannot swap
-                addresses without breaking the seal.
-              </p>
+              <p>Recipient addresses are encrypted to prevent swaps.</p>
             </article>
             <article class="card reveal">
-              <h3>HMAC tamper seal</h3>
-              <p>
-                Every message is signed with a device secret. If anything is
-                altered, the system deletes the data instead of sending it.
-              </p>
+              <h3>Client-side keys</h3>
+              <p>Keys are created on-device and never stored server-side.</p>
             </article>
             <article class="card reveal">
-              <h3>Audio vault protection</h3>
-              <p>
-                Voice notes are encrypted into noise before storage. Without the
-                key, they are unplayable.
-              </p>
+              <h3>Audio locked as noise</h3>
+              <p>Voice notes are encrypted into noise before storage.</p>
+            </article>
+          </div>
+          <div class="security-banner card reveal">
+            <h3>Security promises</h3>
+            <ul>
+              <li>No plaintext ever touches the database.</li>
+              <li>RLS policies enforce subscription gates and ownership.</li>
+              <li>Sent items remain readable for 7 days, then purge.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="protocol" class="section">
+          <div class="section__header">
+            <span class="eyebrow">Protocol flow</span>
+            <h2>The Afterword protocol, step by step.</h2>
+            <p>
+              One heartbeat controls every entry. Check in before it expires and
+              nothing is released.
+            </p>
+          </div>
+          <div class="protocol-grid">
+            <article class="card step reveal">
+              <span class="step__number">01</span>
+              <h3>Set the heartbeat</h3>
+              <p>Pick a cadence. Default is 30 days, adjustable on Pro.</p>
+            </article>
+            <article class="card step reveal">
+              <span class="step__number">02</span>
+              <h3>Secure your vault</h3>
+              <p>Write messages or audio. Everything encrypts locally.</p>
+            </article>
+            <article class="card step reveal">
+              <span class="step__number">03</span>
+              <h3>Check in</h3>
+              <p>Hold the pulse to reset the timer and keep items locked.</p>
+            </article>
+            <article class="card step reveal">
+              <span class="step__number">04</span>
+              <h3>Protocol executes</h3>
+              <p>Afterword sends or destroys entries exactly as instructed.</p>
             </article>
           </div>
         </section>
@@ -168,9 +224,9 @@
         <section id="plans" class="section">
           <div class="section__header">
             <span class="eyebrow">Plans</span>
-            <h2>Choose the level of control you need.</h2>
+            <h2>Choose the control level that fits your legacy.</h2>
           </div>
-          <div class="grid grid--plans">
+          <div class="pricing-grid">
             <article class="card plan reveal">
               <h3>Free</h3>
               <p class="plan__price">$0</p>
@@ -188,7 +244,7 @@
               <ul>
                 <li>Unlimited text items</li>
                 <li>Protocol Zero (Destroy)</li>
-                <li>7–365 day timers</li>
+                <li>7-365 day timers</li>
                 <li>Email fail-safe warning</li>
               </ul>
             </article>
@@ -198,58 +254,97 @@
               <ul>
                 <li>Everything in Pro</li>
                 <li>Audio vault</li>
-                <li>10-minute lifetime audio bank</li>
+                <li>10 minute lifetime audio bank</li>
                 <li>Priority protocol updates</li>
               </ul>
             </article>
+          </div>
+          <div class="comparison card reveal">
+            <div class="comparison__row comparison__head">
+              <span>Feature</span>
+              <span>Free</span>
+              <span>Pro</span>
+              <span>Lifetime</span>
+            </div>
+            <div class="comparison__row">
+              <span>Text items</span>
+              <span>3</span>
+              <span>Unlimited</span>
+              <span>Unlimited</span>
+            </div>
+            <div class="comparison__row">
+              <span>Protocol Zero</span>
+              <span>No</span>
+              <span>Yes</span>
+              <span>Yes</span>
+            </div>
+            <div class="comparison__row">
+              <span>Custom timers</span>
+              <span>30 days</span>
+              <span>7-365 days</span>
+              <span>7-365 days</span>
+            </div>
+            <div class="comparison__row">
+              <span>Email warning</span>
+              <span>No</span>
+              <span>Yes</span>
+              <span>Yes</span>
+            </div>
+            <div class="comparison__row">
+              <span>Audio vault</span>
+              <span>No</span>
+              <span>No</span>
+              <span>10 minute bank</span>
+            </div>
           </div>
         </section>
 
         <section id="faq" class="section">
           <div class="section__header">
             <span class="eyebrow">FAQ</span>
-            <h2>Clear answers, no jargon.</h2>
+            <h2>Clear answers, premium support.</h2>
           </div>
-          <div class="faq">
+          <div class="faq-grid">
             <div class="faq__item reveal">
               <h3>Can Afterword read my messages?</h3>
+              <p>No. Encryption happens on-device and keys never leave you.</p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>What if I check in late?</h3>
               <p>
-                No. Messages are encrypted on your device. The server stores
-                only encrypted blobs.
+                The protocol executes. Sent items stay visible for 7 days, then
+                purge.
               </p>
             </div>
             <div class="faq__item reveal">
-              <h3>What happens if I check in late?</h3>
-              <p>
-                If the deadline passes, the protocol executes your send or
-                destroy rules. Sent items remain visible for 7 days.
-              </p>
+              <h3>Can I update recipients?</h3>
+              <p>Yes. Edit any active entry and it re-encrypts on save.</p>
             </div>
             <div class="faq__item reveal">
-              <h3>Can I change recipients later?</h3>
-              <p>
-                Yes. Edit any active entry to update recipients or rewrite the
-                message. It re-encrypts on save.
-              </p>
-            </div>
-            <div class="faq__item reveal">
-              <h3>How does the audio vault work?</h3>
-              <p>
-                Audio is recorded, encrypted, and uploaded as noise. Lifetime
-                users have a 10-minute total time bank.
-              </p>
+              <h3>How do beneficiaries access items?</h3>
+              <p>They use view.afterword-app.com with the security key.</p>
             </div>
           </div>
         </section>
 
         <section class="cta">
           <div class="cta__content">
-            <h2>Everything you need to protect what matters.</h2>
+            <span class="eyebrow">Premium by design</span>
+            <h2>Protect the words that cannot wait.</h2>
             <p>
-              Afterword is Android-first and designed for real life. If you’re
-              ready to build your vault, start now.
+              Afterword is Android-first and built for real life. Start with
+              free, upgrade when you need complete control.
             </p>
-            <a class="button primary" href="#plans">Get Afterword</a>
+          </div>
+          <div class="cta__panel card">
+            <h3>Ready to build your vault?</h3>
+            <p>Join Afterword and secure your messages in minutes.</p>
+            <div class="hero__actions">
+              <a class="button primary" href="#plans">Get Afterword</a>
+              <a class="button ghost" href="mailto:hello@afterword-app.com">
+                Request access
+              </a>
+            </div>
           </div>
         </section>
       </main>
@@ -257,11 +352,13 @@
       <footer class="site-footer">
         <div>
           <div class="logo">Afterword</div>
-          <p>A secure vault for messages that should only be released on your terms.</p>
+          <p>A secure vault for messages released only on your terms.</p>
+          <span class="footer__meta">Beneficiary access: view.afterword-app.com</span>
         </div>
         <div class="footer__links">
+          <a href="#overview">Overview</a>
           <a href="#security">Security</a>
-          <a href="#faq">FAQ</a>
+          <a href="#plans">Plans</a>
           <a href="mailto:hello@afterword-app.com">Contact</a>
         </div>
       </footer>
