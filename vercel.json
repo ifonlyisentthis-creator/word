@@ -1,7 +1,25 @@
 {
   "rewrites": [
-    { "source": "/viewer", "destination": "/viewer/index.html" },
-    { "source": "/viewer/(.*)", "destination": "/viewer/$1" },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "view.afterword-app.com" }],
+      "destination": "/viewer/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "view.afterword-app.com" }],
+      "destination": "/viewer/$1"
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "afterword-app.com" }],
+      "destination": "/web/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "afterword-app.com" }],
+      "destination": "/web/$1"
+    },
     { "source": "/", "destination": "/web/index.html" },
     { "source": "/(.*)", "destination": "/web/$1" }
   ]
