@@ -117,6 +117,37 @@ function createDownloadButton(label, blob, filename) {
   return button;
 }
 
+function renderExpiredMessage(senderName) {
+  resultTitle.textContent = "Message Unavailable";
+  resultBody.innerHTML = "";
+  resultActions.innerHTML = "";
+
+  const intro = document.createElement("p");
+  intro.textContent = "This secure transmission has expired.";
+
+  const detail = document.createElement("p");
+  const sender = senderName || "the sender";
+  detail.textContent = `You are trying to access a secured message from ${sender}.`;
+
+  const policy = document.createElement("p");
+  policy.textContent =
+    "To protect the sender's privacy and security, all data in this vault was configured to permanently self-destruct 30 days after delivery.";
+
+  const finality = document.createElement("p");
+  finality.textContent =
+    "That time window has passed. In accordance with our Zero-Knowledge security protocols, the encryption keys have been shattered and the data has been permanently erased from our servers. It cannot be recovered by anyone, including our support team.";
+
+  const rule = document.createElement("hr");
+
+  resultBody.appendChild(intro);
+  resultBody.appendChild(detail);
+  resultBody.appendChild(policy);
+  resultBody.appendChild(finality);
+  resultBody.appendChild(rule);
+
+  resultEl.classList.remove("hidden");
+}
+
 async function unlock() {
   clearResult();
   if (!window.supabase) {
@@ -126,8 +157,8 @@ async function unlock() {
 
   const entryId = entryInput.value.trim();
   const keyValue = keyInput.value.trim();
-  if (!entryId || !keyValue) {
-    setStatus("Enter both the entry ID and security key.", "error");
+  if (!entryId) {
+    setStatus("Enter the entry ID from the email link.", "error");
     return;
   }
 
@@ -143,11 +174,40 @@ async function unlock() {
   unlockButton.disabled = true;
 
   try {
-    const keyBytes = base64ToBytes(keyValue);
     const client = supabase.createClient(
       config.supabaseUrl,
       config.supabaseAnonKey
     );
+
+    const { data: entryStatus, error: statusError } = await client.rpc(
+      "viewer_entry_status",
+      { entry_id: entryId }
+    );
+
+    if (statusError) {
+      throw new Error("Unable to verify message status.");
+    }
+
+    if (entryStatus?.state === "expired") {
+      renderExpiredMessage(entryStatus.sender_name);
+      setStatus("This transmission has expired.", "error");
+      return;
+    }
+
+    if (entryStatus?.state === "not_found") {
+      throw new Error("Entry not found or unavailable.");
+    }
+
+    if (entryStatus?.state === "unavailable") {
+      throw new Error("This message is not available yet.");
+    }
+
+    if (!keyValue) {
+      setStatus("Enter the security key from the email.", "error");
+      return;
+    }
+
+    const keyBytes = base64ToBytes(keyValue);
 
     const { data: entry, error } = await client
       .from("vault_entries")

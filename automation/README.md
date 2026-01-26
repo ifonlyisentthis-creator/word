@@ -4,7 +4,7 @@ This script runs daily to enforce the Afterword protocol:
 
 1. **Warning (Day 29)**: Paid users with non-empty vaults receive a final email.
 2. **Execution (Day 30+)**: Expired entries are sent (Send) or deleted (Destroy).
-3. **Cleanup (Day 8 post-send)**: Sent items older than 7 days are deleted and profiles archived.
+3. **Cleanup (Day 31 post-send)**: Sent items older than 30 days are deleted and profiles archived.
 
 ## Requirements
 
@@ -35,4 +35,4 @@ python automation/heartbeat.py
 
 - The script only unlocks entries with valid HMAC signatures.
 - Destroy-mode entries are deleted immediately on expiration.
-- Sent entries remain available for 7 days, then are purged.
+- Sent entries remain available for 30 days, then are purged.

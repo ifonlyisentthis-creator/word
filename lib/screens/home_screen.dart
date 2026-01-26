@@ -158,7 +158,7 @@ class _ProtocolBanner extends StatelessWidget {
         ? 'Protocol executed on $dateLabel. Your vault was empty, so nothing was sent.'
         : isArchived
             ? 'Protocol executed on $dateLabel. Data was permanently erased.'
-            : 'Protocol executed on $dateLabel. Sent items are read-only for 7 days.';
+            : 'Protocol executed on $dateLabel. Sent items are read-only for 30 days.';
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(

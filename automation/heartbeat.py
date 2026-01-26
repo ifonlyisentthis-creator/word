@@ -12,7 +12,6 @@ from supabase import create_client
 AUDIO_BUCKET = "vault-audio"
 PAID_STATUSES = {"pro", "lifetime", "premium"}
 WARNING_WINDOW = timedelta(days=1)
-RETENTION_PERIOD = timedelta(days=7)
 
 
 def get_env(name: str, default: str | None = None) -> str:
@@ -120,7 +119,8 @@ def send_unlock_email(
         f"Title: {entry_title}\n"
         f"Security Key: {security_key}\n"
         f"Open: {viewer_link}\n\n"
-        "The key decrypts the message in your browser."
+        "The key decrypts the message in your browser.\n\n"
+        "Important: This secure transmission expires 30 days after delivery."
     )
     html = (
         f"<p><strong>{sender_name}</strong> left you a secure message in Afterword.</p>"
@@ -128,6 +128,7 @@ def send_unlock_email(
         f"<p><strong>Security Key:</strong> {security_key}</p>"
         f"<p><a href=\"{viewer_link}\">Open the secure message</a></p>"
         "<p>The key decrypts the message in your browser.</p>"
+        "<p><strong>Important:</strong> This secure transmission expires 30 days after delivery.</p>"
     )
     send_email(resend_key, from_email, recipient_email, subject, text, html)
 
@@ -239,29 +240,8 @@ def process_expired_entries(
             print(f"Failed to send entry {entry['id']}: {exc}")
 
 
-def cleanup_sent_entries(client, now: datetime) -> None:
-    threshold = (now - RETENTION_PERIOD).isoformat()
-    response = (
-        client.table("vault_entries")
-        .select("id,user_id,audio_file_path")
-        .eq("status", "sent")
-        .lt("sent_at", threshold)
-        .execute()
-    )
-    entries = response.data or []
-    if not entries:
-        return
-
-    audio_paths = [entry["audio_file_path"] for entry in entries if entry.get("audio_file_path")]
-    if audio_paths:
-        client.storage.from_(AUDIO_BUCKET).remove(audio_paths)
-
-    entry_ids = [entry["id"] for entry in entries]
-    client.table("vault_entries").delete().in_("id", entry_ids).execute()
-
-    user_ids = sorted({entry["user_id"] for entry in entries})
-    if user_ids:
-        client.table("profiles").update({"status": "archived"}).in_("id", user_ids).execute()
+def cleanup_sent_entries(client) -> None:
+    client.rpc("cleanup_sent_entries", {}).execute()
 
 
 def main() -> int:
@@ -322,7 +302,8 @@ def main() -> int:
                     viewer_base_url,
                     now,
                 )
-            mark_profile_status(client, user_id, "inactive")
+            if (profile.get("status") or "").lower() != "archived":
+                mark_profile_status(client, user_id, "inactive")
             continue
 
         if remaining <= WARNING_WINDOW and is_paid(profile.get("subscription_status")):
@@ -334,7 +315,7 @@ def main() -> int:
                 send_warning_email(profile, deadline, resend_key, from_email)
                 mark_warning_sent(client, user_id, now)
 
-    cleanup_sent_entries(client, now)
+    cleanup_sent_entries(client)
     return 0
 
 

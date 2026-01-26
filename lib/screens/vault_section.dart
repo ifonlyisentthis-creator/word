@@ -269,7 +269,7 @@ class _VaultSectionView extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Sent items are read-only and retained for 7 days.',
+                'Sent items are read-only and retained for 30 days.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
