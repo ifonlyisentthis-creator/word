@@ -113,11 +113,16 @@
           </div>
           <div class="hero__panel card">
             <span class="panel__eyebrow">Protocol preview</span>
-            <div class="pulse">
-              <div class="pulse__ring"></div>
-              <div class="pulse__core"></div>
-              <span>Hold to check in</span>
-            </div>
+            <button
+              class="pulse"
+              type="button"
+              aria-label="Hold to check in"
+              data-hold
+            >
+              <div class="pulse__ring" aria-hidden="true"></div>
+              <div class="pulse__core" aria-hidden="true"></div>
+              <span class="pulse__label" data-hold-label>Hold to check in</span>
+            </button>
             <div class="panel__details">
               <div class="detail">
                 <span class="detail__label">Timer</span>
