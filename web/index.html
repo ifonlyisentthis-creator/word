@@ -34,24 +34,42 @@
     </div>
 
     <div class="page">
-      <header class="site-header">
-        <div class="logo">
-          <span class="logo__mark">Afterword</span>
-          <span class="logo__tag">Secure legacy protocol</span>
-        </div>
-        <nav class="nav">
-          <a href="#overview">Overview</a>
-          <a href="#value">Why Afterword</a>
-          <a href="#security">Security</a>
-          <a href="#protocol">Protocol</a>
-          <a href="#plans">Plans</a>
-          <a href="#faq">FAQ</a>
-        </nav>
-        <div class="header-actions">
-          <a class="button ghost" href="mailto:hello@afterword-app.com">
-            Talk to us
+      <header class="site-header" data-header>
+        <div class="header-bar">
+          <a class="logo" href="#overview">
+            <span class="logo__mark">Afterword</span>
+            <span class="logo__tag">Secure legacy protocol</span>
           </a>
-          <a class="button primary" href="#plans">Get the app</a>
+
+          <div class="header-bar__actions">
+            <a class="button primary header__cta" href="#plans">Get the app</a>
+            <button
+              class="header__toggle"
+              type="button"
+              aria-label="Open menu"
+              aria-expanded="false"
+              data-menu-toggle
+            >
+              <span class="header__toggle-lines" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="header-menu" data-menu>
+          <nav class="nav">
+            <a href="#overview">Overview</a>
+            <a href="#value">Why Afterword</a>
+            <a href="#security">Security</a>
+            <a href="#protocol">Protocol</a>
+            <a href="#plans">Plans</a>
+            <a href="#faq">FAQ</a>
+          </nav>
+          <div class="header-actions">
+            <a class="button ghost" href="mailto:hello@afterword-app.com">
+              Talk to us
+            </a>
+            <a class="button primary" href="#plans">Get the app</a>
+          </div>
         </div>
       </header>
 
