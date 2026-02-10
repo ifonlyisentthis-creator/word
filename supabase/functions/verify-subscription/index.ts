@@ -7,8 +7,9 @@
  *
  * Flow:
  *   1. Gateway JWT verification disabled (verify_jwt = false in config.toml)
- *      to match the metadata-crypto pattern. Auth is checked manually below.
- *   2. Extract user_id from the JWT
+ *      to match the metadata-crypto pattern. Auth is verified server-side
+ *      via Supabase /auth/v1/user (signature-checked, not just decoded).
+ *   2. Verify JWT and extract user_id via Supabase Auth API
  *   3. Call RevenueCat GET /v1/subscribers/{user_id}
  *   4. Determine status from entitlements + product IDs
  *   5. Update profiles.subscription_status via service_role
@@ -51,13 +52,29 @@ function corsHeaders(): Headers {
   return h;
 }
 
-function extractUserIdFromJwt(authHeader: string): string | null {
+/**
+ * Verify the JWT by calling Supabase Auth server-side.
+ * This ensures the token signature is valid — a forged JWT will be rejected.
+ */
+async function getVerifiedUserId(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  authHeader: string,
+): Promise<string | null> {
   try {
-    const token = authHeader.replace(/^bearer\s+/i, "");
-    const payloadB64 = token.split(".")[1];
-    if (!payloadB64) return null;
-    const payload = JSON.parse(atob(payloadB64));
-    return payload.sub || null;
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      method: "GET",
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: authHeader,
+      },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data && typeof data.id === "string" && data.id.length > 0) {
+      return data.id;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -76,17 +93,10 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // ── 1. Extract user ID from JWT ────────────────────────────────────
-  const authHeader = req.headers.get("authorization") || "";
-  const userId = extractUserIdFromJwt(authHeader);
-  if (!userId) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      headers,
-      status: 401,
-    });
-  }
-
-  // ── 2. Read secrets ────────────────────────────────────────────────
+  // ── 1. Read secrets ──────────────────────────────────────────────
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const rcSecret = Deno.env.get("REVENUECAT_API_SECRET") || "";
   if (!rcSecret) {
     return new Response(
@@ -96,8 +106,16 @@ Deno.serve(async (req: Request) => {
   }
   const entitlementId =
     Deno.env.get("REVENUECAT_ENTITLEMENT_ID") || "AfterWord Pro";
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+  // ── 2. Verify JWT server-side (prevents forged-token attacks) ────
+  const authHeader = req.headers.get("authorization") || "";
+  const userId = await getVerifiedUserId(supabaseUrl, supabaseAnonKey, authHeader);
+  if (!userId) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      headers,
+      status: 401,
+    });
+  }
 
   // ── 3. Call RevenueCat REST API ────────────────────────────────────
   let rcData: RevenueCatSubscriber;
