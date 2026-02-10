@@ -164,6 +164,8 @@ flutter:
 
     - assets/soul-fire/particles.png
 
+    - assets/fonts/
+
 
 
   # An image asset can refer to one or more resolution-specific "variants", see
