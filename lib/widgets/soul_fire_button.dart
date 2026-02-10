@@ -173,148 +173,202 @@ class _OrbPainter extends CustomPainter {
   final double flash;
   final bool completed;
 
-  static const _cyanLight = Color(0xFF00E5FF);
-  static const _deepBlue = Color(0xFF0077BE);
-  static const _paleCore = Color(0xFFCDFCFF);
+  // Cool palette (idle)
+  static const _cyan = Color(0xFF00E5FF);
+  static const _deepBlue = Color(0xFF0055AA);
+  static const _paleBlue = Color(0xFFCDFCFF);
+  // Warm palette (hold → confirm)
+  static const _amber = Color(0xFFFFB85C);
+  static const _gold = Color(0xFFFFD700);
+  static const _warmWhite = Color(0xFFFFF8E7);
+
+  Color _lerpHold(Color cool, Color warm) =>
+      Color.lerp(cool, warm, Curves.easeIn.transform(hold))!;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final orbRadius = size.width / 2 - 30;
-    final breathScale = 0.93 + breath * 0.07;
-    final holdBoost = hold;
+    final breathScale = 0.94 + breath * 0.06;
 
-    // ── 1. Light rays emanating outward ──
+    // ── 1. Outer light rays ──
     _drawLightRays(canvas, center, orbRadius, breathScale);
 
-    // ── 2. Wide ambient halo ──
-    final haloAlpha = 0.06 + holdBoost * 0.25;
-    final haloPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          _deepBlue.withValues(alpha: haloAlpha),
-          _cyanLight.withValues(alpha: haloAlpha * 0.4),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.45, 1.0],
-      ).createShader(
-          Rect.fromCircle(center: center, radius: orbRadius * 1.9));
+    // ── 2. Wide ethereal halo (shifts warm on hold) ──
+    final haloAlpha = 0.05 + hold * 0.20;
+    final haloColor = _lerpHold(_deepBlue, _amber);
     canvas.drawCircle(
-        center, orbRadius * 1.9 * breathScale, haloPaint);
+      center,
+      orbRadius * 2.0 * breathScale,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            haloColor.withValues(alpha: haloAlpha),
+            _lerpHold(_cyan, _gold).withValues(alpha: haloAlpha * 0.3),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.4, 1.0],
+        ).createShader(
+            Rect.fromCircle(center: center, radius: orbRadius * 2.0)),
+    );
 
     // ── 3. Inner glow ring ──
-    final ringAlpha = 0.10 + holdBoost * 0.35;
-    final ringPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          _cyanLight.withValues(alpha: ringAlpha),
-          _deepBlue.withValues(alpha: ringAlpha * 0.5),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.55, 1.0],
-      ).createShader(
-          Rect.fromCircle(center: center, radius: orbRadius * 1.3));
+    final ringAlpha = 0.08 + hold * 0.30;
+    final ringColor = _lerpHold(_cyan, _gold);
     canvas.drawCircle(
-        center, orbRadius * 1.3 * breathScale, ringPaint);
+      center,
+      orbRadius * 1.35 * breathScale,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            ringColor.withValues(alpha: ringAlpha),
+            _lerpHold(_deepBlue, _amber).withValues(alpha: ringAlpha * 0.4),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ).createShader(
+            Rect.fromCircle(center: center, radius: orbRadius * 1.35)),
+    );
 
-    // ── 4. Main orb body ──
-    final bodyPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          Color.lerp(
-              const Color(0xFF010812), const Color(0xFF0A2050), hold)!,
-          Color.lerp(
-              const Color(0xFF061430), const Color(0xFF1060B0), hold)!,
-          Color.lerp(
-              const Color(0xFF0070B0), const Color(0xFF00D4FF), hold)!,
-        ],
-        stops: const [0.0, 0.6, 1.0],
-      ).createShader(
-          Rect.fromCircle(center: center, radius: orbRadius));
-    canvas.drawCircle(center, orbRadius * breathScale, bodyPaint);
+    // ── 4. Main orb body (deep nebula → blazing core) ──
+    canvas.drawCircle(
+      center,
+      orbRadius * breathScale,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            _lerpHold(const Color(0xFF010A14), const Color(0xFF1A0800)),
+            _lerpHold(const Color(0xFF062040), const Color(0xFF4A2000)),
+            _lerpHold(const Color(0xFF0080C0), const Color(0xFFDD8800)),
+          ],
+          stops: const [0.0, 0.55, 1.0],
+        ).createShader(
+            Rect.fromCircle(center: center, radius: orbRadius)),
+    );
 
-    // ── 5. Luminous core (grows dramatically on hold) ──
-    final coreRadius =
-        orbRadius * (0.22 + breath * 0.06 + hold * 0.42);
-    final corePaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          Color.lerp(Colors.white, _paleCore, hold)!
-              .withValues(alpha: 0.95),
-          Color.lerp(const Color(0xFF90E4FF), const Color(0xFFC0F4FF), hold)!
-              .withValues(alpha: 0.6 + hold * 0.3),
-          _cyanLight.withValues(alpha: 0.15 + hold * 0.25),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.25, 0.65, 1.0],
-      ).createShader(
-          Rect.fromCircle(center: center, radius: coreRadius));
-    canvas.drawCircle(center, coreRadius, corePaint);
+    // ── 5. Nebula texture layer (subtle swirl) ──
+    _drawNebulaSwirls(canvas, center, orbRadius, breathScale);
 
-    // ── 6. Orbiting energy wisps ──
+    // ── 6. Luminous core (grows + shifts color on hold) ──
+    final coreR = orbRadius * (0.20 + breath * 0.05 + hold * 0.40);
+    canvas.drawCircle(
+      center,
+      coreR,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            _lerpHold(Colors.white, _warmWhite).withValues(alpha: 0.95),
+            _lerpHold(const Color(0xFF90E4FF), const Color(0xFFFFD080))
+                .withValues(alpha: 0.65 + hold * 0.25),
+            _lerpHold(_cyan, _amber).withValues(alpha: 0.12 + hold * 0.20),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.22, 0.60, 1.0],
+        ).createShader(Rect.fromCircle(center: center, radius: coreR)),
+    );
+
+    // ── 7. Orbiting energy wisps ──
     _drawWisps(canvas, center, orbRadius, breathScale);
 
-    // ── 7. Floating particles (small bright dots) ──
+    // ── 8. Floating particles with glow ──
     _drawParticles(canvas, center, orbRadius, breathScale);
 
-    // ── 8. Specular highlight ──
-    final specOff = center + Offset(-orbRadius * 0.22, -orbRadius * 0.28);
-    final specPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          Colors.white.withValues(alpha: 0.18 + hold * 0.12),
-          Colors.transparent,
-        ],
-      ).createShader(
-          Rect.fromCircle(center: specOff, radius: orbRadius * 0.35));
-    canvas.drawCircle(specOff, orbRadius * 0.35, specPaint);
-
-    // ── 9. Edge rim light ──
-    final rimPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5 + hold * 1.5
-      ..shader = SweepGradient(
-        colors: [
-          _cyanLight.withValues(alpha: 0.0),
-          _cyanLight.withValues(alpha: 0.15 + hold * 0.35),
-          _deepBlue.withValues(alpha: 0.08 + hold * 0.2),
-          _cyanLight.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 0.3, 0.7, 1.0],
-        transform: GradientRotation(orbit * 2 * pi),
-      ).createShader(
-          Rect.fromCircle(center: center, radius: orbRadius * breathScale));
+    // ── 9. Specular highlight (top-left) ──
+    final specOff = center + Offset(-orbRadius * 0.20, -orbRadius * 0.26);
     canvas.drawCircle(
-        center, orbRadius * breathScale, rimPaint);
+      specOff,
+      orbRadius * 0.30,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.20 + hold * 0.10),
+            Colors.transparent,
+          ],
+        ).createShader(
+            Rect.fromCircle(center: specOff, radius: orbRadius * 0.30)),
+    );
 
-    // ── 10. Flash on completion ──
+    // ── 10. Edge rim light (rotating sweep) ──
+    final rimColor = _lerpHold(_cyan, _gold);
+    canvas.drawCircle(
+      center,
+      orbRadius * breathScale,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2 + hold * 2.0
+        ..shader = SweepGradient(
+          colors: [
+            rimColor.withValues(alpha: 0.0),
+            rimColor.withValues(alpha: 0.18 + hold * 0.40),
+            _lerpHold(_deepBlue, _amber).withValues(alpha: 0.06 + hold * 0.18),
+            rimColor.withValues(alpha: 0.0),
+          ],
+          stops: const [0.0, 0.25, 0.65, 1.0],
+          transform: GradientRotation(orbit * 2 * pi),
+        ).createShader(
+            Rect.fromCircle(center: center, radius: orbRadius * breathScale)),
+    );
+
+    // ── 11. Second counter-rotating rim (subtler) ──
+    canvas.drawCircle(
+      center,
+      orbRadius * breathScale * 0.98,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8 + hold * 1.0
+        ..shader = SweepGradient(
+          colors: [
+            _lerpHold(_paleBlue, _warmWhite).withValues(alpha: 0.0),
+            _lerpHold(_paleBlue, _warmWhite).withValues(alpha: 0.08 + hold * 0.15),
+            _lerpHold(_paleBlue, _warmWhite).withValues(alpha: 0.0),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+          transform: GradientRotation(-orbit * 2 * pi * 0.7),
+        ).createShader(
+            Rect.fromCircle(center: center, radius: orbRadius * breathScale)),
+    );
+
+    // ── 12. Flash on completion ──
     if (flash > 0) {
-      final flashPaint = Paint()
-        ..color = Colors.white.withValues(alpha: (1 - flash) * 0.8);
-      canvas.drawCircle(center, orbRadius * 2.0, flashPaint);
+      final flashAlpha = (1 - flash) * 0.85;
+      canvas.drawCircle(
+        center,
+        orbRadius * (1.5 + flash * 0.8),
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              _warmWhite.withValues(alpha: flashAlpha),
+              _gold.withValues(alpha: flashAlpha * 0.5),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.4, 1.0],
+          ).createShader(Rect.fromCircle(
+              center: center, radius: orbRadius * (1.5 + flash * 0.8))),
+      );
     }
   }
 
   void _drawLightRays(
       Canvas canvas, Offset center, double orbRadius, double breathScale) {
-    const rayCount = 12;
-    final rayLength = orbRadius * (0.6 + hold * 1.2) * breathScale;
-    final baseAlpha = 0.03 + hold * 0.12;
+    const rayCount = 16;
+    final rayLength = orbRadius * (0.5 + hold * 1.4) * breathScale;
+    final baseAlpha = 0.025 + hold * 0.10;
     final rng = Random(77);
+    final rayColor = _lerpHold(_cyan, _gold);
 
     for (int i = 0; i < rayCount; i++) {
-      final angle = (i / rayCount) * 2 * pi + orbit * 2 * pi * 0.3;
-      final spread = 0.04 + rng.nextDouble() * 0.03;
-      final alpha = (baseAlpha + rng.nextDouble() * 0.02).clamp(0.0, 1.0);
+      final angle = (i / rayCount) * 2 * pi + orbit * 2 * pi * 0.25;
+      final spread = 0.03 + rng.nextDouble() * 0.025;
+      final alpha = (baseAlpha + rng.nextDouble() * 0.015).clamp(0.0, 1.0);
       final rayEnd = orbRadius * 0.85 + rayLength;
 
       final path = Path();
       final p1 = center +
-          Offset(cos(angle - spread) * orbRadius * 0.7,
-              sin(angle - spread) * orbRadius * 0.7);
+          Offset(cos(angle - spread) * orbRadius * 0.75,
+              sin(angle - spread) * orbRadius * 0.75);
       final p2 = center +
-          Offset(cos(angle + spread) * orbRadius * 0.7,
-              sin(angle + spread) * orbRadius * 0.7);
+          Offset(cos(angle + spread) * orbRadius * 0.75,
+              sin(angle + spread) * orbRadius * 0.75);
       final tip = center +
           Offset(cos(angle) * rayEnd, sin(angle) * rayEnd);
       path.moveTo(p1.dx, p1.dy);
@@ -322,68 +376,107 @@ class _OrbPainter extends CustomPainter {
       path.lineTo(p2.dx, p2.dy);
       path.close();
 
-      final rayPaint = Paint()
-        ..shader = RadialGradient(
-          center: Alignment.center,
-          colors: [
-            _cyanLight.withValues(alpha: alpha),
-            _cyanLight.withValues(alpha: alpha * 0.3),
-            Colors.transparent,
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(
-            Rect.fromCircle(center: center, radius: rayEnd));
-      canvas.drawPath(path, rayPaint);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              rayColor.withValues(alpha: alpha),
+              rayColor.withValues(alpha: alpha * 0.2),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.5, 1.0],
+          ).createShader(
+              Rect.fromCircle(center: center, radius: rayEnd)),
+      );
+    }
+  }
+
+  void _drawNebulaSwirls(
+      Canvas canvas, Offset center, double orbRadius, double breathScale) {
+    final rng = Random(99);
+    const count = 6;
+    final swirlColor = _lerpHold(
+        const Color(0xFF1090DD), const Color(0xFFCC7700));
+
+    for (int i = 0; i < count; i++) {
+      final baseAngle = (i / count) * 2 * pi;
+      final angle = baseAngle + orbit * 2 * pi * 0.15 + rng.nextDouble() * 0.5;
+      final dist = orbRadius * (0.25 + rng.nextDouble() * 0.45) * breathScale;
+      final sc = center + Offset(cos(angle) * dist, sin(angle) * dist);
+      final sr = orbRadius * (0.15 + rng.nextDouble() * 0.20);
+      final alpha = (0.04 + rng.nextDouble() * 0.04 + hold * 0.06).clamp(0.0, 1.0);
+
+      canvas.drawOval(
+        Rect.fromCenter(
+            center: sc, width: sr * 2.2, height: sr * 1.2),
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              swirlColor.withValues(alpha: alpha),
+              Colors.transparent,
+            ],
+          ).createShader(
+              Rect.fromCircle(center: sc, radius: sr * 1.2)),
+      );
     }
   }
 
   void _drawWisps(
       Canvas canvas, Offset center, double orbRadius, double breathScale) {
     final rng = Random(42);
-    const wispCount = 10;
+    const wispCount = 12;
+    final wispColor = _lerpHold(_cyan, _gold);
 
     for (int i = 0; i < wispCount; i++) {
       final baseAngle = (i / wispCount) * 2 * pi;
       final angle = baseAngle + orbit * 2 * pi + rng.nextDouble() * 0.4;
       final dist =
-          orbRadius * (0.5 + rng.nextDouble() * 0.4) * breathScale;
-      final wc =
-          center + Offset(cos(angle) * dist, sin(angle) * dist);
-      final wr =
-          orbRadius * (0.07 + rng.nextDouble() * 0.09 + hold * 0.08);
+          orbRadius * (0.45 + rng.nextDouble() * 0.45) * breathScale;
+      final wc = center + Offset(cos(angle) * dist, sin(angle) * dist);
+      final wr = orbRadius * (0.06 + rng.nextDouble() * 0.10 + hold * 0.08);
       final alpha =
-          (0.2 + rng.nextDouble() * 0.25 + hold * 0.4).clamp(0.0, 1.0);
+          (0.15 + rng.nextDouble() * 0.20 + hold * 0.35).clamp(0.0, 1.0);
 
-      final wPaint = Paint()
-        ..shader = RadialGradient(
-          colors: [
-            _cyanLight.withValues(alpha: alpha),
-            Colors.transparent,
-          ],
-        ).createShader(Rect.fromCircle(center: wc, radius: wr));
-      canvas.drawCircle(wc, wr, wPaint);
+      canvas.drawCircle(
+        wc,
+        wr,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              wispColor.withValues(alpha: alpha),
+              Colors.transparent,
+            ],
+          ).createShader(Rect.fromCircle(center: wc, radius: wr)),
+      );
     }
   }
 
   void _drawParticles(
       Canvas canvas, Offset center, double orbRadius, double breathScale) {
     final rng = Random(123);
-    final particleCount = 16 + (hold * 12).toInt();
+    final particleCount = 20 + (hold * 16).toInt();
+    final pColor = _lerpHold(_paleBlue, _warmWhite);
 
     for (int i = 0; i < particleCount; i++) {
-      final angle = rng.nextDouble() * 2 * pi + orbit * pi * 0.5;
+      final angle = rng.nextDouble() * 2 * pi + orbit * pi * 0.6;
       final dist =
-          orbRadius * (0.3 + rng.nextDouble() * 0.75) * breathScale;
-      final pc =
-          center + Offset(cos(angle) * dist, sin(angle) * dist);
-      final pr = 1.0 + rng.nextDouble() * 1.5 + hold * 1.0;
+          orbRadius * (0.25 + rng.nextDouble() * 0.80) * breathScale;
+      final pc = center + Offset(cos(angle) * dist, sin(angle) * dist);
+      final pr = 0.8 + rng.nextDouble() * 1.8 + hold * 1.2;
       final alpha =
-          (0.2 + rng.nextDouble() * 0.4 + hold * 0.3).clamp(0.0, 1.0);
+          (0.15 + rng.nextDouble() * 0.35 + hold * 0.35).clamp(0.0, 1.0);
 
+      // Soft glow around each particle
+      canvas.drawCircle(
+        pc,
+        pr * 2.5,
+        Paint()..color = pColor.withValues(alpha: alpha * 0.15),
+      );
       canvas.drawCircle(
         pc,
         pr,
-        Paint()..color = _paleCore.withValues(alpha: alpha),
+        Paint()..color = pColor.withValues(alpha: alpha),
       );
     }
   }

@@ -46,6 +46,8 @@ class VaultSection extends StatelessWidget {
 
     this.onVaultChanged,
 
+    this.readOnly = false,
+
   });
 
 
@@ -57,6 +59,8 @@ class VaultSection extends StatelessWidget {
   final bool isLifetime;
 
   final VoidCallback? onVaultChanged;
+
+  final bool readOnly;
 
 
 
@@ -96,6 +100,8 @@ class VaultSection extends StatelessWidget {
 
         onVaultChanged: onVaultChanged,
 
+        readOnly: readOnly,
+
       ),
 
     );
@@ -116,6 +122,8 @@ class _VaultSectionView extends StatelessWidget {
 
     this.onVaultChanged,
 
+    this.readOnly = false,
+
   });
 
 
@@ -125,6 +133,8 @@ class _VaultSectionView extends StatelessWidget {
   final bool isLifetime;
 
   final VoidCallback? onVaultChanged;
+
+  final bool readOnly;
 
 
 
@@ -174,7 +184,7 @@ class _VaultSectionView extends StatelessWidget {
 
             },
 
-            onEdit: entry.isEditable
+            onEdit: readOnly ? null : (entry.isEditable
 
                 ? () async {
 
@@ -198,9 +208,9 @@ class _VaultSectionView extends StatelessWidget {
 
                   }
 
-                : null,
+                : null),
 
-            onDelete: () async {
+            onDelete: readOnly ? null : (() async {
 
               final confirmed = await _confirmDelete(context);
 
@@ -210,7 +220,7 @@ class _VaultSectionView extends StatelessWidget {
 
               if (context.mounted) onVaultChanged?.call();
 
-            },
+            }),
 
           ),
 
@@ -431,6 +441,8 @@ class _VaultSectionView extends StatelessWidget {
 
                     ),
 
+                    if (!readOnly) ...[
+
                     const SizedBox(height: 12),
 
                     SizedBox(
@@ -457,6 +469,8 @@ class _VaultSectionView extends StatelessWidget {
 
                     ),
 
+                    ],
+
                   ],
 
                 ),
@@ -466,6 +480,8 @@ class _VaultSectionView extends StatelessWidget {
             else ...[
 
               ...buildEntryTiles(activeEntries),
+
+              if (!readOnly) ...[
 
               const SizedBox(height: 12),
 
@@ -492,6 +508,8 @@ class _VaultSectionView extends StatelessWidget {
                 ),
 
               ),
+
+              ],
 
             ],
 
@@ -1119,7 +1137,7 @@ class _VaultEntryTile extends StatelessWidget {
 
   final VoidCallback? onEdit;
 
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
 
 
@@ -1265,6 +1283,8 @@ class _VaultEntryTile extends StatelessWidget {
 
               ),
 
+              if (onEdit != null || onDelete != null) ...[
+
               const SizedBox(height: 8),
 
               _EntryActionButton(
@@ -1279,6 +1299,10 @@ class _VaultEntryTile extends StatelessWidget {
 
               ),
 
+              ],
+
+              if (onDelete != null) ...[
+
               const SizedBox(height: 8),
 
               _EntryActionButton(
@@ -1287,9 +1311,11 @@ class _VaultEntryTile extends StatelessWidget {
 
                 icon: Icons.delete_outline,
 
-                onPressed: onDelete,
+                onPressed: onDelete!,
 
               ),
+
+              ],
 
             ],
 
