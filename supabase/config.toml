@@ -1,0 +1,5 @@
+[functions.metadata-crypto]
+verify_jwt = false
+
+[functions.verify-subscription]
+verify_jwt = false

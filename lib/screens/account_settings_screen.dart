@@ -1,0 +1,368 @@
+import 'package:flutter/material.dart';
+
+import '../services/auth_controller.dart';
+import '../services/home_controller.dart';
+import '../services/revenuecat_controller.dart';
+import '../widgets/ambient_background.dart';
+
+class AccountSettingsScreen extends StatefulWidget {
+  const AccountSettingsScreen({
+    super.key,
+    required this.homeController,
+    required this.authController,
+    required this.revenueCatController,
+  });
+
+  final HomeController homeController;
+  final AuthController authController;
+  final RevenueCatController revenueCatController;
+
+  @override
+  State<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
+}
+
+class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
+  late final TextEditingController _senderController;
+  bool _senderDirty = false;
+  bool _isLoading = false;
+  String? _localError;
+
+  HomeController get _controller => widget.homeController;
+  AuthController get _authController => widget.authController;
+
+  @override
+  void initState() {
+    super.initState();
+    _senderController =
+        TextEditingController(text: _controller.profile?.senderName ?? '');
+    _senderController.addListener(() {
+      final isDirty =
+          _senderController.text != (_controller.profile?.senderName ?? '');
+      if (isDirty != _senderDirty) {
+        setState(() => _senderDirty = isDirty);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _senderController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final controller = _controller;
+    final authController = _authController;
+    final errorColor = theme.colorScheme.error;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          const RepaintBoundary(child: AmbientBackground()),
+          SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Account Settings',
+                      style: theme.textTheme.titleLarge,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Sender Name
+                _Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white10,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                  Icons.mark_email_read_outlined,
+                                  size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            Text('Sender Name',
+                                style: theme.textTheme.titleMedium),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'This name appears in email subjects sent to your beneficiaries.',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: Colors.white60),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _senderController,
+                          textInputAction: TextInputAction.done,
+                          decoration: const InputDecoration(
+                            hintText: 'Sender name',
+                            filled: true,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _isLoading || !_senderDirty
+                                ? null
+                                : () async {
+                                    setState(() {
+                                      _isLoading = true;
+                                      _localError = null;
+                                    });
+                                    await controller.updateSenderName(
+                                      _senderController.text,
+                                    );
+                                    if (!context.mounted) return;
+                                    final message = controller.errorMessage;
+                                    if (message == null) {
+                                      setState(() => _senderDirty = false);
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(const SnackBar(
+                                              content: Text(
+                                                  'Sender name updated.')));
+                                    } else {
+                                      _localError = message;
+                                    }
+                                    setState(() => _isLoading = false);
+                                  },
+                            icon: const Icon(Icons.save_outlined),
+                            label: const Text('Save Sender Name'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Danger Zone
+                _Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: errorColor.withValues(alpha: 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.delete_forever,
+                                  color: errorColor),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Danger Zone',
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(color: errorColor),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Permanently delete your account and every vault entry.',
+                                    style: theme.textTheme.bodySmall
+                                        ?.copyWith(color: Colors.white60),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: errorColor,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: _isLoading
+                                ? null
+                                : () async {
+                                    final confirmed =
+                                        await _confirmDeleteAccount(context);
+                                    if (!confirmed) return;
+                                    setState(() {
+                                      _isLoading = true;
+                                      _localError = null;
+                                    });
+                                    final success =
+                                        await controller.deleteAccount();
+                                    if (!context.mounted) return;
+                                    if (success) {
+                                      final auth = authController;
+                                      final rc = widget.revenueCatController;
+                                      // Pop this screen first.
+                                      if (context.mounted) {
+                                        Navigator.of(context).pop();
+                                      }
+                                      // Phase 1: Remove HomeScreen from tree
+                                      // BEFORE any listener fires.
+                                      auth.prepareSignOut();
+                                      // Phase 2: Log out of RevenueCat and
+                                      // Supabase on the next frame, after
+                                      // providers have been unmounted.
+                                      WidgetsBinding.instance
+                                          .addPostFrameCallback((_) async {
+                                        await rc.logOut();
+                                        await auth.signOut();
+                                      });
+                                      return;
+                                    }
+                                    final msg = controller.errorMessage ??
+                                        'Unable to delete your account.';
+                                    if (!context.mounted) return;
+                                    setState(() {
+                                      _localError = msg;
+                                      _isLoading = false;
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text(msg)));
+                                  },
+                            child: const Text('Delete Account'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                if (_localError != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: errorColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(18),
+                      border:
+                          Border.all(color: errorColor.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: errorColor),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _localError!,
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: errorColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _confirmDeleteAccount(BuildContext context) async {
+    final tc = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final isMatch = tc.text.trim().toUpperCase() == 'DELETE';
+          return AlertDialog(
+            title: const Text('Delete account?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This permanently deletes your profile and all vault data, including audio. This cannot be undone.',
+                ),
+                const SizedBox(height: 12),
+                const Text('Type DELETE to confirm.'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: tc,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    hintText: 'DELETE',
+                    filled: true,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: isMatch ? () => Navigator.pop(context, true) : null,
+                child: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    return result ?? false;
+  }
+}
+
+class _Card extends StatelessWidget {
+  const _Card({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF181818), Color(0xFF0E0E0E)],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: child,
+      ),
+    );
+  }
+}

@@ -10,6 +10,8 @@ class VaultController extends ChangeNotifier {
   })  : _vaultService = vaultService,
         _userId = userId;
 
+  bool _isDisposed = false;
+
   static const int audioTimeBankSeconds = 600;
   static const int maxPlaintextLength = 50000;
   static const Duration createRateLimit = Duration(seconds: 5);
@@ -28,6 +30,18 @@ class VaultController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
+  @override
+  void notifyListeners() {
+    if (_isDisposed) return;
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
+
   int get audioSecondsUsed => _entries
       .where((entry) =>
           entry.status == VaultStatus.active &&
@@ -38,6 +52,7 @@ class VaultController extends ChangeNotifier {
     _setLoading(true);
     try {
       _entries = await _vaultService.fetchEntries(_userId);
+      if (_isDisposed) return;
       _errorMessage = null;
     } catch (_) {
       _errorMessage = 'Unable to load your vault.';
@@ -113,8 +128,8 @@ class VaultController extends ChangeNotifier {
     } on VaultFailure catch (error) {
       _errorMessage = error.message;
       return false;
-    } catch (_) {
-      _errorMessage = 'Unable to save this entry.';
+    } catch (e) {
+      _errorMessage = 'Unable to save this entry. Please try again.';
       return false;
     } finally {
       _setLoading(false);
@@ -227,17 +242,26 @@ class VaultController extends ChangeNotifier {
         return 'Audio time bank limit reached.';
       }
     }
-    if (draft.actionType == VaultActionType.send &&
-        (draft.recipientEmail == null ||
-            draft.recipientEmail!.trim().isEmpty)) {
-      return 'Recipient email is required.';
+    if (draft.actionType == VaultActionType.send) {
+      final email = draft.recipientEmail?.trim() ?? '';
+      if (email.isEmpty) {
+        return 'Recipient email is required.';
+      }
+      if (!_isValidEmail(email)) {
+        return 'Please enter a valid email address.';
+      }
     }
     return null;
   }
 
   void _setLoading(bool value) {
+    if (_isDisposed) return;
     _isLoading = value;
     notifyListeners();
+  }
+
+  static bool _isValidEmail(String email) {
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
   }
 
   bool _isRateLimited() {

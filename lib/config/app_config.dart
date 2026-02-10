@@ -3,7 +3,6 @@ class AppConfig {
     required this.supabaseUrl,
     required this.supabaseAnonKey,
     required this.revenueCatApiKey,
-    required this.serverSecret,
     required this.revenueCatEntitlementId,
     required this.webViewerBaseUrl,
     required this.supabaseAuthRedirectUrl,
@@ -12,7 +11,6 @@ class AppConfig {
   final String supabaseUrl;
   final String supabaseAnonKey;
   final String revenueCatApiKey;
-  final String serverSecret;
   final String revenueCatEntitlementId;
   final String webViewerBaseUrl;
   final String supabaseAuthRedirectUrl;
@@ -21,7 +19,6 @@ class AppConfig {
     const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
     const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
     const revenueCatApiKey = String.fromEnvironment('REVENUECAT_API_KEY');
-    const serverSecret = String.fromEnvironment('SERVER_SECRET');
     const revenueCatEntitlementId =
         String.fromEnvironment('REVENUECAT_ENTITLEMENT_ID');
     const webViewerBaseUrl = String.fromEnvironment('WEB_VIEWER_BASE_URL');
@@ -41,22 +38,15 @@ class AppConfig {
       );
     }
 
-    if (serverSecret.isEmpty) {
-      throw StateError(
-        'Missing SERVER_SECRET. Pass SERVER_SECRET via --dart-define.',
-      );
-    }
-
-    return const AppConfig(
+    return AppConfig(
       supabaseUrl: supabaseUrl,
       supabaseAnonKey: supabaseAnonKey,
       revenueCatApiKey: revenueCatApiKey,
-      serverSecret: serverSecret,
       revenueCatEntitlementId: revenueCatEntitlementId.isEmpty
           ? 'AfterWord Pro'
           : revenueCatEntitlementId,
       webViewerBaseUrl: webViewerBaseUrl.isEmpty
-          ? 'https://afterword-app.com'
+          ? 'https://view.afterword-app.com'
           : webViewerBaseUrl,
       supabaseAuthRedirectUrl: supabaseAuthRedirectUrl.isEmpty
           ? 'afterword://login-callback'

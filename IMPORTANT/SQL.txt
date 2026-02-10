@@ -1046,3 +1046,138 @@ select cron.schedule(
   '0 3 * * *',
   $$select cleanup_sent_entries();$$
 );
+
+-------------------------------------------------------------------------------------
+
+13.
+create table if not exists public.push_devices (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  fcm_token text not null unique,
+  platform text not null,
+  last_seen_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.push_devices enable row level security;
+
+create policy "push_devices_select_own" on public.push_devices
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+create policy "push_devices_insert_own" on public.push_devices
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "push_devices_update_own" on public.push_devices
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "push_devices_delete_own" on public.push_devices
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists set_push_devices_updated_at on public.push_devices;
+create trigger set_push_devices_updated_at
+before update on public.push_devices
+for each row
+execute function public.set_updated_at();
+
+--------------------------------------------------------------------
+
+14.
+create or replace function public.update_check_in(user_id uuid, timer_days int default null)
+returns profiles
+language plpgsql
+security definer
+as $$
+declare
+  result profiles;
+  sub text;
+  effective_timer int;
+  max_timer int;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status, timer_days
+  into sub, effective_timer
+  from profiles
+  where id = user_id;
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub = 'lifetime' then
+    max_timer := 3650;
+  elsif sub = 'pro' then
+    max_timer := 365;
+  else
+    max_timer := 30;
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  elsif timer_days is not null then
+    effective_timer := greatest(7, least(max_timer, timer_days));
+  end if;
+
+  update profiles
+  set last_check_in = now(),
+      timer_days = effective_timer,
+      warning_sent_at = null
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function public.guard_timer_days()
+returns trigger
+language plpgsql
+as $$
+declare
+  max_timer int;
+begin
+  if new.timer_days is distinct from old.timer_days then
+    if auth.role() <> 'service_role' then
+      if old.subscription_status = 'lifetime' then
+        max_timer := 3650;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      elsif old.subscription_status = 'pro' then
+        max_timer := 365;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      else
+        new.timer_days := 30;
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row
+execute function public.guard_timer_days();

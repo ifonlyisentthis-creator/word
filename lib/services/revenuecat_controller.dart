@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class RevenueCatController extends ChangeNotifier {
   RevenueCatController({required this.entitlementId});
@@ -15,6 +16,8 @@ class RevenueCatController extends ChangeNotifier {
   RevenueCatFailure? _lastFailure;
   bool _isConfigured = false;
   bool _isLoading = false;
+  bool _isSyncing = false;
+  DateTime? _lastSyncAttempt;
 
   CustomerInfo? get customerInfo => _customerInfo;
   Offerings? get offerings => _offerings;
@@ -25,9 +28,12 @@ class RevenueCatController extends ChangeNotifier {
   bool get isPro =>
       _customerInfo?.entitlements.active.containsKey(entitlementId) ?? false;
 
-  bool get isLifetime =>
-      _customerInfo?.allPurchasedProductIdentifiers.contains('lifetime') ??
-      false;
+  bool get isLifetime {
+    final active = _customerInfo?.entitlements.active;
+    if (active == null || active.isEmpty) return false;
+    return active.values
+        .any((ent) => ent.productIdentifier.toLowerCase().contains('lifetime'));
+  }
 
   Future<void> configure({required String apiKey}) async {
     if (_isConfigured) return;
@@ -60,6 +66,7 @@ class RevenueCatController extends ChangeNotifier {
       _customerInfo = await Purchases.getCustomerInfo();
       _offerings = await Purchases.getOfferings();
       _lastFailure = null;
+      await _syncSubscriptionStatus();
     } on PlatformException catch (exception) {
       _lastFailure = _mapFailure(exception);
     } finally {
@@ -74,6 +81,7 @@ class RevenueCatController extends ChangeNotifier {
       final result = await Purchases.logIn(userId);
       _customerInfo = result.customerInfo;
       _lastFailure = null;
+      await _syncSubscriptionStatus(force: true);
     } on PlatformException catch (exception) {
       _lastFailure = _mapFailure(exception);
     } finally {
@@ -99,10 +107,11 @@ class RevenueCatController extends ChangeNotifier {
     if (!_isConfigured) return null;
     _setLoading(true);
     try {
-      final customerInfo = await Purchases.purchasePackage(package);
-      _customerInfo = customerInfo;
+      final result = await Purchases.purchase(PurchaseParams.package(package));
+      _customerInfo = result.customerInfo;
       _lastFailure = null;
-      return customerInfo;
+      await _syncSubscriptionStatus(force: true);
+      return _customerInfo;
     } on PlatformException catch (exception) {
       final errorCode = PurchasesErrorHelper.getErrorCode(exception);
       if (errorCode == PurchasesErrorCode.purchaseCancelledError) {
@@ -122,6 +131,7 @@ class RevenueCatController extends ChangeNotifier {
       final customerInfo = await Purchases.restorePurchases();
       _customerInfo = customerInfo;
       _lastFailure = null;
+      await _syncSubscriptionStatus(force: true);
       return customerInfo;
     } on PlatformException catch (exception) {
       _lastFailure = _mapFailure(exception);
@@ -171,6 +181,12 @@ class RevenueCatController extends ChangeNotifier {
   void _handleCustomerInfoUpdate(CustomerInfo info) {
     _customerInfo = info;
     _lastFailure = null;
+    // Only sync here if no explicit method (purchase, restore, etc.) is
+    // already in progress — those methods call _syncSubscriptionStatus
+    // themselves, so we'd duplicate the RPC otherwise.
+    if (!_isLoading && !_isSyncing) {
+      _syncSubscriptionStatus();
+    }
     notifyListeners();
   }
 
@@ -179,10 +195,46 @@ class RevenueCatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _syncSubscriptionStatus({bool force = false}) async {
+    // Debounce: skip if already syncing or if last attempt was < 30s ago.
+    // force=true bypasses debounce (used after purchase/restore/logIn).
+    if (_isSyncing) return;
+    if (!force) {
+      final now = DateTime.now();
+      if (_lastSyncAttempt != null &&
+          now.difference(_lastSyncAttempt!).inSeconds < 30) {
+        if (kDebugMode) debugPrint('[RC-SYNC] Debounced (< 30s since last attempt)');
+        return;
+      }
+    }
+    _isSyncing = true;
+    _lastSyncAttempt = DateTime.now();
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) {
+        if (kDebugMode) debugPrint('[RC-SYNC] No Supabase user, skipping sync');
+        return;
+      }
+      if (kDebugMode) debugPrint('[RC-SYNC] Verifying subscription server-side for ${user.id}');
+
+      // Ensure the JWT is fresh before calling the Edge Function.
+      try {
+        await client.auth.refreshSession();
+      } catch (_) {}
+
+      final res = await client.functions.invoke('verify-subscription');
+      if (kDebugMode) debugPrint('[RC-SYNC] Server verified: ${res.data}');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[RC-SYNC] Error: $e');
+    } finally {
+      _isSyncing = false;
+    }
+  }
+
   RevenueCatFailure _mapFailure(PlatformException exception) {
     final code = PurchasesErrorHelper.getErrorCode(exception);
-    final message = exception.message ??
-        'RevenueCat error${code != null ? ' (${code.name})' : ''}.';
+    final message = exception.message ?? 'RevenueCat error (${code.name}).';
     return RevenueCatFailure(message, code: code);
   }
 }

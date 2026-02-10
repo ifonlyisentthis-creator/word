@@ -1,16 +1,21 @@
-# afterword
+# Afterword
 
-A new Flutter project.
+Flutter (Android-first) client for Afterword.
 
-## Getting Started
+## Timer tiers
 
-This project is a starting point for a Flutter application.
+- **Free**
+  - Fixed at **30 days**
+- **Pro**
+  - Range: **7–365 days**
+- **Lifetime ($99.99)**
+  - Range: **7–3650 days (10 years)**
+  - Use case: **Time Capsule** (children/legacy)
+  - If duration **> 365 days**, show this warning:
+    - `⚠️ NOTE: This is a Time Capsule setting. Beneficiaries will NOT receive this until the full duration passes, even if you stop checking in tomorrow.`
 
-A few resources to get you started if this is your first Flutter project:
+## Run (dev)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```powershell
+flutter run --dart-define=SUPABASE_URL="https://abxduxfiwhsjsqicrbru.supabase.co" --dart-define=SUPABASE_ANON_KEY="(your anon key)" --dart-define=REVENUECAT_API_KEY="(your revenuecat key)" --dart-define=GOOGLE_WEB_CLIENT_ID="394982150671-qcapj1t19e19p4bunm448t5cf51lp8m9.apps.googleusercontent.com"
+```

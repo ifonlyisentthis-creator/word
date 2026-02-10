@@ -1,102 +1,205 @@
 <!DOCTYPE html>
+
 <html lang="en">
+
   <head>
+
     <meta charset="UTF-8" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <meta name="referrer" content="no-referrer" />
+
     <meta
+
       name="description"
+
       content="Afterword Secure Viewer decrypts legacy messages locally in your browser using the security key from the email."
+
     />
+
     <meta
+
       http-equiv="Content-Security-Policy"
+
       content="default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com"
+
     />
+
     <meta http-equiv="Cache-Control" content="no-store, max-age=0" />
+
     <meta http-equiv="Pragma" content="no-cache" />
+
     <meta http-equiv="Expires" content="0" />
+
     <title>Afterword · Secure Viewer</title>
+
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
+
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
+
     <link rel="manifest" href="site.webmanifest" />
+
     <link rel="stylesheet" href="styles.css" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
     <link
+
       href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Work+Sans:wght@300;400;500;600&display=swap"
+
       rel="stylesheet"
+
     />
+
   </head>
+
   <body>
+
     <div class="ambient"></div>
+
     <main class="viewer">
+
       <header class="viewer__header">
+
         <span class="viewer__eyebrow">Afterword Secure Viewer</span>
+
         <h1>Unlock a protected legacy message</h1>
+
         <p>
+
           Afterword releases messages only when a sender misses their check-in.
+
           This viewer decrypts the content locally in your browser using the
+
           security key from the email.
+
         </p>
+
         <div class="viewer__steps">
+
           <div class="viewer__step">
+
             <span class="viewer__step-number">01</span>
+
             <span>Paste the Entry ID from the email link.</span>
+
           </div>
+
           <div class="viewer__step">
+
             <span class="viewer__step-number">02</span>
+
             <span>Enter the private security key to decrypt.</span>
+
           </div>
+
         </div>
+
       </header>
 
+
+
       <section class="card">
+
         <div class="field">
+
           <label for="entry-id">Entry ID</label>
+
           <input
+
             id="entry-id"
+
             type="text"
+
             placeholder="Entry ID from the email link"
+
             autocomplete="off"
+
           />
+
         </div>
+
         <div class="field">
+
           <label for="security-key">Security Key</label>
+
           <input
+
             id="security-key"
+
             type="password"
+
             placeholder="Security key from the email"
+
             autocomplete="off"
+
           />
+
           <span class="field__hint"
+
             >We never send this key to the server. Decryption happens in your
+
             browser.</span
+
           >
+
         </div>
+
         <button id="unlock" class="primary">Unlock</button>
+
         <div id="status" class="status" role="status"></div>
+
       </section>
+
+
 
       <section id="result" class="result hidden">
+
         <div class="result__header">
+
           <div>
+
             <span class="result__label">Decrypted message</span>
+
             <h2 id="result-title"></h2>
+
           </div>
+
           <div class="result__actions" id="result-actions"></div>
+
         </div>
+
         <div id="result-body"></div>
+
       </section>
 
+
+
       <footer class="viewer__footer">
+
         <span>Powered by client-side encryption.</span>
+
         <span>Need help? Reply to the sender.</span>
+
       </footer>
+
     </main>
 
+
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.1/dist/umd/supabase.js"></script>
+
+    <script src="config.js"></script>
     <script src="app.js"></script>
+
   </body>
+
 </html>
+

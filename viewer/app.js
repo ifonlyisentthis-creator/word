@@ -1,8 +1,17 @@
-const config = window.AFTERWORD_VIEWER_CONFIG || {
-  supabaseUrl: "YOUR_SUPABASE_URL",
-  supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY",
-  audioBucket: "vault-audio",
-};
+const config = window.AFTERWORD_VIEWER_CONFIG || {};
+const audioBucket = config.audioBucket || "vault-audio";
+
+let _supabaseClient = null;
+function getClient() {
+  if (_supabaseClient) return _supabaseClient;
+  const url = config.supabaseUrl || "";
+  const key = config.supabaseAnonKey || "";
+  if (!url || !key || url.includes("YOUR_") || key.includes("YOUR_")) {
+    return null;
+  }
+  _supabaseClient = supabase.createClient(url, key);
+  return _supabaseClient;
+}
 
 const entryInput = document.getElementById("entry-id");
 const keyInput = document.getElementById("security-key");
@@ -150,23 +159,18 @@ function renderExpiredMessage(senderName) {
 
 async function unlock() {
   clearResult();
-  if (!window.supabase) {
-    setStatus("Supabase client not loaded.", "error");
-    return;
-  }
 
   const entryId = entryInput.value.trim();
   const keyValue = keyInput.value.trim();
+
   if (!entryId) {
-    setStatus("Enter the entry ID from the email link.", "error");
+    setStatus("Please enter the Entry ID from your email.", "error");
     return;
   }
 
-  if (
-    config.supabaseUrl.includes("YOUR_SUPABASE_URL") ||
-    config.supabaseAnonKey.includes("YOUR_SUPABASE_ANON_KEY")
-  ) {
-    setStatus("Viewer is not configured with Supabase credentials.", "error");
+  const client = getClient();
+  if (!client) {
+    setStatus("This viewer is temporarily unavailable. Please try again later.", "error");
     return;
   }
 
@@ -174,18 +178,13 @@ async function unlock() {
   unlockButton.disabled = true;
 
   try {
-    const client = supabase.createClient(
-      config.supabaseUrl,
-      config.supabaseAnonKey
-    );
-
     const { data: entryStatus, error: statusError } = await client.rpc(
       "viewer_entry_status",
       { entry_id: entryId }
     );
 
     if (statusError) {
-      throw new Error("Unable to verify message status.");
+      throw new Error("could_not_verify");
     }
 
     if (entryStatus?.state === "expired") {
@@ -195,19 +194,24 @@ async function unlock() {
     }
 
     if (entryStatus?.state === "not_found") {
-      throw new Error("Entry not found or unavailable.");
+      throw new Error("not_found");
     }
 
     if (entryStatus?.state === "unavailable") {
-      throw new Error("This message is not available yet.");
+      throw new Error("unavailable");
     }
 
     if (!keyValue) {
-      setStatus("Enter the security key from the email.", "error");
+      setStatus("Please enter the Security Key from your email.", "error");
       return;
     }
 
-    const keyBytes = base64ToBytes(keyValue);
+    let keyBytes;
+    try {
+      keyBytes = base64ToBytes(keyValue);
+    } catch (_) {
+      throw new Error("invalid_key_format");
+    }
 
     const { data: entry, error } = await client
       .from("vault_entries")
@@ -218,29 +222,35 @@ async function unlock() {
       .maybeSingle();
 
     if (error || !entry) {
-      throw new Error("Entry not found or unavailable.");
+      throw new Error("not_found");
     }
 
     if (entry.status && entry.status !== "sent") {
-      throw new Error("This message is not available yet.");
+      throw new Error("unavailable");
     }
 
     resultTitle.textContent = entry.title || "Untitled";
 
     if (entry.data_type === "audio") {
       if (!entry.audio_file_path) {
-        throw new Error("Audio file is missing.");
+        throw new Error("audio_missing");
       }
       const { data: audioBlob, error: audioError } = await client.storage
-        .from(config.audioBucket)
+        .from(audioBucket)
         .download(entry.audio_file_path);
 
       if (audioError || !audioBlob) {
-        throw new Error("Unable to download audio.");
+        throw new Error("audio_missing");
       }
 
-      const encryptedText = await audioBlob.text();
-      const decryptedBytes = await decryptPayload(encryptedText, keyBytes);
+      let decryptedBytes;
+      try {
+        const encryptedText = await audioBlob.text();
+        decryptedBytes = await decryptPayload(encryptedText, keyBytes);
+      } catch (_) {
+        throw new Error("decrypt_failed");
+      }
+
       const audio = document.createElement("audio");
       audio.controls = true;
       const decryptedBlob = new Blob([decryptedBytes], { type: "audio/m4a" });
@@ -249,14 +259,20 @@ async function unlock() {
       resultBody.appendChild(audio);
 
       resultActions.appendChild(
-        createDownloadButton("Download audio", decryptedBlob, "afterword.m4a")
+        createDownloadButton("Download .mp3", decryptedBlob, "afterword.mp3")
       );
     } else {
-      const decryptedBytes = await decryptPayload(
-        entry.payload_encrypted,
-        keyBytes
-      );
-      const decoded = new TextDecoder().decode(decryptedBytes);
+      let decoded;
+      try {
+        const decryptedBytes = await decryptPayload(
+          entry.payload_encrypted,
+          keyBytes
+        );
+        decoded = new TextDecoder().decode(decryptedBytes);
+      } catch (_) {
+        throw new Error("decrypt_failed");
+      }
+
       const text = document.createElement("pre");
       text.textContent = decoded;
       resultBody.appendChild(text);
@@ -270,10 +286,21 @@ async function unlock() {
     resultEl.classList.remove("hidden");
     setStatus("Vault unlocked.", "success");
   } catch (error) {
-    setStatus(error.message || "Unable to unlock vault.", "error");
+    const msg = error.message || "";
+    const friendly = {
+      could_not_verify: "Unable to verify this entry. Please check the Entry ID and try again.",
+      not_found: "No entry found with that ID. Please double-check the Entry ID from your email.",
+      unavailable: "This message is not available yet. It will be released when the sender’s protocol executes.",
+      invalid_key_format: "The security key format is invalid. Please copy the full key from your email.",
+      audio_missing: "The audio file for this entry could not be found.",
+      decrypt_failed: "Unable to decrypt this message. Please make sure you entered the correct Security Key from your email.",
+    };
+    setStatus(friendly[msg] || "Something went wrong. Please check your Entry ID and Security Key and try again.", "error");
   } finally {
     unlockButton.disabled = false;
   }
 }
 
 unlockButton.addEventListener("click", unlock);
+entryInput.addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
+keyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });

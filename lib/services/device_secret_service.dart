@@ -8,6 +8,7 @@ class DeviceSecretService {
       : _storage = storage ?? const FlutterSecureStorage();
 
   static const String _hmacKeyStorageKey = 'afterword_hmac_key';
+  static const String _deviceWrappingKeyStorageKey = 'afterword_device_wrap_v1';
 
   final FlutterSecureStorage _storage;
 
@@ -17,7 +18,7 @@ class DeviceSecretService {
       return SecretKey(base64.decode(stored));
     }
 
-    final key = SecretKey.randomBytes(32);
+    final key = SecretKeyData.random(length: 32);
     final bytes = await key.extractBytes();
     await _storage.write(key: _hmacKeyStorageKey, value: base64.encode(bytes));
     return key;
@@ -25,5 +26,24 @@ class DeviceSecretService {
 
   Future<void> clearHmacKey() async {
     await _storage.delete(key: _hmacKeyStorageKey);
+  }
+
+  Future<SecretKey> loadOrCreateDeviceWrappingKey() async {
+    final stored = await _storage.read(key: _deviceWrappingKeyStorageKey);
+    if (stored != null && stored.isNotEmpty) {
+      return SecretKey(base64.decode(stored));
+    }
+
+    final key = SecretKeyData.random(length: 32);
+    final bytes = await key.extractBytes();
+    await _storage.write(
+      key: _deviceWrappingKeyStorageKey,
+      value: base64.encode(bytes),
+    );
+    return key;
+  }
+
+  Future<void> clearDeviceWrappingKey() async {
+    await _storage.delete(key: _deviceWrappingKeyStorageKey);
   }
 }

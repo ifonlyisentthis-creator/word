@@ -1,22 +1,15 @@
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 
 class CryptoService {
-  CryptoService({required this.serverSecret})
-      : _cipher = AesGcm.with256bits(),
-        _serverKey = SecretKey(
-          sha256.convert(utf8.encode(serverSecret)).bytes,
-        );
+  CryptoService() : _cipher = AesGcm.with256bits();
 
-  final String serverSecret;
   final Cipher _cipher;
-  final SecretKey _serverKey;
 
   Future<SecretKey> generateDataKey() => _cipher.newSecretKey();
 
-  Future<SecretKey> generateHmacKey() => SecretKey.randomBytes(32);
+  Future<SecretKey> generateHmacKey() async => SecretKeyData.random(length: 32);
 
   Future<String> encryptText(String plaintext, SecretKey key) async {
     final nonce = _cipher.newNonce();
@@ -55,31 +48,13 @@ class CryptoService {
     );
   }
 
-  Future<String> encryptWithServerSecret(String plaintext) {
-    return encryptText(plaintext, _serverKey);
-  }
-
-  Future<String> decryptWithServerSecret(String encoded) {
-    return decryptText(encoded, _serverKey);
-  }
-
-  Future<String> encryptKey(SecretKey key) async {
+  Future<String> encryptKey(SecretKey key, SecretKey wrappingKey) async {
     final bytes = await key.extractBytes();
-    final nonce = _cipher.newNonce();
-    final secretBox = await _cipher.encrypt(
-      bytes,
-      secretKey: _serverKey,
-      nonce: nonce,
-    );
-    return _encodeSecretBox(secretBox);
+    return encryptBytes(bytes, wrappingKey);
   }
 
-  Future<SecretKey> decryptKey(String encoded) async {
-    final box = _decodeSecretBox(encoded);
-    final clearBytes = await _cipher.decrypt(
-      box,
-      secretKey: _serverKey,
-    );
+  Future<SecretKey> decryptKey(String encoded, SecretKey wrappingKey) async {
+    final clearBytes = await decryptBytes(encoded, wrappingKey);
     return SecretKey(clearBytes);
   }
 

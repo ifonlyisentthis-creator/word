@@ -1,0 +1,381 @@
+================================================================================
+ AFTERWORD — COMPREHENSIVE TESTING GUIDE
+================================================================================
+
+This guide walks you through testing every feature end-to-end.
+Prerequisites are listed first, then tests are grouped by feature area.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 0. PREREQUISITES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+0.1  Supabase project set up with:
+     • All SQL from IMPORTANT/updated-sql.txt executed
+     • Edge Function "metadata-crypto" deployed (supabase/functions/metadata-crypto/)
+     • SERVER_SECRET env var set on the Edge Function
+     • Storage bucket "vault-audio" created (the SQL does this)
+     • Google OAuth provider enabled in Supabase Auth settings
+
+0.2  Firebase project set up with:
+     • google-services.json placed in android/app/
+     • Cloud Messaging enabled
+     • Service account JSON for heartbeat.py
+
+0.3  RevenueCat project set up with:
+     • API key (can be sandbox/test key)
+     • At least one offering with packages (pro monthly, pro yearly, lifetime)
+     • Entitlement ID matching your config (default: "AfterWord Pro")
+
+0.4  Environment variables for flutter run:
+     --dart-define=SUPABASE_URL=https://your-project.supabase.co
+     --dart-define=SUPABASE_ANON_KEY=your-anon-key
+     --dart-define=REVENUECAT_API_KEY=your-rc-key
+     --dart-define=GOOGLE_WEB_CLIENT_ID=your-google-client-id
+     --dart-define=WEB_VIEWER_BASE_URL=https://your-viewer-url.com
+
+0.5  Physical Android device or emulator with Google Play Services
+     (RevenueCat and Google Sign-In require Play Services)
+
+0.6  For heartbeat.py testing:
+     • Python 3.11+
+     • pip install -r automation/requirements.txt
+     • Environment variables: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+       SERVER_SECRET, RESEND_API_KEY, RESEND_FROM_EMAIL, VIEWER_BASE_URL,
+       FIREBASE_SERVICE_ACCOUNT_JSON
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 1. AUTHENTICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.1  Launch app → Splash screen appears with shield icon and fade-in animation
+1.2  After splash → Sign-in screen with "Afterword" branding, feature rows,
+     security badge, and "Continue with Google" button
+1.3  Tap "Continue with Google" → Google account picker → sign in
+1.4  Verify: profile row created in Supabase `profiles` table with:
+     • id = auth user id
+     • email = your Google email
+     • sender_name = your Google name or email prefix
+     • status = 'active'
+     • subscription_status = 'free'
+     • timer_days = 30
+     • last_check_in = now()
+1.5  Sign out from app drawer → returns to sign-in screen
+1.6  Sign in again → same profile, no duplicate rows
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 2. HOME SCREEN & CHECK-IN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2.1  Home screen shows:
+     • Status banner (protocol active/inactive/executed)
+     • Timer countdown (days remaining)
+     • Soul Fire button (4-layer smoke/particle animation, BlendMode.plus)
+     • Timer settings card
+     • Sender name card
+     • Vault section with entries
+     • Subscription actions
+     • Account danger zone
+2.2  Long-press Soul Fire → hold fills up, haptic, flash,
+     "CHECK-IN COMPLETE" text appears
+2.3  Verify in Supabase: last_check_in updated, warning_sent_at cleared,
+     push_66_sent_at cleared, push_33_sent_at cleared, status = 'active'
+2.4  Timer settings (free): shows "30 Days (Fixed)" with upgrade prompt
+2.5  Timer settings (pro): slider 7–365 days, save button works
+2.6  Timer settings (lifetime): slider 7–3650 days
+2.7  Time Capsule warning appears when timer > 365 days
+2.8  Sender name: edit and save → verify in Supabase profiles.sender_name
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 3. VAULT — TEXT ENTRIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3.1  Navigate to Vault tab
+3.2  Tap "+" to add a new entry
+3.3  Fill out:
+     • Title
+     • Recipient email (beneficiary)
+     • Message text
+     • Action type: "Send" (default) or "Destroy" (pro/lifetime only)
+3.4  Save → entry appears in active entries list
+3.5  Verify in Supabase vault_entries:
+     • payload_encrypted is NOT plaintext (AES-GCM encrypted)
+     • recipient_email_encrypted is NOT plaintext
+     • data_key_encrypted contains server-encrypted key
+     • hmac_signature is present
+     • status = 'active'
+3.6  Tap entry → view decrypted content (client-side decryption works)
+3.7  Edit entry → change message, change recipient email → save
+3.8  Verify: payload_encrypted and recipient_email_encrypted updated,
+     hmac_signature recomputed
+3.9  Delete entry → entry removed from list and Supabase
+
+FREE TIER LIMITS:
+3.10 Create 3 text entries → 4th should be blocked with error
+3.11 Create entries rapidly → rate limit (5 second cooldown) kicks in
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 4. VAULT — AUDIO ENTRIES (Lifetime only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4.1  Switch data type to "Audio" in entry editor
+4.2  Record audio → playback preview works
+4.3  Save → audio uploaded to vault-audio bucket (encrypted)
+4.4  Verify: audio_file_path set, audio_duration_seconds set
+4.5  Re-open entry → audio plays back from downloaded + decrypted file
+4.6  Audio time bank: total active audio ≤ 600 seconds (10 minutes)
+     • Try to exceed → error message
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 5. ENCRYPTION & SECURITY VERIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5.1  In Supabase SQL editor, SELECT * FROM vault_entries:
+     • payload_encrypted should be base64-dot-separated (nonce.cipher.mac)
+     • recipient_email_encrypted should be JSON with "server" key
+     • data_key_encrypted should be JSON with "server" key
+     • None of these should contain plaintext
+5.2  HMAC integrity: manually corrupt payload_encrypted in Supabase →
+     heartbeat.py should skip/delete the tampered entry (signature mismatch)
+5.3  RLS test: sign in as User A, try to query User B's entries via
+     Supabase client → should return empty (RLS blocks it)
+5.4  Subscription guard: as free user, try to set action_type='destroy' →
+     policy should block the INSERT
+5.5  Timer guard: as free user, try to UPDATE timer_days to 90 →
+     trigger should clamp it back to 30
+5.6  Subscription status guard: try to UPDATE subscription_status directly →
+     trigger should raise an exception
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 6. HEARTBEAT.PY — TIMER EXPIRY & EMAIL DELIVERY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+To test without waiting days, temporarily modify last_check_in in Supabase.
+
+6.1  WARNING EMAIL (24h before expiry, paid users with entries):
+     • Set last_check_in to (now - timer_days + 12 hours) in Supabase
+     • Run: python automation/heartbeat.py
+     • Verify: warning email received at your email address
+     • Verify: warning_sent_at updated in profiles
+     • Run again → should NOT send duplicate warning (already warned)
+
+6.2  ENTRY EXECUTION (timer expired, action_type = 'send'):
+     • Set last_check_in to (now - timer_days - 1 hour) in Supabase
+     • Run: python automation/heartbeat.py
+     • Verify: recipient receives email with viewer link and security key
+     • Verify: vault_entries.status = 'sent', sent_at is set
+     • Verify: profiles.status = 'inactive'
+
+6.3  ENTRY DESTRUCTION (timer expired, action_type = 'destroy'):
+     • Create entry with action_type = 'destroy'
+     • Expire the timer as above
+     • Run heartbeat.py
+     • Verify: entry deleted from vault_entries, audio removed from storage
+
+6.4  CLEANUP (30-day purge):
+     • Manually set sent_at to 31 days ago on a sent entry
+     • Run heartbeat.py (or call cleanup_sent_entries() in SQL)
+     • Verify: entry deleted, audio storage cleaned up
+
+6.5  SERVER PUSH NOTIFICATIONS (66%/33% — ALL users, free + paid):
+     • Set last_check_in so remaining time is at 66% → run heartbeat.py
+     • Verify: push notification received on device ("Afterword warning")
+     • Verify: push_66_sent_at updated in profiles
+     • Run again → should NOT send duplicate (already sent this cycle)
+     • Set remaining time to 33% → run heartbeat.py
+     • Verify: second push received, push_33_sent_at updated
+     • Check-in in the app → verify push_66_sent_at and push_33_sent_at cleared
+     • Verify stale FCM tokens cleaned up (UNREGISTERED tokens removed)
+
+6.6  EMPTY VAULT — NO NOTIFICATIONS:
+     • Delete all vault entries for a user
+     • Expire their timer → run heartbeat.py
+     • Verify: NO push sent, NO email sent, profile marked 'inactive'
+     • No "empty email" sent to anyone
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 7. WEB VIEWER — BENEFICIARY DECRYPTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+7.1  Host viewer/ folder (e.g., Netlify, Vercel, or local HTTP server)
+     • Update SUPABASE_URL and SUPABASE_ANON_KEY in viewer/app.js
+     • Update AUDIO_BUCKET if different
+
+7.2  HAPPY PATH:
+     • After heartbeat sends an entry, open the viewer link from the email
+     • Entry ID should auto-populate from ?entry= query param
+     • Paste the security key from the email
+     • Click "Unlock Message"
+     • Verify: decrypted message displayed correctly
+     • For audio: verify audio player appears with download button
+
+7.3  EXPIRED ENTRY:
+     • Wait for 30-day cleanup (or manually delete the entry)
+     • Open the viewer link again
+     • Verify: compassionate "expired" message shown (not a generic error)
+
+7.4  INVALID ENTRY:
+     • Enter a random UUID as entry ID
+     • Verify: expired/not-found message shown
+
+7.5  WRONG KEY:
+     • Enter incorrect security key
+     • Verify: "Unable to decrypt" error, NOT the raw message
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 8. LAZARUS LOGIC — USER RETURNS AFTER EXPIRY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+8.1  Expire a user's timer → heartbeat marks profile status = 'inactive'
+8.2  Open the app as that user → auto check-in fires
+8.3  Verify: profiles.status = 'active', last_check_in = now(),
+     warning_sent_at = null
+8.4  App should show normal home screen (not locked out)
+8.5  If entries were sent during expiry, they appear in "Sent Items" section
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 9. SUBSCRIPTIONS (RevenueCat)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+9.1  Use the Subscription Debug Screen (accessible from app drawer) to:
+     • View current offerings and packages
+     • Test purchase flow (sandbox purchases on test devices)
+     • Restore purchases
+     • Open RevenueCat paywall
+     • Open RevenueCat customer center
+
+9.2  After purchase:
+     • Verify subscription_status in profiles table updated
+       (requires RevenueCat webhook to Supabase calling set_subscription_status)
+     • Verify Pro features unlocked: destroy mode, custom timer, more entries
+
+9.3  Lifetime purchase:
+     • Verify subscription_status = 'lifetime'
+     • Audio vault unlocked
+     • Timer up to 3650 days
+
+NOTE: For initial testing without real IAP, you can manually update
+subscription_status via Supabase SQL using the service role:
+  SELECT set_subscription_status('user-uuid', 'pro');
+  SELECT set_subscription_status('user-uuid', 'lifetime');
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 10. LOCAL NOTIFICATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+10.1 After check-in, local notifications are scheduled at:
+     • 66% of timer_days elapsed (yellow warning)
+     • 33% of timer_days remaining (red warning)
+10.2 For a 30-day timer: notifications at ~day 20 and ~day 25
+10.3 To test quickly: set timer_days to 7 → notifications at ~day 5 and ~day 6
+10.4 Verify notifications appear in the system tray with correct titles
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 11. APP LOCK (Biometrics / PIN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+11.1 App launches → device PIN/biometric prompt appears immediately
+     (uses local_auth — delegates to Android's built-in screen lock)
+11.2 Authenticate with fingerprint/PIN/pattern → app unlocks
+11.3 Cancel or fail → "Authentication required" message with retry button
+11.4 Minimize app (pause) → app re-locks when resumed
+11.5 Debug mode: "Skip (Debug)" button available in debug builds only
+11.6 If device has no lock screen set up → error message prompts user
+     to set up screen lock in phone settings
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 12. UI POLISH CHECKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+12.1 Splash screen: shield icon, scale animation, radial glow, smooth transition
+12.2 Auth screen: gradient icon circle, security badge, feature rows
+12.3 Home screen: ambient background orbs, glass-morphic surface cards
+12.4 Soul Fire button: 4-layer stack, all BlendMode.plus:
+     Layer 1: smoke_texture.png (dark blue, slow CW rotation)
+     Layer 2: smoke_texture.png (cyan, CCW rotation)
+     Layer 3: particles.png (cyan, drifting upward)
+     Layer 4: core_glow.png (pulsing breath, color shift blue→white on hold)
+     Hold: progress ring, intensifying opacity, heavy haptic at completion
+     Release: white flash overlay, "CHECK-IN COMPLETE" in gold
+12.5 App drawer items: My Vault, How It Works, Subscription,
+     Manage Subscription (paid only), Account Settings, Privacy Policy,
+     Terms & Conditions, Sign Out. Profile header with avatar + plan badge.
+12.6 Web viewer: cinematic animations, glassmorphism, responsive on mobile
+12.7 Dark theme consistent throughout, no jarring white screens
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 13. ACCOUNT DELETION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+13.1 Go to Home → Account Danger Zone → Delete Account
+13.2 Confirm deletion dialog
+13.3 Verify: all vault_entries for user deleted, device secrets cleared
+13.4 User signed out and returned to sign-in screen
+13.5 Profile row may be cascade-deleted or remain (depends on auth deletion)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 14. GITHUB ACTIONS — HEARTBEAT CRON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+14.1 Push code to GitHub with .github/workflows/heartbeat.yml
+14.2 Set repository secrets:
+     • SUPABASE_URL
+     • SUPABASE_SERVICE_ROLE_KEY
+     • SERVER_SECRET
+     • RESEND_API_KEY
+     • RESEND_FROM_EMAIL
+     • VIEWER_BASE_URL
+     • FIREBASE_SERVICE_ACCOUNT_JSON
+14.3 Trigger workflow manually (workflow_dispatch) to verify it runs
+14.4 Check Actions log for successful completion
+14.5 Verify cron schedule: daily at 5 AM UTC
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 15. STATIC ANALYSIS — FINAL CHECK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Run from project root:
+
+  dart analyze lib
+
+Expected output: "No issues found!"
+
+As of this audit (Feb 2026): 0 errors, 0 warnings, 0 infos.
+All deprecated APIs have been migrated:
+  • withOpacity → withValues(alpha:)
+  • MaterialStateProperty → WidgetStateProperty
+  • ColorScheme.background → surface
+  • ColorScheme.onBackground → onSurface
+  • ColorScheme.surfaceVariant → surfaceContainerHighest
+  • Purchases.purchasePackage → Purchases.purchase(PurchaseParams.package())
+
+
+================================================================================
+ QUICK-START COMMAND
+================================================================================
+
+flutter run \
+  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY \
+  --dart-define=REVENUECAT_API_KEY=YOUR_RC_KEY \
+  --dart-define=GOOGLE_WEB_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID \
+  --dart-define=WEB_VIEWER_BASE_URL=https://your-viewer.com
+
+================================================================================
+ END OF TESTING GUIDE
+================================================================================

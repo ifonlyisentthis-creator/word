@@ -46,7 +46,7 @@ class ProfileService {
 
   Future<Profile> updateSenderName(String userId, String senderName) async {
     final response = await _client
-        .rpc('update_sender_name', params: {'sender_name': senderName})
+        .rpc('update_sender_name', params: {'new_sender_name': senderName})
         .single();
     return Profile.fromMap(response);
   }
