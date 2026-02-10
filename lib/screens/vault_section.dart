@@ -26,8 +26,6 @@ import '../services/device_secret_service.dart';
 
 import '../services/server_crypto_service.dart';
 
-import '../services/home_controller.dart';
-
 import '../services/vault_controller.dart';
 
 import '../services/vault_service.dart';
@@ -46,6 +44,8 @@ class VaultSection extends StatelessWidget {
 
     required this.isLifetime,
 
+    this.onVaultChanged,
+
   });
 
 
@@ -55,6 +55,8 @@ class VaultSection extends StatelessWidget {
   final bool isPro;
 
   final bool isLifetime;
+
+  final VoidCallback? onVaultChanged;
 
 
 
@@ -92,6 +94,8 @@ class VaultSection extends StatelessWidget {
 
         isLifetime: isLifetime,
 
+        onVaultChanged: onVaultChanged,
+
       ),
 
     );
@@ -110,6 +114,8 @@ class _VaultSectionView extends StatelessWidget {
 
     required this.isLifetime,
 
+    this.onVaultChanged,
+
   });
 
 
@@ -117,6 +123,8 @@ class _VaultSectionView extends StatelessWidget {
   final bool isPro;
 
   final bool isLifetime;
+
+  final VoidCallback? onVaultChanged;
 
 
 
@@ -200,9 +208,7 @@ class _VaultSectionView extends StatelessWidget {
 
               await controller.deleteEntry(entry);
 
-              if (context.mounted) {
-                context.read<HomeController>().refreshVaultStatus();
-              }
+              if (context.mounted) onVaultChanged?.call();
 
             },
 
@@ -669,8 +675,7 @@ class _VaultSectionView extends StatelessWidget {
 
       );
 
-      // Refresh HomeController so 'vault empty' message updates.
-      context.read<HomeController>().refreshVaultStatus();
+      onVaultChanged?.call();
 
     }
 
