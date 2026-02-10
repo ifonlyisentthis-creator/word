@@ -132,7 +132,7 @@ class _SoulFireButtonState extends State<SoulFireButton>
                 Positioned(
                   bottom: 2,
                   child: Text(
-                    'CHECK-IN COMPLETE',
+                    'SIGNAL VERIFIED',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: const Color(0xFFFFB85C),
                           fontWeight: FontWeight.w700,
@@ -143,6 +143,7 @@ class _SoulFireButtonState extends State<SoulFireButton>
 
               // Touch target
               Listener(
+                behavior: HitTestBehavior.opaque,
                 onPointerDown: _onPointerDown,
                 onPointerUp: _onPointerUp,
                 onPointerCancel: (_) =>

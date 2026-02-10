@@ -36,7 +36,7 @@ class PushService {
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const settings = InitializationSettings(android: androidSettings);
-    await _localNotifications.initialize(settings);
+    await _localNotifications.initialize(settings: settings);
 
     await _localNotifications
         .resolvePlatformSpecificImplementation<
@@ -63,10 +63,10 @@ class PushService {
         );
 
         await _localNotifications.show(
-          notification.hashCode,
-          notification.title,
-          notification.body,
-          const NotificationDetails(android: androidDetails),
+          id: notification.hashCode,
+          title: notification.title,
+          body: notification.body,
+          notificationDetails: const NotificationDetails(android: androidDetails),
         );
       },
     );

@@ -21,12 +21,15 @@ class AuthController extends ChangeNotifier {
   final RevenueCatController _revenueCatController;
   final PushService _pushService;
 
-  GoogleSignIn _buildGoogleSignIn() {
+  bool _googleInitialized = false;
+
+  Future<void> _ensureGoogleInit() async {
+    if (_googleInitialized) return;
     const webClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
-    return GoogleSignIn(
+    await GoogleSignIn.instance.initialize(
       serverClientId: webClientId.isEmpty ? null : webClientId,
-      scopes: const ['email'],
     );
+    _googleInitialized = true;
   }
 
   StreamSubscription<AuthState>? _authSubscription;
@@ -60,18 +63,14 @@ class AuthController extends ChangeNotifier {
   Future<void> signInWithGoogle() async {
     _setLoading(true);
     try {
-      final signIn = _buildGoogleSignIn();
+      await _ensureGoogleInit();
+      final gsi = GoogleSignIn.instance;
 
-      await signIn.disconnect().catchError((_) { return null; });
-      await signIn.signOut().catchError((_) { return null; });
-      final account = await signIn.signIn();
-      if (account == null) {
-        _lastFailure = null;
-        return;
-      }
-      final auth = await account.authentication;
+      await gsi.disconnect().catchError((_) {});
+      await gsi.signOut().catchError((_) {});
+      final account = await gsi.authenticate();
+      final auth = account.authentication;
       final idToken = auth.idToken;
-      final accessToken = auth.accessToken;
       if (idToken == null || idToken.isEmpty) {
         _lastFailure = const AuthFailure(
           'Google sign-in failed. Please try again.',
@@ -82,8 +81,10 @@ class AuthController extends ChangeNotifier {
       await _supabaseClient.auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,
-        accessToken: accessToken,
       );
+      _lastFailure = null;
+    } on GoogleSignInException catch (_) {
+      // User cancelled or other Google-specific error
       _lastFailure = null;
     } on AuthException catch (exception) {
       _lastFailure = AuthFailure(exception.message);
@@ -107,9 +108,10 @@ class AuthController extends ChangeNotifier {
     try {
       await _pushService.onSignOut();
 
-      final googleSignIn = _buildGoogleSignIn();
-      await googleSignIn.signOut().catchError((_) { return null; });
-      await googleSignIn.disconnect().catchError((_) { return null; });
+      await _ensureGoogleInit();
+      final gsi = GoogleSignIn.instance;
+      await gsi.signOut().catchError((_) {});
+      await gsi.disconnect().catchError((_) {});
 
       await _supabaseClient.auth.signOut();
       _lastFailure = null;

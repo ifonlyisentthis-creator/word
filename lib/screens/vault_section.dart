@@ -26,6 +26,8 @@ import '../services/device_secret_service.dart';
 
 import '../services/server_crypto_service.dart';
 
+import '../services/home_controller.dart';
+
 import '../services/vault_controller.dart';
 
 import '../services/vault_service.dart';
@@ -197,6 +199,10 @@ class _VaultSectionView extends StatelessWidget {
               if (!confirmed) return;
 
               await controller.deleteEntry(entry);
+
+              if (context.mounted) {
+                context.read<HomeController>().refreshVaultStatus();
+              }
 
             },
 
@@ -662,6 +668,9 @@ class _VaultSectionView extends StatelessWidget {
         ),
 
       );
+
+      // Refresh HomeController so 'vault empty' message updates.
+      context.read<HomeController>().refreshVaultStatus();
 
     }
 

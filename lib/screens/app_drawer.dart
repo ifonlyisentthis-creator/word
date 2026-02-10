@@ -7,6 +7,7 @@ import '../services/home_controller.dart';
 import '../services/revenuecat_controller.dart';
 import 'account_settings_screen.dart';
 import 'how_it_works_screen.dart';
+import 'my_vault_page.dart';
 import 'privacy_policy_screen.dart';
 import 'subscription_debug_screen.dart';
 import 'terms_screen.dart';
@@ -14,21 +15,26 @@ import 'terms_screen.dart';
 class AppDrawer extends StatelessWidget {
   const AppDrawer({
     super.key,
-    this.onScrollToVault,
+    required this.userId,
   });
 
-  final VoidCallback? onScrollToVault;
+  final String userId;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authController = context.read<AuthController>();
     final revenueCat = context.watch<RevenueCatController>();
+    final homeController = context.watch<HomeController>();
     final user = Supabase.instance.client.auth.currentUser;
     final email = user?.email ?? '';
-    final displayName = user?.userMetadata?['full_name'] as String? ??
-        user?.userMetadata?['name'] as String? ??
-        email.split('@').first;
+    // Use sender name from profile (updated in account settings) with auth metadata fallback
+    final profileName = homeController.profile?.senderName;
+    final authName = user?.userMetadata?['full_name'] as String? ??
+        user?.userMetadata?['name'] as String?;
+    final displayName = (profileName != null && profileName != 'Afterword')
+        ? profileName
+        : authName ?? email.split('@').first;
 
     final isPro = revenueCat.isPro || revenueCat.isLifetime;
 
@@ -137,7 +143,12 @@ class AppDrawer extends StatelessWidget {
                     label: 'My Vault',
                     onTap: () {
                       Navigator.pop(context);
-                      onScrollToVault?.call();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MyVaultPage(userId: userId),
+                        ),
+                      );
                     },
                   ),
                   _DrawerItem(

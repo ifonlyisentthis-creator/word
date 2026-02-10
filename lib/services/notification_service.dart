@@ -32,7 +32,7 @@ class NotificationService {
 
     const settings = InitializationSettings(android: androidSettings);
 
-    await _plugin.initialize(settings);
+    await _plugin.initialize(settings: settings);
 
 
 
@@ -56,9 +56,9 @@ class NotificationService {
 
   ) async {
 
-    await _plugin.cancel(_reminderId);
+    await _plugin.cancel(id: _reminderId);
 
-    await _plugin.cancel(_urgentId);
+    await _plugin.cancel(id: _urgentId);
 
 
 
@@ -160,21 +160,17 @@ class NotificationService {
 
     await _plugin.zonedSchedule(
 
-      id,
+      id: id,
 
-      title,
+      title: title,
 
-      body,
+      body: body,
 
-      tz.TZDateTime.from(scheduledFor, tz.local),
+      scheduledDate: tz.TZDateTime.from(scheduledFor, tz.local),
 
-      details,
+      notificationDetails: details,
 
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-
-      uiLocalNotificationDateInterpretation:
-
-          UILocalNotificationDateInterpretation.absoluteTime,
 
     );
 

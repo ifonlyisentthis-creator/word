@@ -205,15 +205,9 @@ class _AppLockGateState extends State<AppLockGate>
 
         localizedReason: 'Unlock Afterword with your device PIN.',
 
-        options: const AuthenticationOptions(
+        biometricOnly: false,
 
-          biometricOnly: false,
-
-          stickyAuth: true,
-
-          useErrorDialogs: true,
-
-        ),
+        persistAcrossBackgrounding: true,
 
       );
 

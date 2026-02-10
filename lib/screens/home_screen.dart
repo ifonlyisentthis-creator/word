@@ -36,7 +36,7 @@ import '../widgets/soul_fire_button.dart';
 
 import 'app_drawer.dart';
 
-import 'vault_section.dart';
+import 'my_vault_page.dart';
 
 
 
@@ -323,7 +323,6 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
   final DateFormat _dateFormat = DateFormat('MMM d, yyyy');
 
-  final GlobalKey _vaultKey = GlobalKey();
 
 
 
@@ -395,7 +394,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
       drawer: AppDrawer(
 
-        onScrollToVault: _scrollToVault,
+        userId: widget.userId,
 
       ),
 
@@ -519,16 +518,34 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                 const SizedBox(height: 28),
 
-                VaultSection(
-
-                  key: _vaultKey,
-
-                  userId: widget.userId,
-
-                  isPro: isPro,
-
-                  isLifetime: isLifetime,
-
+                _VaultSummaryCard(
+                  entryCount: controller.vaultEntryCount,
+                  isLoading: controller.isLoading,
+                  onViewAll: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => MyVaultPage(userId: widget.userId),
+                      ),
+                    ).then((_) {
+                      // Refresh vault count when returning from vault page
+                      if (context.mounted) {
+                        context.read<HomeController>().refreshVaultStatus();
+                      }
+                    });
+                  },
+                  onAdd: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => MyVaultPage(userId: widget.userId),
+                      ),
+                    ).then((_) {
+                      if (context.mounted) {
+                        context.read<HomeController>().refreshVaultStatus();
+                      }
+                    });
+                  },
                 ),
 
               ],
@@ -547,20 +564,6 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
 
 
-  void _scrollToVault() {
-    _scrollToKey(_vaultKey);
-  }
-
-  void _scrollToKey(GlobalKey key) {
-    final ctx = key.currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
 
 }
 
@@ -1179,32 +1182,11 @@ class _TimerCardState extends State<_TimerCard> {
             ],
 
             if (_canAdjust) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _fmtDays(currentDays),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      widget.isLifetime ? 'LIFETIME' : 'PRO',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontSize: 10,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ),
-                ],
+              Text(
+                'Timer: ${_fmtDays(currentDays)}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 2),
               Row(
@@ -1378,4 +1360,85 @@ class _SurfaceCard extends StatelessWidget {
 
 
 
-// PulseRing removed — replaced by SoulFireButton in widgets/soul_fire_button.dart
+class _VaultSummaryCard extends StatelessWidget {
+  const _VaultSummaryCard({
+    required this.entryCount,
+    required this.isLoading,
+    required this.onViewAll,
+    required this.onAdd,
+  });
+
+  final int entryCount;
+  final bool isLoading;
+  final VoidCallback onViewAll;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return _SurfaceCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.lock_outline, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Text('Vault', style: theme.textTheme.titleMedium),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary
+                        .withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$entryCount',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: onViewAll,
+                  child: const Text('View All →'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              entryCount == 0
+                  ? 'Your vault is empty. Add a secure message.'
+                  : '$entryCount encrypted ${entryCount == 1 ? 'entry' : 'entries'} stored.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: Colors.white60),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: isLoading ? null : onAdd,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Entry'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

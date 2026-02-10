@@ -61,6 +61,7 @@ class HomeController extends ChangeNotifier {
   bool _notificationsReady = false;
 
   bool _hasVaultEntries = false;
+  int _vaultEntryCount = 0;
 
 
 
@@ -77,6 +78,7 @@ class HomeController extends ChangeNotifier {
   bool get protocolNoEntries => _protocolNoEntries;
 
   bool get hasVaultEntries => _hasVaultEntries;
+  int get vaultEntryCount => _vaultEntryCount;
 
 
 
@@ -489,9 +491,10 @@ class HomeController extends ChangeNotifier {
           .from('vault_entries')
           .select('id')
           .eq('user_id', _user!.id)
-          .eq('status', 'active')
-          .limit(1);
-      _hasVaultEntries = (rows as List).isNotEmpty;
+          .eq('status', 'active');
+      final list = rows as List;
+      _hasVaultEntries = list.isNotEmpty;
+      _vaultEntryCount = list.length;
     } catch (_) {
       // Best-effort; leave current value.
     }

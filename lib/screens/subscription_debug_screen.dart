@@ -32,6 +32,9 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
         final packages = currentOffering?.availablePackages ?? <Package>[];
 
+        final isLifetime = controller.isLifetime;
+        final isPro = controller.isPro;
+
         return Scaffold(
 
           appBar: AppBar(
@@ -72,7 +75,9 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
                   _StatusCard(
 
-                    isPro: controller.isPro,
+                    isPro: isPro,
+
+                    isLifetime: isLifetime,
 
                     isLoading: controller.isLoading,
 
@@ -81,6 +86,14 @@ class SubscriptionDebugScreen extends StatelessWidget {
                   ),
 
                   const SizedBox(height: 20),
+
+                  if (isLifetime) ...[
+                    _InfoBanner(
+                      icon: Icons.workspace_premium,
+                      message: 'You have Lifetime access. All features are permanently unlocked.',
+                      color: const Color(0xFF5BC0B4),
+                    ),
+                  ] else ...[
 
                   Text(
 
@@ -108,6 +121,8 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
                       isLoading: controller.isLoading,
 
+                      currentlyPro: isPro,
+
                       onPurchase: () async {
 
                         await controller.purchasePackage(package);
@@ -118,6 +133,7 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
                     const SizedBox(height: 12),
 
+                  ],
                   ],
 
                   const SizedBox(height: 20),
@@ -236,11 +252,52 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
 
 
+class _InfoBanner extends StatelessWidget {
+  const _InfoBanner({
+    required this.icon,
+    required this.message,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String message;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatusCard extends StatelessWidget {
 
   const _StatusCard({
 
     required this.isPro,
+
+    required this.isLifetime,
 
     required this.isLoading,
 
@@ -252,6 +309,8 @@ class _StatusCard extends StatelessWidget {
 
   final bool isPro;
 
+  final bool isLifetime;
+
   final bool isLoading;
 
   final RevenueCatFailure? lastFailure;
@@ -262,11 +321,11 @@ class _StatusCard extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
-    final statusText = isPro ? 'Active' : 'Inactive';
+    final statusText = isLifetime ? 'Lifetime' : isPro ? 'Active' : 'Inactive';
 
-    final statusColor =
-
-        isPro ? Theme.of(context).colorScheme.secondary : Colors.orangeAccent;
+    final statusColor = isLifetime
+        ? const Color(0xFF5BC0B4)
+        : isPro ? Theme.of(context).colorScheme.secondary : Colors.orangeAccent;
 
 
 
@@ -462,6 +521,8 @@ class _PackageTile extends StatelessWidget {
 
     required this.isLoading,
 
+    required this.currentlyPro,
+
     required this.onPurchase,
 
   });
@@ -471,6 +532,8 @@ class _PackageTile extends StatelessWidget {
   final Package package;
 
   final bool isLoading;
+
+  final bool currentlyPro;
 
   final Future<void> Function() onPurchase;
 
@@ -584,7 +647,7 @@ class _PackageTile extends StatelessWidget {
 
                 FilledButton.icon(
 
-                  onPressed: isLoading
+                  onPressed: (isLoading || (currentlyPro && !_isLifetimePackage(package)))
 
                       ? null
 
@@ -594,9 +657,13 @@ class _PackageTile extends StatelessWidget {
 
                         },
 
-                  icon: const Icon(Icons.shopping_bag_outlined),
+                  icon: Icon(currentlyPro && !_isLifetimePackage(package)
+                      ? Icons.check_circle_outline
+                      : Icons.shopping_bag_outlined),
 
-                  label: Text(isLoading ? 'Processing' : 'Subscribe'),
+                  label: Text(currentlyPro && !_isLifetimePackage(package)
+                      ? 'Current Plan'
+                      : isLoading ? 'Processing' : 'Subscribe'),
 
                 ),
 
@@ -667,6 +734,11 @@ class _ActionButton extends StatelessWidget {
 }
 
 
+
+bool _isLifetimePackage(Package package) {
+  final id = package.storeProduct.identifier.toLowerCase();
+  return id.contains('lifetime');
+}
 
 String _formatPackageType(PackageType type) {
 
