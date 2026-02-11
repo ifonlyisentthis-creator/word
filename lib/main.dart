@@ -16,6 +16,8 @@ import 'config/app_config.dart';
 
 import 'screens/auth_gate.dart';
 
+import 'screens/splash_screen.dart';
+
 import 'services/auth_controller.dart';
 
 import 'services/push_service.dart';
@@ -30,101 +32,131 @@ Future<void> main() async {
 
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  final config = AppConfig.fromEnv();
-
-
-
-  if (!kIsWeb &&
-
-      (defaultTargetPlatform == TargetPlatform.android ||
-
-          defaultTargetPlatform == TargetPlatform.iOS)) {
-
-    await Firebase.initializeApp();
-
-  }
-
-
-
-  await Supabase.initialize(
-
-    url: config.supabaseUrl,
-
-    anonKey: config.supabaseAnonKey,
-
-    authOptions: FlutterAuthClientOptions(
-
-      authFlowType: AuthFlowType.pkce,
-
-    ),
-
-    debug: kDebugMode,
-
-  );
-
-
-
-  final revenueCatController =
-
-      RevenueCatController(entitlementId: config.revenueCatEntitlementId);
-
-  await revenueCatController.configure(apiKey: config.revenueCatApiKey);
-
-  final authController = AuthController(
-
-    supabaseClient: Supabase.instance.client,
-
-    revenueCatController: revenueCatController,
-
-    redirectUrl: config.supabaseAuthRedirectUrl,
-
-    pushService: PushService(client: Supabase.instance.client),
-
-  );
-
-  await authController.initialize();
-
-  runApp(
-
-    AfterwordApp(
-
-      config: config,
-
-      revenueCatController: revenueCatController,
-
-      authController: authController,
-
-    ),
-
-  );
+  runApp(const AfterwordApp());
 
 }
 
 
 
-class AfterwordApp extends StatelessWidget {
+class AfterwordApp extends StatefulWidget {
 
-  const AfterwordApp({
-
-    super.key,
-
-    required this.config,
-
-    required this.revenueCatController,
-
-    required this.authController,
-
-  });
+  const AfterwordApp({super.key});
 
 
 
-  final AppConfig config;
+  @override
 
-  final RevenueCatController revenueCatController;
+  State<AfterwordApp> createState() => _AfterwordAppState();
 
-  final AuthController authController;
+}
+
+
+
+class _AfterwordAppState extends State<AfterwordApp> {
 
   static final ThemeData _cachedTheme = _buildTheme();
+
+  bool _ready = false;
+
+  late AppConfig _config;
+
+  late RevenueCatController _revenueCatController;
+
+  late AuthController _authController;
+
+
+
+  @override
+
+  void initState() {
+
+    super.initState();
+
+    _bootstrap();
+
+  }
+
+
+
+  Future<void> _bootstrap() async {
+
+    final config = AppConfig.fromEnv();
+
+    _config = config;
+
+
+
+    await Future.wait([
+
+      _initServices(config),
+
+      Future.delayed(const Duration(milliseconds: 1200)),
+
+    ]);
+
+
+
+    if (!mounted) return;
+
+    setState(() => _ready = true);
+
+  }
+
+
+
+  Future<void> _initServices(AppConfig config) async {
+
+    if (!kIsWeb &&
+
+        (defaultTargetPlatform == TargetPlatform.android ||
+
+            defaultTargetPlatform == TargetPlatform.iOS)) {
+
+      await Firebase.initializeApp();
+
+    }
+
+
+
+    await Supabase.initialize(
+
+      url: config.supabaseUrl,
+
+      anonKey: config.supabaseAnonKey,
+
+      authOptions: FlutterAuthClientOptions(
+
+        authFlowType: AuthFlowType.pkce,
+
+      ),
+
+      debug: kDebugMode,
+
+    );
+
+
+
+    _revenueCatController =
+
+        RevenueCatController(entitlementId: config.revenueCatEntitlementId);
+
+    await _revenueCatController.configure(apiKey: config.revenueCatApiKey);
+
+    _authController = AuthController(
+
+      supabaseClient: Supabase.instance.client,
+
+      revenueCatController: _revenueCatController,
+
+      redirectUrl: config.supabaseAuthRedirectUrl,
+
+      pushService: PushService(client: Supabase.instance.client),
+
+    );
+
+    await _authController.initialize();
+
+  }
 
 
 
@@ -132,17 +164,31 @@ class AfterwordApp extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
-    final theme = _cachedTheme;
+    if (!_ready) {
+
+      return MaterialApp(
+
+        theme: _cachedTheme,
+
+        debugShowCheckedModeBanner: false,
+
+        home: const SplashScreen(),
+
+      );
+
+    }
+
+
 
     return MultiProvider(
 
       providers: [
 
-        Provider.value(value: config),
+        Provider.value(value: _config),
 
-        ChangeNotifierProvider.value(value: revenueCatController),
+        ChangeNotifierProvider.value(value: _revenueCatController),
 
-        ChangeNotifierProvider.value(value: authController),
+        ChangeNotifierProvider.value(value: _authController),
 
       ],
 
@@ -150,7 +196,7 @@ class AfterwordApp extends StatelessWidget {
 
         title: 'Afterword',
 
-        theme: theme,
+        theme: _cachedTheme,
 
         debugShowCheckedModeBanner: false,
 

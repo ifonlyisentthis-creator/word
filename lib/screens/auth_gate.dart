@@ -12,7 +12,6 @@ import 'app_lock_gate.dart';
 
 import 'home_screen.dart';
 
-import 'splash_screen.dart';
 
 
 
@@ -32,27 +31,9 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
 
-  bool _splashComplete = false;
-
-
-
   @override
 
   Widget build(BuildContext context) {
-
-    if (!_splashComplete) {
-
-      return SplashScreen(
-
-        onComplete: () {
-
-          if (mounted) setState(() => _splashComplete = true);
-
-        },
-
-      );
-
-    }
 
     return Consumer<AuthController>(
 
