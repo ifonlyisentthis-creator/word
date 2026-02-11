@@ -26,11 +26,11 @@
 
 
 
-1.6 Automatic Reset: The timer MUST reset automatically in the background (`initState`) the moment the app is opened. The user is not required to touch anything but for sake of users mind, we will add a "Soul Fire" button.
+1.6 NO Automatic Reset: The timer does NOT reset on app open. Opening the app only refreshes the display (fetches the latest profile from the server) without updating `last_check_in`. The timer countdown continues regardless of how many times the app is opened.
 
 
 
-1.7 Manual Reset: The "Pulse" soul fire ring is there for psychological reassurance. If the user Long Presses the ring, it fills up visually, triggers a haptic vibration, and displays "Signal Verified." This confirms the timer has been reset.
+1.7 Soul Fire Reset (ONLY way to reset): The timer resets ONLY when the user Long Presses the Soul Fire ring. The ring fills up visually, triggers a haptic vibration, and displays "Signal Verified." This is the ONLY action that calls `update_check_in` and resets `last_check_in` to now(). No other interaction resets the timer.
 
 
 

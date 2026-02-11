@@ -28,6 +28,7 @@ class _SoulFireButtonState extends State<SoulFireButton>
   late final AnimationController _flashController;
 
   bool _completed = false;
+  Offset? _pointerStart;
 
   @override
   void initState() {
@@ -74,13 +75,27 @@ class _SoulFireButtonState extends State<SoulFireButton>
     super.dispose();
   }
 
-  void _onPointerDown(PointerDownEvent _) {
+  void _onPointerDown(PointerDownEvent event) {
     if (!widget.enabled || _completed) return;
+    _pointerStart = event.position;
     _holdController.forward(from: 0);
     HapticFeedback.lightImpact();
   }
 
+  void _onPointerMove(PointerMoveEvent event) {
+    if (_pointerStart == null || _completed) return;
+    final distance = (event.position - _pointerStart!).distance;
+    if (distance > 18) {
+      _cancelHold();
+    }
+  }
+
   void _onPointerUp(PointerUpEvent _) {
+    _cancelHold();
+  }
+
+  void _cancelHold() {
+    _pointerStart = null;
     if (_completed) return;
     _holdController.stop();
     _holdController.reset();
@@ -145,9 +160,9 @@ class _SoulFireButtonState extends State<SoulFireButton>
               Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: _onPointerDown,
+                onPointerMove: _onPointerMove,
                 onPointerUp: _onPointerUp,
-                onPointerCancel: (_) =>
-                    _onPointerUp(const PointerUpEvent()),
+                onPointerCancel: (_) => _cancelHold(),
                 child: SizedBox(width: _size, height: _size),
               ),
             ],

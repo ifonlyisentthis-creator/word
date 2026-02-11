@@ -138,31 +138,11 @@ class HomeController extends ChangeNotifier {
 
       _profile = ensured;
 
+      _errorMessage = null;
+
       if (ensured.status.toLowerCase() == 'active') {
 
-        try {
-
-          final updated = await _profileService.updateCheckIn(user.id);
-
-          if (_isDisposed) return;
-
-          _profile = updated.copyWith(senderName: ensured.senderName);
-
-          _errorMessage = null;
-
-        } catch (_) {
-
-          _errorMessage = 'Unable to refresh your timer.';
-
-        }
-
         await _scheduleReminders();
-
-      } else {
-
-        _profile = ensured;
-
-        _errorMessage = null;
 
       }
 
@@ -234,43 +214,15 @@ class HomeController extends ChangeNotifier {
 
       _setProtocolState(profile);
 
-      if (profile.status.toLowerCase() != 'active') {
-
-        _profile = profile;
-
-        _errorMessage = null;
-
-        notifyListeners();
-
-        return;
-
-      }
-
       _profile = profile;
 
-      try {
-
-        _profile = await _profileService.updateCheckIn(_user!.id);
-
-        if (_isDisposed) return;
-
-        _errorMessage = null;
-
-      } catch (_) {
-
-        _errorMessage = 'Unable to refresh your timer.';
-
-      }
-
-      await _scheduleReminders();
+      _errorMessage = null;
 
       notifyListeners();
 
     } catch (_) {
 
-      _errorMessage = 'Unable to refresh your timer.';
-
-      notifyListeners();
+      // Silent background refresh — no error shown
 
     }
 
@@ -326,13 +278,7 @@ class HomeController extends ChangeNotifier {
 
     try {
 
-      _profile = await _profileService.updateCheckIn(
-
-        _user!.id,
-
-        timerDays: timerDays,
-
-      );
+      _profile = await _profileService.updateTimerDays(timerDays);
 
       _errorMessage = null;
 
@@ -409,6 +355,8 @@ class HomeController extends ChangeNotifier {
       _protocolWasArchived = false;
 
       _protocolNoEntries = false;
+
+      notifyListeners();
 
       await _scheduleReminders();
 

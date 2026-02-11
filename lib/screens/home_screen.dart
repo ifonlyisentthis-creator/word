@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:intl/intl.dart';
@@ -409,6 +411,8 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
           SafeArea(
 
             child: RefreshIndicator(
+              displacement: 60,
+              strokeWidth: 2.5,
               onRefresh: () async {
                 final hc = context.read<HomeController>();
                 await hc.autoCheckIn();
@@ -860,18 +864,51 @@ class _TimerCard extends StatefulWidget {
 
 class _TimerCardState extends State<_TimerCard> {
 
-  double? _localSlider;
+  bool _showLongTimerWarning = false;
+  Timer? _warningTimer;
 
   int get _minDays => widget.isPro || widget.isLifetime ? 7 : 30;
   int get _maxDays => widget.isLifetime ? 3650 : widget.isPro ? 365 : 30;
   bool get _canAdjust => widget.isPro || widget.isLifetime;
 
   @override
-  void didUpdateWidget(covariant _TimerCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.profile?.timerDays != widget.profile?.timerDays) {
-      _localSlider = null;
-    }
+  void dispose() {
+    _warningTimer?.cancel();
+    super.dispose();
+  }
+
+  void _openTimerPicker() {
+    final profile = widget.profile;
+    if (profile == null) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _TimerPickerSheet(
+        currentDays: profile.timerDays,
+        minDays: _minDays,
+        maxDays: _maxDays,
+        isLifetime: widget.isLifetime,
+        onConfirm: (days) {
+          Navigator.pop(context);
+          if (days != profile.timerDays) {
+            widget.onTimerChanged(days);
+            if (days >= 365) {
+              _warningTimer?.cancel();
+              setState(() => _showLongTimerWarning = true);
+              _warningTimer = Timer(const Duration(seconds: 5), () {
+                if (mounted) setState(() => _showLongTimerWarning = false);
+              });
+            } else {
+              _warningTimer?.cancel();
+              if (_showLongTimerWarning) {
+                setState(() => _showLongTimerWarning = false);
+              }
+            }
+          }
+        },
+      ),
+    );
   }
 
   String _fmtDays(int d) {
@@ -1006,7 +1043,7 @@ class _TimerCardState extends State<_TimerCard> {
 
         : remainingSeconds / totalSeconds.toDouble();
 
-    final currentDays = _localSlider?.round() ?? resolvedProfile.timerDays;
+    final currentDays = resolvedProfile.timerDays;
 
 
 
@@ -1189,61 +1226,29 @@ class _TimerCardState extends State<_TimerCard> {
             ],
 
             if (_canAdjust) ...[
-              Text(
-                'Timer: ${_fmtDays(currentDays)}',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 2),
               Row(
                 children: [
-                  Text('${_minDays}d',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: Colors.white38, fontSize: 10)),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 3,
-                        thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 7),
-                        overlayShape: const RoundSliderOverlayShape(
-                            overlayRadius: 16),
-                        activeTrackColor: theme.colorScheme.primary,
-                        inactiveTrackColor: Colors.white12,
-                        thumbColor: theme.colorScheme.primary,
-                        overlayColor:
-                            theme.colorScheme.primary.withValues(alpha: 0.15),
-                      ),
-                      child: Slider(
-                        min: _minDays.toDouble(),
-                        max: _maxDays.toDouble(),
-                        divisions: _maxDays - _minDays,
-                        value: currentDays
-                            .toDouble()
-                            .clamp(_minDays.toDouble(), _maxDays.toDouble()),
-                        onChanged: widget.isLoading
-                            ? null
-                            : (v) => setState(() => _localSlider = v),
-                        onChangeEnd: widget.isLoading
-                            ? null
-                            : (v) {
-                                final d = v.round();
-                                if (d != resolvedProfile.timerDays) {
-                                  widget.onTimerChanged(d);
-                                }
-                                setState(() => _localSlider = null);
-                              },
-                      ),
+                  Icon(Icons.timer_outlined, size: 16, color: Colors.white54),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Timer: ${_fmtDays(currentDays)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  Text(_fmtDays(_maxDays),
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: Colors.white38, fontSize: 10)),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: widget.isLoading ? null : _openTimerPicker,
+                    icon: const Icon(Icons.tune, size: 16),
+                    label: const Text('Adjust'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: theme.colorScheme.primary,
+                      textStyle: theme.textTheme.labelMedium,
+                    ),
+                  ),
                 ],
               ),
-
-              if (widget.isLifetime && currentDays > 365) ...[
+              if (_showLongTimerWarning) ...[
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.all(10),
@@ -1302,6 +1307,190 @@ class _TimerCardState extends State<_TimerCard> {
 }
 
 
+
+class _TimerPickerSheet extends StatefulWidget {
+  const _TimerPickerSheet({
+    required this.currentDays,
+    required this.minDays,
+    required this.maxDays,
+    required this.isLifetime,
+    required this.onConfirm,
+  });
+
+  final int currentDays;
+  final int minDays;
+  final int maxDays;
+  final bool isLifetime;
+  final ValueChanged<int> onConfirm;
+
+  @override
+  State<_TimerPickerSheet> createState() => _TimerPickerSheetState();
+}
+
+class _TimerPickerSheetState extends State<_TimerPickerSheet> {
+  late double _sliderValue;
+
+  @override
+  void initState() {
+    super.initState();
+    _sliderValue = widget.currentDays
+        .toDouble()
+        .clamp(widget.minDays.toDouble(), widget.maxDays.toDouble());
+  }
+
+  int get _selectedDays => _sliderValue.round();
+
+  String _fmtDays(int d) {
+    if (d >= 365) {
+      final y = d ~/ 365;
+      final r = d % 365;
+      if (r == 0) return '$y ${y == 1 ? 'year' : 'years'}';
+      return '$y${y == 1 ? 'yr' : 'yrs'}, $r days';
+    }
+    return '$d days';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final range = widget.maxDays - widget.minDays;
+    final divisions = range > 500 ? (range ~/ 5) : range;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF141414),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Adjust Timer',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Set how long before protocol executes',
+            style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
+          ),
+          const SizedBox(height: 28),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Text(
+              _fmtDays(_selectedDays),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Text(
+                _fmtDays(widget.minDays),
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: Colors.white30, fontSize: 10),
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 4,
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 8),
+                    overlayShape:
+                        const RoundSliderOverlayShape(overlayRadius: 18),
+                    activeTrackColor: theme.colorScheme.primary,
+                    inactiveTrackColor: Colors.white10,
+                    thumbColor: Colors.white,
+                    overlayColor:
+                        theme.colorScheme.primary.withValues(alpha: 0.12),
+                  ),
+                  child: Slider(
+                    min: widget.minDays.toDouble(),
+                    max: widget.maxDays.toDouble(),
+                    divisions: divisions,
+                    value: _sliderValue,
+                    onChanged: (v) => setState(() => _sliderValue = v),
+                  ),
+                ),
+              ),
+              Text(
+                _fmtDays(widget.maxDays),
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: Colors.white30, fontSize: 10),
+              ),
+            ],
+          ),
+          if (_selectedDays >= 365) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: theme.colorScheme.error.withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      size: 16, color: theme.colorScheme.error),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Beneficiaries won\'t receive anything until the '
+                      'full ${_fmtDays(_selectedDays)} duration passes.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => widget.onConfirm(_selectedDays),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: Text('Set to ${_fmtDays(_selectedDays)}'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _SurfaceCard extends StatelessWidget {
 

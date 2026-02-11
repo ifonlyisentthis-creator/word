@@ -49,6 +49,51 @@ begin
 end;
 $$;
 
+create or replace function public.update_timer_days(p_timer_days int)
+returns profiles
+language plpgsql
+security definer
+as $$
+declare
+  result profiles;
+  sub text;
+  max_timer int;
+  effective_timer int;
+begin
+  if auth.uid() is null then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status into sub
+  from profiles where id = auth.uid();
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub = 'lifetime' then
+    max_timer := 3650;
+  elsif sub = 'pro' then
+    max_timer := 365;
+  else
+    max_timer := 30;
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  else
+    effective_timer := greatest(7, least(max_timer, p_timer_days));
+  end if;
+
+  update profiles
+  set timer_days = effective_timer
+  where id = auth.uid()
+  returning * into result;
+
+  return result;
+end;
+$$;
+
 create or replace function public.guard_timer_days()
 returns trigger
 language plpgsql

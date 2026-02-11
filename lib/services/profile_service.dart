@@ -44,6 +44,12 @@ class ProfileService {
     return Profile.fromMap(response);
   }
 
+  Future<Profile> updateTimerDays(int timerDays) async {
+    final response = await _client
+        .rpc('update_timer_days', params: {'p_timer_days': timerDays}).single();
+    return Profile.fromMap(response);
+  }
+
   Future<Profile> updateSenderName(String userId, String senderName) async {
     final response = await _client
         .rpc('update_sender_name', params: {'new_sender_name': senderName})
