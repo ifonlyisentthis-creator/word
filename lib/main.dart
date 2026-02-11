@@ -86,13 +86,21 @@ class _AfterwordAppState extends State<AfterwordApp> {
 
 
 
-    await Future.wait([
+    try {
 
-      _initServices(config),
+      await Future.wait([
 
-      Future.delayed(const Duration(milliseconds: 1200)),
+        _initServices(config),
 
-    ]);
+        Future.delayed(const Duration(milliseconds: 1200)),
+
+      ]);
+
+    } catch (e) {
+
+      debugPrint('Bootstrap error: $e');
+
+    }
 
 
 

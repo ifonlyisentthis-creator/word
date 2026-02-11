@@ -638,47 +638,55 @@ class _HeaderRow extends StatelessWidget {
 
         const SizedBox(width: 12),
 
-        Column(
+        Flexible(
 
-          crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
 
-          children: [
+            crossAxisAlignment: CrossAxisAlignment.start,
 
-            Text(
+            children: [
 
-              'Afterword',
+              Text(
 
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                'Afterword',
 
-                    fontWeight: FontWeight.w600,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
 
-                    letterSpacing: 1.3,
+                      fontWeight: FontWeight.w600,
 
-                  ),
+                      letterSpacing: 1.3,
 
-            ),
+                    ),
 
-            const SizedBox(height: 2),
+                overflow: TextOverflow.ellipsis,
 
-            Text(
+              ),
 
-              'Signal-secure vault',
+              const SizedBox(height: 2),
 
-              style: Theme.of(context)
+              Text(
 
-                  .textTheme
+                'Signal-secure vault',
 
-                  .bodySmall
+                style: Theme.of(context)
 
-                  ?.copyWith(color: Colors.white60),
+                    .textTheme
 
-            ),
+                    .bodySmall
 
-          ],
+                    ?.copyWith(color: Colors.white60),
+
+                overflow: TextOverflow.ellipsis,
+
+              ),
+
+            ],
+
+          ),
 
         ),
 
-        const Spacer(),
+        const SizedBox(width: 8),
 
         _PlanChip(isPro: isPro, isLifetime: isLifetime),
 
@@ -1230,13 +1238,16 @@ class _TimerCardState extends State<_TimerCard> {
                 children: [
                   Icon(Icons.timer_outlined, size: 16, color: Colors.white54),
                   const SizedBox(width: 8),
-                  Text(
-                    'Timer: ${_fmtDays(currentDays)}',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: Text(
+                      'Timer: ${_fmtDays(currentDays)}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 4),
                   TextButton.icon(
                     onPressed: widget.isLoading ? null : _openTimerPicker,
                     icon: const Icon(Icons.tune, size: 16),
@@ -1609,9 +1620,11 @@ class _VaultSummaryCard extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                TextButton(
-                  onPressed: onViewAll,
-                  child: const Text('View All →'),
+                Flexible(
+                  child: TextButton(
+                    onPressed: onViewAll,
+                    child: const Text('View All →'),
+                  ),
                 ),
               ],
             ),
