@@ -133,6 +133,9 @@ Future<bool> openVaultEntryEditor(
   bool created = false;
 
   try {
+    await controller.loadEntries();
+    if (!context.mounted) return false;
+
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,

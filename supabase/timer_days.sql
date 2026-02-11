@@ -39,7 +39,9 @@ begin
   update profiles
   set last_check_in = now(),
       timer_days = effective_timer,
-      warning_sent_at = null
+      warning_sent_at = null,
+      push_66_sent_at = null,
+      push_33_sent_at = null
   where id = user_id
   returning * into result;
 
