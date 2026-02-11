@@ -36,6 +36,7 @@ class MyVaultPage extends StatelessWidget {
                 isPro: isPro,
                 isLifetime: isLifetime,
                 readOnly: false,
+                allowCreate: false,
               ),
             ],
           ),

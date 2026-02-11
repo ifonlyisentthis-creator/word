@@ -48,6 +48,8 @@ class VaultSection extends StatelessWidget {
 
     this.readOnly = false,
 
+    this.allowCreate = true,
+
   });
 
 
@@ -61,6 +63,8 @@ class VaultSection extends StatelessWidget {
   final VoidCallback? onVaultChanged;
 
   final bool readOnly;
+
+  final bool allowCreate;
 
 
 
@@ -101,6 +105,8 @@ class VaultSection extends StatelessWidget {
         onVaultChanged: onVaultChanged,
 
         readOnly: readOnly,
+
+        allowCreate: allowCreate,
 
       ),
 
@@ -185,6 +191,8 @@ class _VaultSectionView extends StatelessWidget {
 
     this.readOnly = false,
 
+    this.allowCreate = true,
+
   });
 
 
@@ -196,6 +204,8 @@ class _VaultSectionView extends StatelessWidget {
   final VoidCallback? onVaultChanged;
 
   final bool readOnly;
+
+  final bool allowCreate;
 
 
 
@@ -502,7 +512,7 @@ class _VaultSectionView extends StatelessWidget {
 
                     ),
 
-                    if (!readOnly) ...[
+                    if (allowCreate) ...[
 
                     const SizedBox(height: 12),
 
@@ -542,7 +552,7 @@ class _VaultSectionView extends StatelessWidget {
 
               ...buildEntryTiles(activeEntries),
 
-              if (!readOnly) ...[
+              if (allowCreate) ...[
 
               const SizedBox(height: 12),
 
