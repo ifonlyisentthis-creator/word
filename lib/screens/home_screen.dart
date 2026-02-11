@@ -408,9 +408,18 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
           SafeArea(
 
-            child: ListView(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                final hc = context.read<HomeController>();
+                await hc.autoCheckIn();
+                await hc.refreshVaultStatus();
+              },
+              color: Theme.of(context).colorScheme.primary,
+              child: ListView(
 
               controller: _scrollController,
+
+              physics: const AlwaysScrollableScrollPhysics(),
 
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
 
@@ -552,13 +561,10 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
               ],
 
             ),
-
+            ),
           ),
-
         ],
-
       ),
-
     );
 
   }
