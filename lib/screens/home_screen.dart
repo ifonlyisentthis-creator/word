@@ -28,8 +28,6 @@ import '../services/revenuecat_controller.dart';
 
 import '../services/server_crypto_service.dart';
 
-import '../services/vault_controller.dart';
-
 import '../services/vault_service.dart';
 
 import '../widgets/ambient_background.dart';
@@ -539,65 +537,14 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                     });
                   },
                   onAdd: () async {
-                    final vc = VaultController(
-                      vaultService: VaultService(
-                        client: Supabase.instance.client,
-                        cryptoService: CryptoService(),
-                        serverCryptoService: ServerCryptoService(
-                            client: Supabase.instance.client),
-                        deviceSecretService: DeviceSecretService(),
-                      ),
+                    final created = await openVaultEntryEditor(
+                      context,
                       userId: widget.userId,
+                      isPro: isPro,
+                      isLifetime: isLifetime,
                     );
-                    final created = await showModalBottomSheet<bool>(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (sheetCtx) {
-                        final topPad = MediaQuery.of(sheetCtx).padding.top;
-                        return ChangeNotifierProvider.value(
-                          value: vc,
-                          child: Padding(
-                            padding: EdgeInsets.fromLTRB(8, topPad + 8, 8, 8),
-                            child: Container(
-                              constraints: BoxConstraints(
-                                maxHeight: MediaQuery.of(sheetCtx).size.height * 0.92 - topPad,
-                              ),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [Color(0xFF1A1A1A), Color(0xFF0E0E0E)],
-                                ),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.white12),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: VaultEntrySheet(
-                                entry: null,
-                                payload: null,
-                                isPro: isPro,
-                                isLifetime: isLifetime,
-                                onSave: (draft) async {
-                                  final ok = await vc.createEntry(
-                                    draft,
-                                    isPro: isPro,
-                                    isLifetime: isLifetime,
-                                  );
-                                  return ok;
-                                },
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                    vc.dispose();
-                    if (created == true && context.mounted) {
+                    if (created && context.mounted) {
                       context.read<HomeController>().refreshVaultStatus();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Entry saved.')),
-                      );
                     }
                   },
                 ),
@@ -1201,7 +1148,10 @@ class _TimerCardState extends State<_TimerCard> {
 
             ),
 
+            // --- Timer settings section ---
             const SizedBox(height: 16),
+            Divider(color: Colors.white12, height: 1),
+            const SizedBox(height: 14),
 
             if (!widget.hasVaultEntries) ...[
               Container(

@@ -112,6 +112,72 @@ class VaultSection extends StatelessWidget {
 
 
 
+/// Opens the vault entry editor sheet from any screen.
+/// Returns `true` if an entry was successfully created.
+Future<bool> openVaultEntryEditor(
+  BuildContext context, {
+  required String userId,
+  required bool isPro,
+  required bool isLifetime,
+}) async {
+  final controller = VaultController(
+    vaultService: VaultService(
+      client: Supabase.instance.client,
+      cryptoService: CryptoService(),
+      deviceSecretService: DeviceSecretService(),
+      serverCryptoService: ServerCryptoService(client: Supabase.instance.client),
+    ),
+    userId: userId,
+  );
+
+  bool created = false;
+
+  try {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => ChangeNotifierProvider.value(
+        value: controller,
+        child: _SheetContainer(
+          child: VaultEntrySheet(
+            entry: null,
+            payload: null,
+            isPro: isPro,
+            isLifetime: isLifetime,
+            onSave: (draft) async {
+              final success = await controller.createEntry(
+                draft,
+                isPro: isPro,
+                isLifetime: isLifetime,
+              );
+              if (!success && sheetContext.mounted) {
+                final message = controller.errorMessage ??
+                    'Unable to save this entry. Please try again.';
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  SnackBar(content: Text(message)),
+                );
+              }
+              return success;
+            },
+          ),
+        ),
+      ),
+    );
+    created = result == true;
+  } finally {
+    controller.dispose();
+  }
+
+  if (created && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Entry saved.')),
+    );
+  }
+
+  return created;
+}
+
 class _VaultSectionView extends StatelessWidget {
 
   const _VaultSectionView({
