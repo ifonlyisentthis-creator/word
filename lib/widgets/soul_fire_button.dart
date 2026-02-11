@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -29,6 +30,7 @@ class _SoulFireButtonState extends State<SoulFireButton>
 
   bool _completed = false;
   Offset? _pointerStart;
+  Timer? _holdDelayTimer;
 
   @override
   void initState() {
@@ -68,6 +70,7 @@ class _SoulFireButtonState extends State<SoulFireButton>
 
   @override
   void dispose() {
+    _holdDelayTimer?.cancel();
     _breathController.dispose();
     _holdController.dispose();
     _orbitController.dispose();
@@ -78,14 +81,19 @@ class _SoulFireButtonState extends State<SoulFireButton>
   void _onPointerDown(PointerDownEvent event) {
     if (!widget.enabled || _completed) return;
     _pointerStart = event.position;
-    _holdController.forward(from: 0);
-    HapticFeedback.lightImpact();
+    _holdDelayTimer?.cancel();
+    _holdDelayTimer = Timer(const Duration(milliseconds: 120), () {
+      if (_pointerStart != null && !_completed) {
+        _holdController.forward(from: 0);
+        HapticFeedback.lightImpact();
+      }
+    });
   }
 
   void _onPointerMove(PointerMoveEvent event) {
     if (_pointerStart == null || _completed) return;
     final distance = (event.position - _pointerStart!).distance;
-    if (distance > 18) {
+    if (distance > 10) {
       _cancelHold();
     }
   }
@@ -95,6 +103,8 @@ class _SoulFireButtonState extends State<SoulFireButton>
   }
 
   void _cancelHold() {
+    _holdDelayTimer?.cancel();
+    _holdDelayTimer = null;
     _pointerStart = null;
     if (_completed) return;
     _holdController.stop();

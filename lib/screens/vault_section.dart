@@ -149,19 +149,11 @@ Future<bool> openVaultEntryEditor(
             isPro: isPro,
             isLifetime: isLifetime,
             onSave: (draft) async {
-              final success = await controller.createEntry(
+              return controller.createEntry(
                 draft,
                 isPro: isPro,
                 isLifetime: isLifetime,
               );
-              if (!success && sheetContext.mounted) {
-                final message = controller.errorMessage ??
-                    'Unable to save this entry. Please try again.';
-                ScaffoldMessenger.of(sheetContext).showSnackBar(
-                  SnackBar(content: Text(message)),
-                );
-              }
-              return success;
             },
           ),
         ),
@@ -698,9 +690,9 @@ class _VaultSectionView extends StatelessWidget {
 
           onSave: (draft) async {
 
-            final success = entry == null
+            return entry == null
 
-                ? await controller.createEntry(
+                ? controller.createEntry(
 
                     draft,
 
@@ -710,7 +702,7 @@ class _VaultSectionView extends StatelessWidget {
 
                   )
 
-                : await controller.updateEntry(
+                : controller.updateEntry(
 
                     entry,
 
@@ -721,22 +713,6 @@ class _VaultSectionView extends StatelessWidget {
                     isLifetime: isLifetime,
 
                   );
-
-            if (!success && sheetContext.mounted) {
-
-              final message = controller.errorMessage ??
-
-                  'Unable to save this entry. Please try again.';
-
-              ScaffoldMessenger.of(sheetContext).showSnackBar(
-
-                SnackBar(content: Text(message)),
-
-              );
-
-            }
-
-            return success;
 
           },
 
@@ -1469,6 +1445,8 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
   String? _audioError;
 
   bool _isSaving = false;
+
+  String? _saveError;
 
 
 
@@ -2232,6 +2210,46 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
             const SizedBox(height: 16),
 
+            if (_saveError != null) ...[
+
+              Container(
+
+                width: double.infinity,
+
+                padding: const EdgeInsets.all(10),
+
+                decoration: BoxDecoration(
+
+                  color: Theme.of(context).colorScheme.error.withValues(alpha: 0.08),
+
+                  borderRadius: BorderRadius.circular(10),
+
+                  border: Border.all(
+
+                    color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
+
+                  ),
+
+                ),
+
+                child: Text(
+
+                  _saveError!,
+
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+
+                    color: Theme.of(context).colorScheme.error,
+
+                  ),
+
+                ),
+
+              ),
+
+              const SizedBox(height: 12),
+
+            ],
+
             SizedBox(
 
               width: double.infinity,
@@ -2292,9 +2310,15 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
       _isSaving = true;
 
+      _saveError = null;
+
     });
 
     FocusScope.of(context).unfocus();
+
+    final nav = Navigator.of(context);
+
+    final ctrl = context.read<VaultController>();
 
     final isAudio = _dataType == VaultDataType.audio;
 
@@ -2324,13 +2348,13 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     if (!mounted) return;
 
-    setState(() {
-
-      _isSaving = false;
-
-    });
-
     if (success) {
+
+      setState(() {
+
+        _isSaving = false;
+
+      });
 
       if (_recordedFilePath != null) {
 
@@ -2342,7 +2366,17 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
       }
 
-      if (context.mounted) Navigator.pop(context, true);
+      if (mounted) nav.pop(true);
+
+    } else {
+
+      setState(() {
+
+        _isSaving = false;
+
+        _saveError = ctrl.errorMessage ?? 'Unable to save this entry. Please try again.';
+
+      });
 
     }
 
