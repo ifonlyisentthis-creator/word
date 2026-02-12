@@ -26,6 +26,10 @@ import 'services/revenuecat_controller.dart';
 
 
 
+late AppConfig _appConfig;
+late RevenueCatController _revenueCatController;
+late AuthController _authController;
+
 Future<void> main() async {
 
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -34,9 +38,48 @@ Future<void> main() async {
 
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  // Call runApp() IMMEDIATELY — zero blocking, fastest first frame
+  // Init everything WHILE native splash is visible (no black screen)
+  await _initServices();
+
   runApp(const AfterwordApp());
 
+}
+
+Future<void> _initServices() async {
+  final config = AppConfig.fromEnv();
+  _appConfig = config;
+
+  try {
+    await Future.wait([
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS))
+        Firebase.initializeApp(),
+      Supabase.initialize(
+        url: config.supabaseUrl,
+        anonKey: config.supabaseAnonKey,
+        authOptions: FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+        ),
+        debug: kDebugMode,
+      ),
+    ]);
+
+    _revenueCatController =
+        RevenueCatController(entitlementId: config.revenueCatEntitlementId);
+    _authController = AuthController(
+      supabaseClient: Supabase.instance.client,
+      revenueCatController: _revenueCatController,
+      redirectUrl: config.supabaseAuthRedirectUrl,
+      pushService: PushService(client: Supabase.instance.client),
+    );
+    await Future.wait([
+      _revenueCatController.configure(apiKey: config.revenueCatApiKey),
+      _authController.initialize(),
+    ]);
+  } catch (e) {
+    debugPrint('Bootstrap error: $e');
+  }
 }
 
 
@@ -59,138 +102,24 @@ class _AfterwordAppState extends State<AfterwordApp> {
 
   static final ThemeData _cachedTheme = _buildTheme();
 
-  bool _ready = false;
-
-  late AppConfig _config;
-
-  late RevenueCatController _revenueCatController;
-
-  late AuthController _authController;
-
-
-
   @override
-
   void initState() {
-
     super.initState();
-
-    // Remove native splash after first frame (seamless black→black transition)
+    // Remove native splash after first Flutter frame is painted
     WidgetsBinding.instance.addPostFrameCallback((_) {
-
       FlutterNativeSplash.remove();
-
     });
-
-    // Init services in background — UI is already visible
-    _bootstrap();
-
   }
-
-
-
-  Future<void> _bootstrap() async {
-
-    final config = AppConfig.fromEnv();
-
-    _config = config;
-
-
-
-    try {
-
-      // Firebase + Supabase in parallel
-      await Future.wait([
-
-        if (!kIsWeb &&
-
-            (defaultTargetPlatform == TargetPlatform.android ||
-
-                defaultTargetPlatform == TargetPlatform.iOS))
-
-          Firebase.initializeApp(),
-
-        Supabase.initialize(
-
-          url: config.supabaseUrl,
-
-          anonKey: config.supabaseAnonKey,
-
-          authOptions: FlutterAuthClientOptions(
-
-            authFlowType: AuthFlowType.pkce,
-
-          ),
-
-          debug: kDebugMode,
-
-        ),
-
-      ]);
-
-
-
-      // RevenueCat + Auth in parallel (depend on Supabase)
-      _revenueCatController =
-
-          RevenueCatController(entitlementId: config.revenueCatEntitlementId);
-
-      _authController = AuthController(
-
-        supabaseClient: Supabase.instance.client,
-
-        revenueCatController: _revenueCatController,
-
-        redirectUrl: config.supabaseAuthRedirectUrl,
-
-        pushService: PushService(client: Supabase.instance.client),
-
-      );
-
-      await Future.wait([
-
-        _revenueCatController.configure(apiKey: config.revenueCatApiKey),
-
-        _authController.initialize(),
-
-      ]);
-
-
-
-    } catch (e) {
-
-      debugPrint('Bootstrap error: $e');
-
-    }
-
-
-
-    if (!mounted) return;
-
-    setState(() => _ready = true);
-
-  }
-
-
 
   @override
 
   Widget build(BuildContext context) {
 
-    if (!_ready) {
-
-      // Minimal black screen — matches native splash, renders in <16ms
-      return const ColoredBox(color: Color(0xFF000000));
-
-    }
-
-
-
     return MultiProvider(
 
       providers: [
 
-        Provider.value(value: _config),
+        Provider.value(value: _appConfig),
 
         ChangeNotifierProvider.value(value: _revenueCatController),
 
