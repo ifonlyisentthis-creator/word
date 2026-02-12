@@ -88,7 +88,11 @@ begin
   end if;
 
   update profiles
-  set timer_days = effective_timer
+  set timer_days = effective_timer,
+      last_check_in = now(),
+      warning_sent_at = null,
+      push_66_sent_at = null,
+      push_33_sent_at = null
   where id = auth.uid()
   returning * into result;
 
