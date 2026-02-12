@@ -25,6 +25,11 @@
 # Keep local_auth
 -keep class io.flutter.plugins.localauth.** { *; }
 
+# Keep/suppress Play Core split-install classes (referenced by Flutter engine)
+-dontwarn com.google.android.play.core.splitcompat.**
+-dontwarn com.google.android.play.core.splitinstall.**
+-dontwarn com.google.android.play.core.tasks.**
+
 # Suppress warnings for missing annotations
 -dontwarn javax.annotation.**
 -dontwarn kotlin.Metadata
