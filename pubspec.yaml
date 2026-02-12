@@ -166,7 +166,9 @@ flutter:
 
     - assets/soul-fire/particles.png
 
-    - assets/splash_blank.png
+    - assets/splash_icon.png
+
+    - assets/splash_branding.png
 
     - assets/fonts/
 
@@ -224,7 +226,9 @@ flutter:
 
 flutter_native_splash:
   color: "#000000"
+  image: assets/splash_icon.png
   fullscreen: true
   android_12:
-    color: "#000000"
-    image: assets/splash_blank.png
+    image: assets/splash_icon.png
+    icon_background_color: "#000000"
+    branding: assets/splash_branding.png

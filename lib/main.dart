@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:provider/provider.dart';
@@ -16,8 +18,6 @@ import 'config/app_config.dart';
 
 import 'screens/auth_gate.dart';
 
-import 'screens/splash_screen.dart';
-
 import 'services/auth_controller.dart';
 
 import 'services/push_service.dart';
@@ -26,14 +26,59 @@ import 'services/revenuecat_controller.dart';
 
 
 
+late AppConfig _appConfig;
+late RevenueCatController _revenueCatController;
+late AuthController _authController;
+
 Future<void> main() async {
 
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+
+  // Keep native splash (Shield + Afterword) visible during init
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   GoogleFonts.config.allowRuntimeFetching = false;
 
+  // Run ALL heavy init while native splash is still showing
+  await _initializeCriticalDependencies();
+
   runApp(const AfterwordApp());
 
+}
+
+Future<void> _initializeCriticalDependencies() async {
+  final config = AppConfig.fromEnv();
+  _appConfig = config;
+
+  try {
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
+      await Firebase.initializeApp();
+    }
+
+    await Supabase.initialize(
+      url: config.supabaseUrl,
+      anonKey: config.supabaseAnonKey,
+      authOptions: FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+      ),
+      debug: kDebugMode,
+    );
+
+    _revenueCatController =
+        RevenueCatController(entitlementId: config.revenueCatEntitlementId);
+    await _revenueCatController.configure(apiKey: config.revenueCatApiKey);
+    _authController = AuthController(
+      supabaseClient: Supabase.instance.client,
+      revenueCatController: _revenueCatController,
+      redirectUrl: config.supabaseAuthRedirectUrl,
+      pushService: PushService(client: Supabase.instance.client),
+    );
+    await _authController.initialize();
+  } catch (e) {
+    debugPrint('Bootstrap error: $e');
+  }
 }
 
 
@@ -56,14 +101,6 @@ class _AfterwordAppState extends State<AfterwordApp> {
 
   static final ThemeData _cachedTheme = _buildTheme();
 
-  bool _ready = false;
-
-  late AppConfig _config;
-
-  late RevenueCatController _revenueCatController;
-
-  late AuthController _authController;
-
 
 
   @override
@@ -72,91 +109,12 @@ class _AfterwordAppState extends State<AfterwordApp> {
 
     super.initState();
 
-    _bootstrap();
+    // Remove native splash after first Flutter frame is painted
+    WidgetsBinding.instance.addPostFrameCallback((_) {
 
-  }
+      FlutterNativeSplash.remove();
 
-
-
-  Future<void> _bootstrap() async {
-
-    final config = AppConfig.fromEnv();
-
-    _config = config;
-
-
-
-    try {
-
-      await _initServices(config);
-
-    } catch (e) {
-
-      debugPrint('Bootstrap error: $e');
-
-    }
-
-
-
-    if (!mounted) return;
-
-    setState(() => _ready = true);
-
-  }
-
-
-
-  Future<void> _initServices(AppConfig config) async {
-
-    if (!kIsWeb &&
-
-        (defaultTargetPlatform == TargetPlatform.android ||
-
-            defaultTargetPlatform == TargetPlatform.iOS)) {
-
-      await Firebase.initializeApp();
-
-    }
-
-
-
-    await Supabase.initialize(
-
-      url: config.supabaseUrl,
-
-      anonKey: config.supabaseAnonKey,
-
-      authOptions: FlutterAuthClientOptions(
-
-        authFlowType: AuthFlowType.pkce,
-
-      ),
-
-      debug: kDebugMode,
-
-    );
-
-
-
-    _revenueCatController =
-
-        RevenueCatController(entitlementId: config.revenueCatEntitlementId);
-
-    await _revenueCatController.configure(apiKey: config.revenueCatApiKey);
-
-    _authController = AuthController(
-
-      supabaseClient: Supabase.instance.client,
-
-      revenueCatController: _revenueCatController,
-
-      redirectUrl: config.supabaseAuthRedirectUrl,
-
-      pushService: PushService(client: Supabase.instance.client),
-
-    );
-
-    await _authController.initialize();
+    });
 
   }
 
@@ -166,25 +124,11 @@ class _AfterwordAppState extends State<AfterwordApp> {
 
   Widget build(BuildContext context) {
 
-    if (!_ready) {
-
-      return const Directionality(
-
-        textDirection: TextDirection.ltr,
-
-        child: SplashScreen(),
-
-      );
-
-    }
-
-
-
     return MultiProvider(
 
       providers: [
 
-        Provider.value(value: _config),
+        Provider.value(value: _appConfig),
 
         ChangeNotifierProvider.value(value: _revenueCatController),
 
