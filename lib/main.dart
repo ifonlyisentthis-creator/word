@@ -50,6 +50,7 @@ Future<void> _initServices() async {
   _appConfig = config;
 
   try {
+    // ONLY block on Firebase + Supabase (parallel, ~500ms)
     await Future.wait([
       if (!kIsWeb &&
           (defaultTargetPlatform == TargetPlatform.android ||
@@ -65,6 +66,7 @@ Future<void> _initServices() async {
       ),
     ]);
 
+    // Create controllers (sync constructors, instant)
     _revenueCatController =
         RevenueCatController(entitlementId: config.revenueCatEntitlementId);
     _authController = AuthController(
@@ -73,10 +75,12 @@ Future<void> _initServices() async {
       redirectUrl: config.supabaseAuthRedirectUrl,
       pushService: PushService(client: Supabase.instance.client),
     );
-    await Future.wait([
-      _revenueCatController.configure(apiKey: config.revenueCatApiKey),
-      _authController.initialize(),
-    ]);
+
+    // Quick sync init: reads cached session + starts listener (<1ms)
+    // AuthGate will know auth state immediately — no wrong screen flash
+    _authController.quickInit();
+
+    // Heavy network stuff (RevenueCat, push, login) deferred to after UI
   } catch (e) {
     debugPrint('Bootstrap error: $e');
   }
@@ -108,7 +112,20 @@ class _AfterwordAppState extends State<AfterwordApp> {
     // Remove native splash after first Flutter frame is painted
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FlutterNativeSplash.remove();
+      // Heavy network init AFTER UI is visible (RevenueCat + push + login)
+      _deferredInit();
     });
+  }
+
+  Future<void> _deferredInit() async {
+    try {
+      await Future.wait([
+        _revenueCatController.configure(apiKey: _appConfig.revenueCatApiKey),
+        _authController.deferredInit(),
+      ]);
+    } catch (e) {
+      debugPrint('Deferred init error: $e');
+    }
   }
 
   @override

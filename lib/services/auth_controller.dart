@@ -46,18 +46,26 @@ class AuthController extends ChangeNotifier {
   bool get isSignedIn => _session != null;
   bool get isSigningOut => _signingOut;
 
-  Future<void> initialize() async {
+  /// Fast sync init: reads cached session + starts auth listener.
+  /// No network calls — takes <1ms. Call before runApp().
+  void quickInit() {
     _session = _supabaseClient.auth.currentSession;
     _user = _session?.user;
-    if (_user != null) {
-      await _pushService.onSignIn(_user!.id);
-      await _revenueCatController.logIn(_user!.id);
-    }
     _authSubscription = _supabaseClient.auth.onAuthStateChange.listen(
       (data) async {
         await _handleAuthState(data);
       },
     );
+    notifyListeners();
+  }
+
+  /// Slow deferred init: push registration + RevenueCat login.
+  /// Call after UI is visible.
+  Future<void> deferredInit() async {
+    if (_user != null) {
+      await _pushService.onSignIn(_user!.id);
+      await _revenueCatController.logIn(_user!.id);
+    }
   }
 
   Future<void> signInWithGoogle() async {
