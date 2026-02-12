@@ -67,7 +67,11 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
               const RepaintBoundary(child: AmbientBackground()),
 
-              ListView(
+              SafeArea(
+
+                top: false,
+
+                child: ListView(
 
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
 
@@ -233,6 +237,8 @@ class SubscriptionDebugScreen extends StatelessWidget {
                   ),
 
                 ],
+
+              ),
 
               ),
 

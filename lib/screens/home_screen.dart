@@ -1367,7 +1367,9 @@ class _TimerPickerSheetState extends State<_TimerPickerSheet> {
     final range = widget.maxDays - widget.minDays;
     final divisions = range > 500 ? (range ~/ 5) : range;
 
-    return Container(
+    return SafeArea(
+      top: false,
+      child: Container(
       decoration: const BoxDecoration(
         color: Color(0xFF141414),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -1498,6 +1500,7 @@ class _TimerPickerSheetState extends State<_TimerPickerSheet> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

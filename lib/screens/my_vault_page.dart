@@ -28,16 +28,19 @@ class MyVaultPage extends StatelessWidget {
       body: Stack(
         children: [
           const RepaintBoundary(child: AmbientBackground()),
-          ListView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-            children: [
-              VaultSection(
-                userId: userId,
-                isPro: isPro,
-                isLifetime: isLifetime,
-                readOnly: false,
-              ),
-            ],
+          SafeArea(
+            top: false,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+              children: [
+                VaultSection(
+                  userId: userId,
+                  isPro: isPro,
+                  isLifetime: isLifetime,
+                  readOnly: false,
+                ),
+              ],
+            ),
           ),
         ],
       ),
