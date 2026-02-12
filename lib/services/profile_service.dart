@@ -37,7 +37,7 @@ class ProfileService {
   Future<Profile> updateCheckIn(String userId, {int? timerDays}) async {
     final params = <String, dynamic>{'user_id': userId};
     if (timerDays != null) {
-      params['timer_days'] = timerDays;
+      params['p_timer_days'] = timerDays;
     }
     final response =
         await _client.rpc('update_check_in', params: params).single();

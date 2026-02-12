@@ -362,7 +362,9 @@ class HomeController extends ChangeNotifier {
 
       return true;
 
-    } catch (_) {
+    } catch (e) {
+
+      debugPrint('manualCheckIn error: $e');
 
       _errorMessage = 'Unable to check in. Please try again.';
 

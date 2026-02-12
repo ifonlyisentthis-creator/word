@@ -1,4 +1,4 @@
-create or replace function public.update_check_in(user_id uuid, timer_days int default null)
+create or replace function public.update_check_in(user_id uuid, p_timer_days int default null)
 returns profiles
 language plpgsql
 security definer
@@ -32,8 +32,8 @@ begin
 
   if sub not in ('pro','lifetime') then
     effective_timer := 30;
-  elsif timer_days is not null then
-    effective_timer := greatest(7, least(max_timer, timer_days));
+  elsif p_timer_days is not null then
+    effective_timer := greatest(7, least(max_timer, p_timer_days));
   end if;
 
   update profiles
