@@ -51,31 +51,35 @@ Future<void> _initializeCriticalDependencies() async {
   _appConfig = config;
 
   try {
-    if (!kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.android ||
-            defaultTargetPlatform == TargetPlatform.iOS)) {
-      await Firebase.initializeApp();
-    }
-
-    await Supabase.initialize(
-      url: config.supabaseUrl,
-      anonKey: config.supabaseAnonKey,
-      authOptions: FlutterAuthClientOptions(
-        authFlowType: AuthFlowType.pkce,
+    // Firebase + Supabase are independent — run in parallel
+    await Future.wait([
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS))
+        Firebase.initializeApp(),
+      Supabase.initialize(
+        url: config.supabaseUrl,
+        anonKey: config.supabaseAnonKey,
+        authOptions: FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+        ),
+        debug: kDebugMode,
       ),
-      debug: kDebugMode,
-    );
+    ]);
 
+    // RevenueCat + Auth depend on Supabase — run in parallel with each other
     _revenueCatController =
         RevenueCatController(entitlementId: config.revenueCatEntitlementId);
-    await _revenueCatController.configure(apiKey: config.revenueCatApiKey);
     _authController = AuthController(
       supabaseClient: Supabase.instance.client,
       revenueCatController: _revenueCatController,
       redirectUrl: config.supabaseAuthRedirectUrl,
       pushService: PushService(client: Supabase.instance.client),
     );
-    await _authController.initialize();
+    await Future.wait([
+      _revenueCatController.configure(apiKey: config.revenueCatApiKey),
+      _authController.initialize(),
+    ]);
   } catch (e) {
     debugPrint('Bootstrap error: $e');
   }
