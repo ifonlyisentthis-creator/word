@@ -40,9 +40,9 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
+    return Container(
+      color: Colors.black,
+      child: Center(
         child: FadeTransition(
           opacity: _fade,
           child: ScaleTransition(
@@ -69,13 +69,15 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-                Text(
+                const Text(
                   'Afterword',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.5,
-                        color: Colors.white,
-                      ),
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.5,
+                    color: Colors.white,
+                    decoration: TextDecoration.none,
+                  ),
                 ),
               ],
             ),
