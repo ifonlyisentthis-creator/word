@@ -88,13 +88,7 @@ class _AfterwordAppState extends State<AfterwordApp> {
 
     try {
 
-      await Future.wait([
-
-        _initServices(config),
-
-        Future.delayed(const Duration(milliseconds: 1200)),
-
-      ]);
+      await _initServices(config);
 
     } catch (e) {
 
