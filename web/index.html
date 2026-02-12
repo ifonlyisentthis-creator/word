@@ -1,30 +1,88 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <base href="/" />
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
-    <meta
-      name="description"
-      content="Afterword is a zero-knowledge legacy vault that sends or destroys your messages when your check-in timer expires."
-    />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#050505" />
+<!DOCTYPE html><html lang="en"><head>
+    <base href="/">
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+    <meta name="description" content="Afterword is a zero-knowledge legacy vault that sends or destroys your messages when your check-in timer expires.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#050505">
     <title>Afterword · Secure Legacy Vault</title>
 
-    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
-    <link rel="manifest" href="manifest.json" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Manrope:wght@300;400;500;600&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="landing.css" />
-  </head>
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&amp;family=Manrope:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="landing.css">
+    <style id="splash-screen-style">
+    html {
+      height: 100%
+    }
+
+    body {
+      margin: 0;
+      min-height: 100%;
+      background-color: #000000;
+          background-size: 100% 100%;
+    }
+
+    .center {
+      margin: 0;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      -ms-transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%);
+    }
+
+    .contain {
+      display:block;
+      width:100%; height:100%;
+      object-fit: contain;
+    }
+
+    .stretch {
+      display:block;
+      width:100%; height:100%;
+    }
+
+    .cover {
+      display:block;
+      width:100%; height:100%;
+      object-fit: cover;
+    }
+
+    .bottom {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      -ms-transform: translate(-50%, 0);
+      transform: translate(-50%, 0);
+    }
+
+    .bottomLeft {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+    }
+
+    .bottomRight {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+    }
+  </style>
+  <script id="splash-screen-script">
+    function removeSplashFromWeb() {
+      document.getElementById("splash")?.remove();
+      document.getElementById("splash-branding")?.remove();
+      document.body.style.background = "transparent";
+    }
+  </script>
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+</head>
   <body>
     <div class="background">
       <div class="glow glow--one"></div>
@@ -34,7 +92,7 @@
     </div>
 
     <div class="page">
-      <header class="site-header" data-header>
+      <header class="site-header" data-header="">
         <div class="header-bar">
           <a class="logo" href="#overview">
             <span class="logo__mark">Afterword</span>
@@ -43,19 +101,13 @@
 
           <div class="header-bar__actions">
             <a class="button primary header__cta" href="#plans">Get the app</a>
-            <button
-              class="header__toggle"
-              type="button"
-              aria-label="Open menu"
-              aria-expanded="false"
-              data-menu-toggle
-            >
+            <button class="header__toggle" type="button" aria-label="Open menu" aria-expanded="false" data-menu-toggle="">
               <span class="header__toggle-lines" aria-hidden="true"></span>
             </button>
           </div>
         </div>
 
-        <div class="header-menu" data-menu>
+        <div class="header-menu" data-menu="">
           <nav class="nav">
             <a href="#overview">Overview</a>
             <a href="#value">Why Afterword</a>
@@ -113,15 +165,10 @@
           </div>
           <div class="hero__panel card">
             <span class="panel__eyebrow">Protocol preview</span>
-            <button
-              class="pulse"
-              type="button"
-              aria-label="Hold to check in"
-              data-hold
-            >
+            <button class="pulse" type="button" aria-label="Hold to check in" data-hold="">
               <div class="pulse__ring" aria-hidden="true"></div>
               <div class="pulse__core" aria-hidden="true"></div>
-              <span class="pulse__label" data-hold-label>Hold to check in</span>
+              <span class="pulse__label" data-hold-label="">Hold to check in</span>
             </button>
             <div class="panel__details">
               <div class="detail">
@@ -392,5 +439,6 @@
     </div>
 
     <script src="landing.js"></script>
-  </body>
-</html>
+  
+
+</body></html>

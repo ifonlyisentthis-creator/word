@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:provider/provider.dart';
@@ -28,7 +30,9 @@ import 'services/revenuecat_controller.dart';
 
 Future<void> main() async {
 
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   GoogleFonts.config.allowRuntimeFetching = false;
 
@@ -73,6 +77,16 @@ class _AfterwordAppState extends State<AfterwordApp> {
     super.initState();
 
     _bootstrap();
+
+    // Remove native splash after Flutter paints the first frame
+
+    // (the Flutter SplashScreen is already rendered underneath).
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+      FlutterNativeSplash.remove();
+
+    });
 
   }
 
