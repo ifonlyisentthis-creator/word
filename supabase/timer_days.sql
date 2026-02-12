@@ -1,3 +1,5 @@
+DROP FUNCTION IF EXISTS public.update_check_in(uuid, integer);
+
 create or replace function public.update_check_in(user_id uuid, p_timer_days int default null)
 returns profiles
 language plpgsql
