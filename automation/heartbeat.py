@@ -856,7 +856,30 @@ def process_expired_entries(
 
 def cleanup_sent_entries(client) -> None:
 
-    client.rpc("cleanup_sent_entries", {}).execute()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+
+    sent_entries = (
+        client.table("vault_entries")
+        .select("id,user_id,audio_file_path")
+        .eq("status", "sent")
+        .lt("updated_at", cutoff)
+        .execute()
+    ).data or []
+
+    for entry in sent_entries:
+        delete_entry(client, entry)
+
+    if sent_entries:
+        user_ids = {e["user_id"] for e in sent_entries}
+        for uid in user_ids:
+            remaining = (
+                client.table("vault_entries")
+                .select("id", count="exact")
+                .eq("user_id", uid)
+                .execute()
+            )
+            if (remaining.count or 0) == 0:
+                mark_profile_status(client, uid, "archived")
 
 
 
