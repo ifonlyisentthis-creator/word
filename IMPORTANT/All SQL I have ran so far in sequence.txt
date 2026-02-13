@@ -1,0 +1,3447 @@
+All SQL I have ran so far in sequential order:
+
+1:
+create extension if not exists "pgcrypto";
+
+create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  sender_name text not null default 'Afterword',
+  status text not null default 'active' check (status in ('active','inactive','archived')),
+  subscription_status text not null default 'free'
+    check (subscription_status in ('free','pro','lifetime','premium')),
+  last_check_in timestamptz not null default now(),
+  timer_days int not null default 30,
+  warning_sent_at timestamptz,
+  hmac_key_encrypted text,
+  last_entry_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists vault_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null default 'Untitled',
+  action_type text not null default 'send' check (action_type in ('send','destroy')),
+  data_type text not null default 'text' check (data_type in ('text','audio')),
+  status text not null default 'active' check (status in ('active','sending','sent')),
+  payload_encrypted text not null,
+  recipient_email_encrypted text,
+  data_key_encrypted text not null,
+  hmac_signature text not null,
+  audio_file_path text,
+  audio_duration_seconds int,
+  sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists vault_entries_user_status_idx
+  on vault_entries(user_id, status);
+create index if not exists vault_entries_audio_path_idx
+  on vault_entries(audio_file_path);
+
+create or replace function set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger profiles_set_updated_at
+before update on profiles for each row execute function set_updated_at();
+
+create trigger vault_entries_set_updated_at
+before update on vault_entries for each row execute function set_updated_at();
+
+create or replace function update_check_in(user_id uuid, timer_days int default null)
+returns profiles language plpgsql security definer as $$
+declare
+  result profiles;
+  sub text;
+  effective_timer int;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status, timer_days into sub, effective_timer
+  from profiles where id = user_id;
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  elsif timer_days is not null then
+    effective_timer := greatest(7, least(365, timer_days));
+  end if;
+
+  update profiles
+  set last_check_in = now(),
+      timer_days = effective_timer,
+      warning_sent_at = null
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function update_sender_name(sender_name text)
+returns profiles language plpgsql security definer as $$
+declare result profiles;
+begin
+  update profiles
+  set sender_name = coalesce(nullif(trim(sender_name), ''), 'Afterword')
+  where id = auth.uid()
+  returning * into result;
+  return result;
+end;
+$$;
+
+create or replace function set_subscription_status(user_id uuid, subscription_status text)
+returns profiles language plpgsql security definer as $$
+declare result profiles;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  update profiles
+  set subscription_status = lower(subscription_status)
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+alter table profiles enable row level security;
+
+create policy profiles_select_own on profiles
+for select using (auth.uid() = id);
+
+create policy profiles_insert_own on profiles
+for insert with check (auth.uid() = id);
+
+create policy profiles_update_own on profiles
+for update using (auth.uid() = id) with check (auth.uid() = id);
+
+create policy profiles_delete_own on profiles
+for delete using (auth.uid() = id);
+
+alter table vault_entries enable row level security;
+
+create policy entries_select_own on vault_entries
+for select using (auth.uid() = user_id);
+
+create policy entries_select_sent_anon on vault_entries
+for select to anon using (status = 'sent');
+
+create policy entries_insert_own on vault_entries
+for insert with check (
+  auth.uid() = user_id
+  and status = 'active'
+  and (
+    action_type <> 'destroy'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+  )
+  and (
+    data_type <> 'audio'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status = 'lifetime'
+    )
+  )
+  and (
+    (select p.last_entry_at is null
+        or now() - p.last_entry_at >= interval '5 seconds'
+     from profiles p where p.id = auth.uid())
+  )
+);
+
+create policy entries_update_own on vault_entries
+for update using (auth.uid() = user_id and status = 'active')
+with check (
+  auth.uid() = user_id
+  and status = 'active'
+  and (
+    action_type <> 'destroy'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+  )
+  and (
+    data_type <> 'audio'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status = 'lifetime'
+    )
+  )
+);
+
+create policy entries_delete_own on vault_entries
+for delete using (auth.uid() = user_id and status = 'active');
+
+create or replace function bump_last_entry_at()
+returns trigger language plpgsql security definer as $$
+begin
+  update profiles set last_entry_at = now() where id = new.user_id;
+  return new;
+end;
+$$;
+
+create trigger vault_entries_bump_last_entry
+after insert on vault_entries for each row execute function bump_last_entry_at();
+
+insert into storage.buckets (id, name, public)
+values ('vault-audio', 'vault-audio', false)
+on conflict (id) do nothing;
+
+create policy vault_audio_read_owner on storage.objects
+for select to authenticated
+using (bucket_id = 'vault-audio' and auth.uid() = owner);
+
+create policy vault_audio_read_sent_anon on storage.objects
+for select to anon
+using (
+  bucket_id = 'vault-audio'
+  and exists (
+    select 1 from vault_entries ve
+    where ve.audio_file_path = storage.objects.name
+      and ve.status = 'sent'
+  )
+);
+
+create policy vault_audio_insert_lifetime on storage.objects
+for insert to authenticated
+with check (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and name like auth.uid() || '/%'
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+create policy vault_audio_update_lifetime on storage.objects
+for update to authenticated
+using (bucket_id = 'vault-audio' and auth.uid() = owner)
+with check (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and name like auth.uid() || '/%'
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+create policy vault_audio_delete_lifetime on storage.objects
+for delete to authenticated
+using (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+
+2:
+create or replace function block_subscription_status_changes()
+returns trigger language plpgsql as $$
+begin
+  if auth.role() <> 'service_role'
+     and new.subscription_status is distinct from old.subscription_status then
+    raise exception 'subscription_status is server-managed';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_block_sub_status on profiles;
+create trigger profiles_block_sub_status
+before update on profiles for each row
+execute function block_subscription_status_changes();
+
+3:
+drop policy if exists entries_insert_own on vault_entries;
+
+create policy entries_insert_own on vault_entries
+for insert with check (
+  auth.uid() = user_id
+  and status = 'active'
+  and (
+    action_type <> 'destroy'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+  )
+  and (
+    data_type <> 'audio'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status = 'lifetime'
+    )
+  )
+  and (
+    exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+    or (
+      select count(*) from vault_entries ve
+      where ve.user_id = auth.uid()
+        and ve.status = 'active'
+        and ve.data_type = 'text'
+    ) < 3
+  )
+  and (
+    (select p.last_entry_at is null
+        or now() - p.last_entry_at >= interval '5 seconds'
+     from profiles p where p.id = auth.uid())
+  )
+);
+
+
+4.
+create or replace function public.guard_subscription_status()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.subscription_status is distinct from old.subscription_status
+     and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    raise exception 'subscription_status can only be changed by service role';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_subscription_status on profiles;
+create trigger protect_subscription_status
+before update on profiles
+for each row execute function public.guard_subscription_status();
+
+revoke all on function public.set_subscription_status(uuid, text) from anon, authenticated;
+grant execute on function public.set_subscription_status(uuid, text) to service_role;
+
+
+5.
+create or replace function public.enforce_audio_time_bank()
+returns trigger
+language plpgsql
+security definer
+as $$
+declare
+  total_seconds int;
+begin
+  if new.data_type <> 'audio' then
+    return new;
+  end if;
+
+  if new.audio_duration_seconds is null then
+    raise exception 'audio duration required';
+  end if;
+
+  select coalesce(sum(audio_duration_seconds), 0)
+  into total_seconds
+  from vault_entries
+  where user_id = new.user_id
+    and data_type = 'audio'
+    and status = 'active'
+    and id <> coalesce(new.id, gen_random_uuid());
+
+  if total_seconds + new.audio_duration_seconds > 600 then
+    raise exception 'audio time bank exceeded (10 minutes)';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_audio_time_bank on vault_entries;
+create trigger vault_entries_audio_time_bank
+before insert or update on vault_entries
+for each row execute function public.enforce_audio_time_bank();
+
+
+6.
+create or replace function public.guard_timer_days()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.timer_days is distinct from old.timer_days then
+    if auth.role() <> 'service_role' then
+      if exists (
+        select 1 from profiles p
+        where p.id = auth.uid()
+          and p.subscription_status in ('pro','lifetime')
+      ) then
+        new.timer_days := greatest(7, least(365, new.timer_days));
+      else
+        new.timer_days := 30;
+      end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row execute function public.guard_timer_days();
+
+
+7.
+drop trigger if exists profiles_block_sub_status on profiles;
+drop trigger if exists protect_subscription_status on profiles;
+
+create or replace function public.guard_subscription_status()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.subscription_status is distinct from old.subscription_status
+     and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    raise exception 'subscription_status can only be changed by service role';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger protect_subscription_status
+before update on profiles
+for each row execute function public.guard_subscription_status();
+
+revoke all on function public.set_subscription_status(uuid, text) from anon, authenticated;
+grant execute on function public.set_subscription_status(uuid, text) to service_role;
+
+
+8.
+-- Ensure last_entry_at exists
+alter table profiles
+  add column if not exists last_entry_at timestamptz;
+
+-- Rate-limit inserts: max 1 every 5 seconds
+create or replace function enforce_entry_rate_limit()
+returns trigger language plpgsql security definer as $$
+declare
+  last_ts timestamptz;
+begin
+  if new.user_id <> auth.uid() then
+    raise exception 'not authorized';
+  end if;
+
+  select last_entry_at into last_ts
+  from profiles
+  where id = new.user_id
+  for update;
+
+  if last_ts is not null
+     and clock_timestamp() - last_ts < interval '5 seconds' then
+    raise exception 'rate limit';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_rate_limit on vault_entries;
+create trigger vault_entries_rate_limit
+before insert on vault_entries
+for each row execute function enforce_entry_rate_limit();
+
+-- Update last_entry_at after insert
+create or replace function bump_last_entry_at()
+returns trigger language plpgsql security definer as $$
+begin
+  update profiles set last_entry_at = clock_timestamp()
+  where id = new.user_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_bump_last_entry on vault_entries;
+create trigger vault_entries_bump_last_entry
+after insert on vault_entries
+for each row execute function bump_last_entry_at();
+
+-- Encrypted payload length cap (~50k plaintext)
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_payload_len_cap'
+  ) then
+    alter table vault_entries
+      add constraint vault_entries_payload_len_cap
+      check (char_length(payload_encrypted) <= 70000);
+  end if;
+end $$;
+
+
+9.
+create or replace function enforce_audio_time_bank()
+returns trigger language plpgsql security definer as $$
+declare
+  total_seconds int;
+  sub text;
+  new_duration int;
+begin
+  if new.data_type <> 'audio' then
+    return new;
+  end if;
+
+  select subscription_status into sub
+  from profiles
+  where id = new.user_id;
+
+  if sub <> 'lifetime' then
+    raise exception 'audio vault is lifetime only';
+  end if;
+
+  new_duration := coalesce(new.audio_duration_seconds, 0);
+  if new_duration <= 0 then
+    raise exception 'audio duration required';
+  end if;
+
+  select coalesce(sum(audio_duration_seconds), 0)
+  into total_seconds
+  from vault_entries
+  where user_id = new.user_id
+    and data_type = 'audio'
+    and status = 'active'
+    and id <> new.id;
+
+  if total_seconds + new_duration > 600 then
+    raise exception 'audio time bank limit reached';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_audio_bank on vault_entries;
+create trigger vault_entries_audio_bank
+before insert or update on vault_entries
+for each row execute function enforce_audio_time_bank();
+
+
+10.
+create extension if not exists pg_cron;
+select cron.schedule(
+  'cleanup-sent-entries',
+  '0 3 * * *',
+  $$select cleanup_sent_entries();$$
+);
+
+
+11.
+-- LOCKDOWN SENSITIVE PROFILE COLUMNS
+revoke update on profiles from authenticated, anon;
+grant update (hmac_key_encrypted) on profiles to authenticated;
+grant update (subscription_status, status, warning_sent_at) on profiles to service_role;
+
+-- SENT = READ‑ONLY (no edits)
+drop policy if exists vault_entries_update on vault_entries;
+create policy vault_entries_update on vault_entries
+for update to authenticated
+using (auth.uid() = user_id and status <> 'sent')
+with check (auth.uid() = user_id and status <> 'sent');
+
+-- CRON CLEANUP (sent older than 7 days)
+create or replace function cleanup_sent_entries()
+returns void language plpgsql security definer as $$
+begin
+  delete from vault_entries
+  where status = 'sent'
+    and sent_at < now() - interval '7 days';
+
+  update profiles p
+  set status = 'archived'
+  where p.status <> 'archived'
+    and not exists (
+      select 1 from vault_entries v
+      where v.user_id = p.id and v.status <> 'sent'
+    );
+end;
+$$;
+
+select cron.schedule(
+  'cleanup-sent-entries',
+  '0 3 * * *',
+  $$select cleanup_sent_entries();$$
+);
+
+
+12.
+create extension if not exists pgcrypto;
+create extension if not exists pg_cron;
+
+create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  sender_name text not null default 'Afterword',
+  status text not null default 'active' check (status in ('active','inactive','archived')),
+  subscription_status text not null default 'free'
+    check (subscription_status in ('free','pro','lifetime','premium')),
+  last_check_in timestamptz not null default now(),
+  timer_days int not null default 30,
+  warning_sent_at timestamptz,
+  hmac_key_encrypted text,
+  last_entry_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists vault_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null default 'Untitled',
+  action_type text not null default 'send' check (action_type in ('send','destroy')),
+  data_type text not null default 'text' check (data_type in ('text','audio')),
+  status text not null default 'active' check (status in ('active','sending','sent')),
+  payload_encrypted text not null,
+  recipient_email_encrypted text,
+  data_key_encrypted text not null,
+  hmac_signature text not null,
+  audio_file_path text,
+  audio_duration_seconds int,
+  sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists vault_entries_user_status_idx
+  on vault_entries(user_id, status);
+create index if not exists vault_entries_audio_path_idx
+  on vault_entries(audio_file_path);
+
+create or replace function set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_set_updated_at on profiles;
+create trigger profiles_set_updated_at
+before update on profiles for each row execute function set_updated_at();
+
+drop trigger if exists vault_entries_set_updated_at on vault_entries;
+create trigger vault_entries_set_updated_at
+before update on vault_entries for each row execute function set_updated_at();
+
+create or replace function update_check_in(user_id uuid, timer_days int default null)
+returns profiles language plpgsql security definer as $$
+declare
+  result profiles;
+  sub text;
+  effective_timer int;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status, timer_days into sub, effective_timer
+  from profiles where id = user_id;
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  elsif timer_days is not null then
+    effective_timer := greatest(7, least(365, timer_days));
+  end if;
+
+  update profiles
+  set last_check_in = now(),
+      timer_days = effective_timer,
+      warning_sent_at = null
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function update_sender_name(sender_name text)
+returns profiles language plpgsql security definer as $$
+declare result profiles;
+begin
+  update profiles
+  set sender_name = coalesce(nullif(trim(sender_name), ''), 'Afterword')
+  where id = auth.uid()
+  returning * into result;
+  return result;
+end;
+$$;
+
+create or replace function set_subscription_status(user_id uuid, subscription_status text)
+returns profiles language plpgsql security definer as $$
+declare result profiles;
+begin
+  if coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    raise exception 'not authorized';
+  end if;
+
+  update profiles
+  set subscription_status = lower(subscription_status)
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+revoke all on function public.set_subscription_status(uuid, text) from anon, authenticated;
+grant execute on function public.set_subscription_status(uuid, text) to service_role;
+
+create or replace function guard_subscription_status()
+returns trigger language plpgsql as $$
+begin
+  if new.subscription_status is distinct from old.subscription_status
+     and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    raise exception 'subscription_status can only be changed by service role';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_subscription_status on profiles;
+create trigger protect_subscription_status
+before update on profiles
+for each row execute function guard_subscription_status();
+
+create or replace function guard_timer_days()
+returns trigger language plpgsql as $$
+begin
+  if new.timer_days is distinct from old.timer_days then
+    if auth.role() <> 'service_role' then
+      if exists (
+        select 1 from profiles p
+        where p.id = auth.uid()
+          and p.subscription_status in ('pro','lifetime')
+      ) then
+        new.timer_days := greatest(7, least(365, new.timer_days));
+      else
+        new.timer_days := 30;
+      end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row execute function guard_timer_days();
+
+create or replace function enforce_entry_rate_limit()
+returns trigger language plpgsql security definer as $$
+declare
+  last_ts timestamptz;
+begin
+  if new.user_id <> auth.uid() then
+    raise exception 'not authorized';
+  end if;
+
+  select last_entry_at into last_ts
+  from profiles
+  where id = new.user_id
+  for update;
+
+  if last_ts is not null
+     and clock_timestamp() - last_ts < interval '5 seconds' then
+    raise exception 'rate limit';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_rate_limit on vault_entries;
+create trigger vault_entries_rate_limit
+before insert on vault_entries
+for each row execute function enforce_entry_rate_limit();
+
+create or replace function bump_last_entry_at()
+returns trigger language plpgsql security definer as $$
+begin
+  update profiles set last_entry_at = clock_timestamp()
+  where id = new.user_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_bump_last_entry on vault_entries;
+create trigger vault_entries_bump_last_entry
+after insert on vault_entries
+for each row execute function bump_last_entry_at();
+
+create or replace function enforce_audio_time_bank()
+returns trigger language plpgsql security definer as $$
+declare
+  total_seconds int;
+  sub text;
+  new_duration int;
+begin
+  if new.data_type <> 'audio' then
+    return new;
+  end if;
+
+  select subscription_status into sub
+  from profiles
+  where id = new.user_id;
+
+  if sub <> 'lifetime' then
+    raise exception 'audio vault is lifetime only';
+  end if;
+
+  new_duration := coalesce(new.audio_duration_seconds, 0);
+  if new_duration <= 0 then
+    raise exception 'audio duration required';
+  end if;
+
+  select coalesce(sum(audio_duration_seconds), 0)
+  into total_seconds
+  from vault_entries
+  where user_id = new.user_id
+    and data_type = 'audio'
+    and status = 'active'
+    and id <> new.id;
+
+  if total_seconds + new_duration > 600 then
+    raise exception 'audio time bank limit reached';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_audio_bank on vault_entries;
+create trigger vault_entries_audio_bank
+before insert or update on vault_entries
+for each row execute function enforce_audio_time_bank();
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_payload_len_cap'
+  ) then
+    alter table vault_entries
+      add constraint vault_entries_payload_len_cap
+      check (char_length(payload_encrypted) <= 70000);
+  end if;
+end $$;
+
+alter table profiles enable row level security;
+alter table vault_entries enable row level security;
+
+drop policy if exists profiles_select_own on profiles;
+drop policy if exists profiles_insert_own on profiles;
+drop policy if exists profiles_update_own on profiles;
+drop policy if exists profiles_delete_own on profiles;
+
+create policy profiles_select_own on profiles
+for select using (auth.uid() = id);
+
+create policy profiles_insert_own on profiles
+for insert with check (auth.uid() = id);
+
+create policy profiles_update_own on profiles
+for update using (auth.uid() = id) with check (auth.uid() = id);
+
+create policy profiles_delete_own on profiles
+for delete using (auth.uid() = id);
+
+drop policy if exists entries_select_own on vault_entries;
+drop policy if exists entries_select_sent_anon on vault_entries;
+drop policy if exists entries_insert_own on vault_entries;
+drop policy if exists entries_update_own on vault_entries;
+drop policy if exists entries_delete_own on vault_entries;
+drop policy if exists vault_entries_update on vault_entries;
+
+create policy entries_select_own on vault_entries
+for select using (auth.uid() = user_id);
+
+create policy entries_select_sent_anon on vault_entries
+for select to anon using (status = 'sent');
+
+create policy entries_insert_own on vault_entries
+for insert with check (
+  auth.uid() = user_id
+  and status = 'active'
+  and (
+    action_type <> 'destroy'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+  )
+  and (
+    data_type <> 'audio'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status = 'lifetime'
+    )
+  )
+  and (
+    exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+    or (
+      select count(*) from vault_entries ve
+      where ve.user_id = auth.uid()
+        and ve.status = 'active'
+        and ve.data_type = 'text'
+    ) < 3
+  )
+);
+
+create policy entries_update_own on vault_entries
+for update using (auth.uid() = user_id and status = 'active')
+with check (
+  auth.uid() = user_id
+  and status = 'active'
+  and (
+    action_type <> 'destroy'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+  )
+  and (
+    data_type <> 'audio'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status = 'lifetime'
+    )
+  )
+);
+
+create policy entries_delete_own on vault_entries
+for delete using (auth.uid() = user_id);
+
+insert into storage.buckets (id, name, public)
+values ('vault-audio', 'vault-audio', false)
+on conflict (id) do nothing;
+
+drop policy if exists vault_audio_read_owner on storage.objects;
+drop policy if exists vault_audio_read_sent_anon on storage.objects;
+drop policy if exists vault_audio_insert_lifetime on storage.objects;
+drop policy if exists vault_audio_update_lifetime on storage.objects;
+drop policy if exists vault_audio_delete_lifetime on storage.objects;
+
+create policy vault_audio_read_owner on storage.objects
+for select to authenticated
+using (bucket_id = 'vault-audio' and auth.uid() = owner);
+
+create policy vault_audio_read_sent_anon on storage.objects
+for select to anon
+using (
+  bucket_id = 'vault-audio'
+  and exists (
+    select 1 from vault_entries ve
+    where ve.audio_file_path = storage.objects.name
+      and ve.status = 'sent'
+  )
+);
+
+create policy vault_audio_insert_lifetime on storage.objects
+for insert to authenticated
+with check (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and name like auth.uid() || '/%'
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+create policy vault_audio_update_lifetime on storage.objects
+for update to authenticated
+using (bucket_id = 'vault-audio' and auth.uid() = owner)
+with check (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and name like auth.uid() || '/%'
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+create policy vault_audio_delete_lifetime on storage.objects
+for delete to authenticated
+using (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+revoke update on profiles from authenticated, anon;
+grant update (hmac_key_encrypted) on profiles to authenticated;
+grant update (subscription_status, status, warning_sent_at) on profiles to service_role;
+
+create or replace function cleanup_sent_entries()
+returns void language plpgsql security definer as $$
+begin
+  delete from vault_entries
+  where status = 'sent'
+    and sent_at < now() - interval '7 days';
+
+  update profiles p
+  set status = 'archived'
+  where p.status <> 'archived'
+    and not exists (
+      select 1 from vault_entries v
+      where v.user_id = p.id and v.status <> 'sent'
+    );
+end;
+$$;
+
+select cron.unschedule(jobid) from cron.job where jobname = 'cleanup-sent-entries';
+select cron.schedule(
+  'cleanup-sent-entries',
+  '0 3 * * *',
+  $$select cleanup_sent_entries();$$
+);
+
+
+13.
+create extension if not exists "pgcrypto";
+create extension if not exists pg_cron;
+
+create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  sender_name text not null default 'Afterword',
+  status text not null default 'active' check (status in ('active','inactive','archived')),
+  subscription_status text not null default 'free'
+    check (subscription_status in ('free','pro','lifetime','premium')),
+  last_check_in timestamptz not null default now(),
+  timer_days int not null default 30,
+  warning_sent_at timestamptz,
+  hmac_key_encrypted text,
+  last_entry_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists vault_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null default 'Untitled',
+  action_type text not null default 'send' check (action_type in ('send','destroy')),
+  data_type text not null default 'text' check (data_type in ('text','audio')),
+  status text not null default 'active' check (status in ('active','sending','sent')),
+  payload_encrypted text not null,
+  recipient_email_encrypted text,
+  data_key_encrypted text not null,
+  hmac_signature text not null,
+  audio_file_path text,
+  audio_duration_seconds int,
+  sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint vault_entries_send_requires_recipient
+    check (action_type = 'destroy' or recipient_email_encrypted is not null),
+  constraint vault_entries_sent_requires_timestamp
+    check (status <> 'sent' or sent_at is not null)
+);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_send_requires_recipient'
+  ) then
+    alter table vault_entries
+      add constraint vault_entries_send_requires_recipient
+      check (action_type = 'destroy' or recipient_email_encrypted is not null);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_sent_requires_timestamp'
+  ) then
+    alter table vault_entries
+      add constraint vault_entries_sent_requires_timestamp
+      check (status <> 'sent' or sent_at is not null);
+  end if;
+end $$;
+
+create table if not exists vault_entry_tombstones (
+  vault_entry_id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  sender_name text not null,
+  sent_at timestamptz,
+  expired_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists vault_entries_user_status_idx
+  on vault_entries(user_id, status);
+create index if not exists vault_entries_audio_path_idx
+  on vault_entries(audio_file_path);
+create index if not exists vault_entry_tombstones_user_idx
+  on vault_entry_tombstones(user_id, expired_at);
+
+create or replace function set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_set_updated_at on profiles;
+create trigger profiles_set_updated_at
+before update on profiles for each row execute function set_updated_at();
+
+drop trigger if exists vault_entries_set_updated_at on vault_entries;
+create trigger vault_entries_set_updated_at
+before update on vault_entries for each row execute function set_updated_at();
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  insert into public.profiles (id, email, sender_name)
+  values (
+    new.id,
+    new.email,
+    coalesce(nullif(trim(coalesce(new.raw_user_meta_data->>'name','')), ''), 'Afterword')
+  )
+  on conflict (id) do update
+    set email = excluded.email;
+  return new;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgname = 'on_auth_user_created'
+  ) then
+    execute 'create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user()';
+  end if;
+end $$;
+
+create or replace function update_check_in(user_id uuid, timer_days int default null)
+returns profiles language plpgsql security definer as $$
+declare
+  result profiles;
+  sub text;
+  effective_timer int;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status, timer_days into sub, effective_timer
+  from profiles where id = user_id;
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  elsif timer_days is not null then
+    effective_timer := greatest(7, least(365, timer_days));
+  end if;
+
+  update profiles
+  set last_check_in = now(),
+      timer_days = effective_timer,
+      warning_sent_at = null,
+      status = 'active'
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function update_sender_name(sender_name text)
+returns profiles language plpgsql security definer as $$
+declare result profiles;
+begin
+  update profiles
+  set sender_name = coalesce(nullif(trim(sender_name), ''), 'Afterword')
+  where id = auth.uid()
+  returning * into result;
+  return result;
+end;
+$$;
+
+create or replace function set_subscription_status(user_id uuid, subscription_status text)
+returns profiles language plpgsql security definer as $$
+declare result profiles;
+begin
+  if coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    raise exception 'not authorized';
+  end if;
+
+  update profiles
+  set subscription_status = lower(subscription_status)
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+revoke all on function public.set_subscription_status(uuid, text) from anon, authenticated;
+grant execute on function public.set_subscription_status(uuid, text) to service_role;
+
+create or replace function guard_subscription_status()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.subscription_status is distinct from old.subscription_status
+     and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    raise exception 'subscription_status can only be changed by service role';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_subscription_status on profiles;
+create trigger protect_subscription_status
+before update on profiles
+for each row execute function guard_subscription_status();
+
+create or replace function guard_timer_days()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.timer_days is distinct from old.timer_days then
+    if auth.role() <> 'service_role' then
+      if exists (
+        select 1 from profiles p
+        where p.id = auth.uid()
+          and p.subscription_status in ('pro','lifetime')
+      ) then
+        new.timer_days := greatest(7, least(365, new.timer_days));
+      else
+        new.timer_days := 30;
+      end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row execute function guard_timer_days();
+
+create or replace function enforce_entry_rate_limit()
+returns trigger language plpgsql security definer as $$
+declare
+  last_ts timestamptz;
+begin
+  if new.user_id <> auth.uid() then
+    raise exception 'not authorized';
+  end if;
+
+  select last_entry_at into last_ts
+  from profiles
+  where id = new.user_id
+  for update;
+
+  if last_ts is not null
+     and clock_timestamp() - last_ts < interval '5 seconds' then
+    raise exception 'rate limit';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_rate_limit on vault_entries;
+create trigger vault_entries_rate_limit
+before insert on vault_entries
+for each row execute function enforce_entry_rate_limit();
+
+create or replace function bump_last_entry_at()
+returns trigger language plpgsql security definer as $$
+begin
+  update profiles set last_entry_at = clock_timestamp()
+  where id = new.user_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_bump_last_entry on vault_entries;
+create trigger vault_entries_bump_last_entry
+after insert on vault_entries
+for each row execute function bump_last_entry_at();
+
+create or replace function enforce_audio_time_bank()
+returns trigger language plpgsql security definer as $$
+declare
+  total_seconds int;
+  sub text;
+  new_duration int;
+begin
+  if new.data_type <> 'audio' then
+    return new;
+  end if;
+
+  select subscription_status into sub
+  from profiles
+  where id = new.user_id;
+
+  if sub <> 'lifetime' then
+    raise exception 'audio vault is lifetime only';
+  end if;
+
+  new_duration := coalesce(new.audio_duration_seconds, 0);
+  if new_duration <= 0 then
+    raise exception 'audio duration required';
+  end if;
+
+  select coalesce(sum(audio_duration_seconds), 0)
+  into total_seconds
+  from vault_entries
+  where user_id = new.user_id
+    and data_type = 'audio'
+    and status = 'active'
+    and id <> new.id;
+
+  if total_seconds + new_duration > 600 then
+    raise exception 'audio time bank limit reached';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_audio_bank on vault_entries;
+create trigger vault_entries_audio_bank
+before insert or update on vault_entries
+for each row execute function enforce_audio_time_bank();
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_payload_len_cap'
+  ) then
+    alter table vault_entries
+      add constraint vault_entries_payload_len_cap
+      check (char_length(payload_encrypted) <= 70000);
+  end if;
+end $$;
+
+alter table profiles enable row level security;
+alter table vault_entries enable row level security;
+alter table vault_entry_tombstones enable row level security;
+
+grant select, insert, delete on table profiles to authenticated;
+grant update (hmac_key_encrypted) on table profiles to authenticated;
+
+grant select, insert, update, delete on table vault_entries to authenticated;
+grant select on table vault_entries to anon;
+
+grant select on table vault_entry_tombstones to authenticated;
+
+drop policy if exists profiles_select_own on profiles;
+drop policy if exists profiles_insert_own on profiles;
+drop policy if exists profiles_update_own on profiles;
+drop policy if exists profiles_delete_own on profiles;
+
+create policy profiles_select_own on profiles
+for select using (auth.uid() = id);
+
+create policy profiles_insert_own on profiles
+for insert with check (auth.uid() = id);
+
+create policy profiles_update_own on profiles
+for update using (auth.uid() = id) with check (auth.uid() = id);
+
+create policy profiles_delete_own on profiles
+for delete using (auth.uid() = id);
+
+drop policy if exists entries_select_own on vault_entries;
+drop policy if exists entries_select_sent_anon on vault_entries;
+drop policy if exists entries_insert_own on vault_entries;
+drop policy if exists entries_update_own on vault_entries;
+drop policy if exists entries_delete_own on vault_entries;
+
+create policy entries_select_own on vault_entries
+for select using (auth.uid() = user_id);
+
+create policy entries_select_sent_anon on vault_entries
+for select to anon using (status = 'sent');
+
+create policy entries_insert_own on vault_entries
+for insert with check (
+  auth.uid() = user_id
+  and status = 'active'
+  and (
+    action_type <> 'destroy'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+  )
+  and (
+    data_type <> 'audio'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status = 'lifetime'
+    )
+  )
+  and (
+    exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+    or (
+      select count(*) from vault_entries ve
+      where ve.user_id = auth.uid()
+        and ve.status = 'active'
+        and ve.data_type = 'text'
+    ) < 3
+  )
+);
+
+create policy entries_update_own on vault_entries
+for update using (auth.uid() = user_id and status = 'active')
+with check (
+  auth.uid() = user_id
+  and status = 'active'
+  and (
+    action_type <> 'destroy'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+  )
+  and (
+    data_type <> 'audio'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status = 'lifetime'
+    )
+  )
+);
+
+create policy entries_delete_own on vault_entries
+for delete using (auth.uid() = user_id and status <> 'sending');
+
+drop policy if exists tombstones_select_own on vault_entry_tombstones;
+create policy tombstones_select_own on vault_entry_tombstones
+for select to authenticated using (auth.uid() = user_id);
+
+insert into storage.buckets (id, name, public)
+values ('vault-audio', 'vault-audio', false)
+on conflict (id) do nothing;
+
+drop policy if exists vault_audio_read_owner on storage.objects;
+drop policy if exists vault_audio_read_sent_anon on storage.objects;
+drop policy if exists vault_audio_insert_lifetime on storage.objects;
+drop policy if exists vault_audio_update_lifetime on storage.objects;
+drop policy if exists vault_audio_delete_lifetime on storage.objects;
+
+create policy vault_audio_read_owner on storage.objects
+for select to authenticated
+using (bucket_id = 'vault-audio' and auth.uid() = owner);
+
+create policy vault_audio_read_sent_anon on storage.objects
+for select to anon
+using (
+  bucket_id = 'vault-audio'
+  and exists (
+    select 1 from vault_entries ve
+    where ve.audio_file_path = storage.objects.name
+      and ve.status = 'sent'
+  )
+);
+
+create policy vault_audio_insert_lifetime on storage.objects
+for insert to authenticated
+with check (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and name like auth.uid() || '/%'
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+create policy vault_audio_update_lifetime on storage.objects
+for update to authenticated
+using (bucket_id = 'vault-audio' and auth.uid() = owner)
+with check (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and name like auth.uid() || '/%'
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+create policy vault_audio_delete_lifetime on storage.objects
+for delete to authenticated
+using (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+revoke update on profiles from authenticated, anon;
+grant update (hmac_key_encrypted) on profiles to authenticated;
+grant update (subscription_status, status, warning_sent_at) on profiles to service_role;
+
+create or replace function cleanup_sent_entries()
+returns void language plpgsql security definer as $$
+begin
+  insert into vault_entry_tombstones (vault_entry_id, user_id, sender_name, sent_at, expired_at)
+  select ve.id, ve.user_id, p.sender_name, ve.sent_at, now()
+  from vault_entries ve
+  join profiles p on p.id = ve.user_id
+  where ve.status = 'sent'
+    and ve.sent_at is not null
+    and ve.sent_at < now() - interval '30 days'
+  on conflict (vault_entry_id) do nothing;
+
+  delete from storage.objects so
+  using vault_entries ve
+  where so.bucket_id = 'vault-audio'
+    and ve.status = 'sent'
+    and ve.sent_at is not null
+    and ve.sent_at < now() - interval '30 days'
+    and ve.data_type = 'audio'
+    and ve.audio_file_path is not null
+    and so.name = ve.audio_file_path;
+
+  delete from vault_entries
+  where status = 'sent'
+    and sent_at is not null
+    and sent_at < now() - interval '30 days';
+
+  update profiles p
+  set status = 'archived'
+  where p.status <> 'archived'
+    and not exists (
+      select 1 from vault_entries v
+      where v.user_id = p.id
+    )
+    and exists (
+      select 1 from vault_entry_tombstones t
+      where t.user_id = p.id
+    );
+end;
+$$;
+
+select cron.unschedule(jobid) from cron.job where jobname = 'cleanup-sent-entries';
+select cron.schedule(
+  'cleanup-sent-entries',
+  '0 3 * * *',
+  $$select cleanup_sent_entries();$$
+);
+
+create or replace function viewer_entry_status(entry_id uuid)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  sender text;
+  ve_status text;
+begin
+  select p.sender_name, ve.status
+  into sender, ve_status
+  from vault_entries ve
+  join profiles p on p.id = ve.user_id
+  where ve.id = entry_id;
+
+  if found then
+    if ve_status = 'sent' then
+      return jsonb_build_object('state', 'available', 'sender_name', sender);
+    end if;
+    return jsonb_build_object('state', 'unavailable', 'sender_name', sender);
+  end if;
+
+  select t.sender_name
+  into sender
+  from vault_entry_tombstones t
+  where t.vault_entry_id = entry_id;
+
+  if found then
+    return jsonb_build_object('state', 'expired', 'sender_name', sender);
+  end if;
+
+  return jsonb_build_object('state', 'not_found');
+end;
+$$;
+
+revoke all on function public.viewer_entry_status(uuid) from public;
+grant execute on function public.viewer_entry_status(uuid) to anon;
+grant execute on function public.viewer_entry_status(uuid) to authenticated;
+
+alter function public.handle_new_user() set search_path = public, auth;
+alter function public.update_check_in(uuid, int) set search_path = public, auth;
+alter function public.update_sender_name(text) set search_path = public, auth;
+alter function public.set_subscription_status(uuid, text) set search_path = public, auth;
+alter function public.enforce_entry_rate_limit() set search_path = public, auth;
+alter function public.bump_last_entry_at() set search_path = public, auth;
+alter function public.enforce_audio_time_bank() set search_path = public, auth;
+alter function public.cleanup_sent_entries() set search_path = public, auth, storage;
+alter function public.viewer_entry_status(uuid) set search_path = public, auth;
+
+
+14.
+select
+  (select count(*) from profiles where hmac_key_encrypted is not null) as profiles_with_hmac_key,
+  (select count(*) from vault_entries) as vault_entries_total,
+  (select count(*) from vault_entries where data_key_encrypted is not null) as entries_with_data_key,
+  (select count(*) from vault_entries where recipient_email_encrypted is not null) as entries_with_recipient,
+  (select count(*) from vault_entries where payload_encrypted is not null) as entries_with_payload;
+
+
+15.
+create table if not exists public.push_devices (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  fcm_token text not null unique,
+  platform text not null,
+  last_seen_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.push_devices enable row level security;
+
+create policy "push_devices_select_own" on public.push_devices
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+create policy "push_devices_insert_own" on public.push_devices
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "push_devices_update_own" on public.push_devices
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "push_devices_delete_own" on public.push_devices
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists set_push_devices_updated_at on public.push_devices;
+create trigger set_push_devices_updated_at
+before update on public.push_devices
+for each row
+execute function public.set_updated_at();
+
+16.
+create or replace function public.update_check_in(user_id uuid, timer_days int default null)
+returns profiles
+language plpgsql
+security definer
+as $$
+declare
+  result profiles;
+  sub text;
+  effective_timer int;
+  max_timer int;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status, timer_days
+  into sub, effective_timer
+  from profiles
+  where id = user_id;
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub = 'lifetime' then
+    max_timer := 3650;
+  elsif sub = 'pro' then
+    max_timer := 365;
+  else
+    max_timer := 30;
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  elsif timer_days is not null then
+    effective_timer := greatest(7, least(max_timer, timer_days));
+  end if;
+
+  update profiles
+  set last_check_in = now(),
+      timer_days = effective_timer,
+      warning_sent_at = null
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function public.guard_timer_days()
+returns trigger
+language plpgsql
+as $$
+declare
+  max_timer int;
+begin
+  if new.timer_days is distinct from old.timer_days then
+    if auth.role() <> 'service_role' then
+      if old.subscription_status = 'lifetime' then
+        max_timer := 3650;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      elsif old.subscription_status = 'pro' then
+        max_timer := 365;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      else
+        new.timer_days := 30;
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row
+execute function public.guard_timer_days();
+
+
+17.
+-- ============================================================================
+-- AFTERWORD — COMPLETE SQL (Single Source of Truth)
+-- Run this ONCE on a fresh Supabase project, or use individual sections
+-- to patch an existing database.
+--
+-- Fixes applied vs original SQL.txt:
+--   1. viewer_entry_status RPC — was completely missing (web viewer broken)
+--   2. cleanup_sent_entries — changed from 7 days to 30 days per README §7.4
+--   3. update_check_in — Lazarus fix: sets status='active' on check-in
+--   4. Lifetime timer cap — 3650 days (10 years) per README §5.3.1.1
+-- ============================================================================
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  SECTION 1 — EXTENSIONS                                            ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+create extension if not exists pgcrypto;
+create extension if not exists pg_cron;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  SECTION 2 — TABLES                                                ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- 2a. profiles
+create table if not exists profiles (
+  id                    uuid primary key references auth.users(id) on delete cascade,
+  email                 text,
+  sender_name           text        not null default 'Afterword',
+  status                text        not null default 'active'
+                        check (status in ('active','inactive','archived')),
+  subscription_status   text        not null default 'free'
+                        check (subscription_status in ('free','pro','lifetime','premium')),
+  last_check_in         timestamptz not null default now(),
+  timer_days            int         not null default 30,
+  warning_sent_at       timestamptz,
+  push_66_sent_at       timestamptz,
+  push_33_sent_at       timestamptz,
+  hmac_key_encrypted    text,
+  last_entry_at         timestamptz,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
+);
+
+-- 2a-patch. Add push notification tracking columns if missing (for existing databases)
+alter table profiles add column if not exists push_66_sent_at timestamptz;
+alter table profiles add column if not exists push_33_sent_at timestamptz;
+
+-- 2b. vault_entries
+create table if not exists vault_entries (
+  id                          uuid primary key default gen_random_uuid(),
+  user_id                     uuid        not null references auth.users(id) on delete cascade,
+  title                       text        not null default 'Untitled',
+  action_type                 text        not null default 'send'
+                              check (action_type in ('send','destroy')),
+  data_type                   text        not null default 'text'
+                              check (data_type in ('text','audio')),
+  status                      text        not null default 'active'
+                              check (status in ('active','sending','sent')),
+  payload_encrypted           text        not null,
+  recipient_email_encrypted   text,
+  data_key_encrypted          text        not null,
+  hmac_signature              text        not null,
+  audio_file_path             text,
+  audio_duration_seconds      int,
+  sent_at                     timestamptz,
+  created_at                  timestamptz not null default now(),
+  updated_at                  timestamptz not null default now()
+);
+
+create index if not exists vault_entries_user_status_idx
+  on vault_entries(user_id, status);
+create index if not exists vault_entries_audio_path_idx
+  on vault_entries(audio_file_path);
+
+-- 2c. push_devices (FCM tokens)
+create table if not exists push_devices (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid        not null references auth.users(id) on delete cascade,
+  fcm_token     text        not null unique,
+  platform      text        not null,
+  last_seen_at  timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- 2d. Payload length cap (~50 000 plaintext chars → ~70 000 encrypted)
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_payload_len_cap'
+  ) then
+    alter table vault_entries
+      add constraint vault_entries_payload_len_cap
+      check (char_length(payload_encrypted) <= 70000);
+  end if;
+end $$;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  SECTION 3 — UTILITY TRIGGER FUNCTIONS                             ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- 3a. Auto-set updated_at on any UPDATE
+create or replace function set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_set_updated_at on profiles;
+create trigger profiles_set_updated_at
+before update on profiles for each row execute function set_updated_at();
+
+drop trigger if exists vault_entries_set_updated_at on vault_entries;
+create trigger vault_entries_set_updated_at
+before update on vault_entries for each row execute function set_updated_at();
+
+drop trigger if exists set_push_devices_updated_at on push_devices;
+create trigger set_push_devices_updated_at
+before update on push_devices for each row execute function set_updated_at();
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  SECTION 4 — RPC FUNCTIONS (called from Flutter / Web Viewer)      ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- 4a. update_check_in
+--     • Resets the timer for the calling user
+--     • LAZARUS FIX: always sets status = 'active' so returning users
+--       (inactive / archived) are reactivated on check-in
+--     • Clears warning_sent_at so the 24h email can fire again next cycle
+--     • Clamps timer_days to subscription tier limits
+create or replace function update_check_in(user_id uuid, timer_days int default null)
+returns profiles language plpgsql security definer as $$
+declare
+  result profiles;
+  sub text;
+  effective_timer int;
+  max_timer int;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status, p.timer_days
+  into sub, effective_timer
+  from profiles p where p.id = user_id;
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  -- Determine max allowed timer per subscription tier
+  if sub = 'lifetime' then
+    max_timer := 3650;          -- 10 years
+  elsif sub = 'pro' then
+    max_timer := 365;           -- 1 year
+  else
+    max_timer := 30;            -- free: fixed 30 days
+  end if;
+
+  -- Clamp or force timer
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  elsif timer_days is not null then
+    effective_timer := greatest(7, least(max_timer, timer_days));
+  end if;
+
+  update profiles
+  set last_check_in   = now(),
+      timer_days       = effective_timer,
+      warning_sent_at  = null,
+      push_66_sent_at  = null,
+      push_33_sent_at  = null,
+      status           = 'active'       -- ← LAZARUS FIX
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+-- 4b. update_sender_name
+create or replace function update_sender_name(sender_name text)
+returns profiles language plpgsql security definer as $$
+declare result profiles;
+begin
+  update profiles
+  set sender_name = coalesce(nullif(trim(sender_name), ''), 'Afterword')
+  where id = auth.uid()
+  returning * into result;
+  return result;
+end;
+$$;
+
+-- 4c. set_subscription_status (SERVICE ROLE ONLY — called by RevenueCat webhook)
+create or replace function set_subscription_status(user_id uuid, subscription_status text)
+returns profiles language plpgsql security definer as $$
+declare result profiles;
+begin
+  if coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    raise exception 'not authorized';
+  end if;
+
+  update profiles
+  set subscription_status = lower(subscription_status)
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+revoke all on function set_subscription_status(uuid, text) from anon, authenticated;
+grant execute on function set_subscription_status(uuid, text) to service_role;
+
+-- 4d. cleanup_sent_entries (called by pg_cron AND heartbeat.py)
+--     • Purges vault entries in 'sent' status older than 30 days (README §7.4)
+--     • Marks profiles as 'archived' when they have no remaining active entries
+create or replace function cleanup_sent_entries()
+returns void language plpgsql security definer as $$
+begin
+  -- Delete audio storage objects for entries about to be purged
+  delete from storage.objects
+  where bucket_id = 'vault-audio'
+    and name in (
+      select audio_file_path from vault_entries
+      where status = 'sent'
+        and sent_at < now() - interval '30 days'
+        and audio_file_path is not null
+    );
+
+  -- Purge sent entries older than 30 days
+  delete from vault_entries
+  where status = 'sent'
+    and sent_at < now() - interval '30 days';
+
+  -- Archive profiles that have no active/sending entries remaining
+  update profiles p
+  set status = 'archived'
+  where p.status <> 'archived'
+    and not exists (
+      select 1 from vault_entries v
+      where v.user_id = p.id and v.status in ('active','sending')
+    )
+    and exists (
+      select 1 from vault_entries v
+      where v.user_id = p.id and v.status = 'sent'
+    ) is false
+    and p.status = 'inactive';
+end;
+$$;
+
+-- 4e. viewer_entry_status (called by web viewer — anonymous access)
+--     Returns JSON: { state: 'available'|'expired'|'unavailable', sender_name? }
+--     • 'available'   — entry exists and is in 'sent' status, ready for decryption
+--     • 'expired'     — entry was purged or never existed (show compassionate message)
+--     • 'unavailable' — entry exists but has not been sent yet
+drop function if exists viewer_entry_status(uuid);
+create or replace function viewer_entry_status(entry_id uuid)
+returns json language plpgsql security definer as $$
+declare
+  rec record;
+begin
+  select ve.status, p.sender_name
+  into rec
+  from vault_entries ve
+  join profiles p on p.id = ve.user_id
+  where ve.id = entry_id;
+
+  if not found then
+    -- Entry was deleted (30-day purge) or never existed
+    return json_build_object('state', 'expired', 'sender_name', null::text);
+  end if;
+
+  if rec.status = 'sent' then
+    return json_build_object('state', 'available', 'sender_name', rec.sender_name);
+  end if;
+
+  -- Entry exists but hasn't been released yet (active/sending)
+  return json_build_object('state', 'unavailable');
+end;
+$$;
+
+-- Grant anon access so the web viewer (unauthenticated) can call this
+grant execute on function viewer_entry_status(uuid) to anon;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  SECTION 5 — GUARD TRIGGERS (security enforcement)                 ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- 5a. Prevent clients from changing subscription_status directly
+create or replace function guard_subscription_status()
+returns trigger language plpgsql as $$
+begin
+  if new.subscription_status is distinct from old.subscription_status
+     and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    raise exception 'subscription_status can only be changed by service role';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_subscription_status on profiles;
+create trigger protect_subscription_status
+before update on profiles
+for each row execute function guard_subscription_status();
+
+-- 5b. Clamp timer_days to subscription tier limits
+create or replace function guard_timer_days()
+returns trigger language plpgsql as $$
+declare
+  max_timer int;
+begin
+  if new.timer_days is distinct from old.timer_days then
+    if coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+      if old.subscription_status = 'lifetime' then
+        max_timer := 3650;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      elsif old.subscription_status = 'pro' then
+        max_timer := 365;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      else
+        new.timer_days := 30;
+      end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row execute function guard_timer_days();
+
+-- 5c. Rate-limit vault entry creation: max 1 every 5 seconds
+create or replace function enforce_entry_rate_limit()
+returns trigger language plpgsql security definer as $$
+declare
+  last_ts timestamptz;
+begin
+  if new.user_id <> auth.uid() then
+    raise exception 'not authorized';
+  end if;
+
+  select last_entry_at into last_ts
+  from profiles
+  where id = new.user_id
+  for update;
+
+  if last_ts is not null
+     and clock_timestamp() - last_ts < interval '5 seconds' then
+    raise exception 'rate limit';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_rate_limit on vault_entries;
+create trigger vault_entries_rate_limit
+before insert on vault_entries
+for each row execute function enforce_entry_rate_limit();
+
+-- 5d. Bump last_entry_at after insert (for rate limiting)
+create or replace function bump_last_entry_at()
+returns trigger language plpgsql security definer as $$
+begin
+  update profiles set last_entry_at = clock_timestamp()
+  where id = new.user_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_bump_last_entry on vault_entries;
+create trigger vault_entries_bump_last_entry
+after insert on vault_entries
+for each row execute function bump_last_entry_at();
+
+-- 5e. Enforce audio time bank (10 minutes = 600 seconds, lifetime only)
+create or replace function enforce_audio_time_bank()
+returns trigger language plpgsql security definer as $$
+declare
+  total_seconds int;
+  sub text;
+  new_duration int;
+begin
+  if new.data_type <> 'audio' then
+    return new;
+  end if;
+
+  select subscription_status into sub
+  from profiles
+  where id = new.user_id;
+
+  if sub <> 'lifetime' then
+    raise exception 'audio vault is lifetime only';
+  end if;
+
+  new_duration := coalesce(new.audio_duration_seconds, 0);
+  if new_duration <= 0 then
+    raise exception 'audio duration required';
+  end if;
+
+  select coalesce(sum(audio_duration_seconds), 0)
+  into total_seconds
+  from vault_entries
+  where user_id = new.user_id
+    and data_type = 'audio'
+    and status = 'active'
+    and id <> new.id;
+
+  if total_seconds + new_duration > 600 then
+    raise exception 'audio time bank limit reached';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists vault_entries_audio_bank on vault_entries;
+create trigger vault_entries_audio_bank
+before insert or update on vault_entries
+for each row execute function enforce_audio_time_bank();
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  SECTION 6 — ROW LEVEL SECURITY (RLS)                              ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+alter table profiles enable row level security;
+alter table vault_entries enable row level security;
+alter table push_devices enable row level security;
+
+-- 6a. profiles policies
+drop policy if exists profiles_select_own on profiles;
+drop policy if exists profiles_insert_own on profiles;
+drop policy if exists profiles_update_own on profiles;
+drop policy if exists profiles_delete_own on profiles;
+
+create policy profiles_select_own on profiles
+for select using (auth.uid() = id);
+
+create policy profiles_insert_own on profiles
+for insert with check (auth.uid() = id);
+
+create policy profiles_update_own on profiles
+for update using (auth.uid() = id) with check (auth.uid() = id);
+
+create policy profiles_delete_own on profiles
+for delete using (auth.uid() = id);
+
+-- 6b. vault_entries policies
+drop policy if exists entries_select_own on vault_entries;
+drop policy if exists entries_select_sent_anon on vault_entries;
+drop policy if exists entries_insert_own on vault_entries;
+drop policy if exists entries_update_own on vault_entries;
+drop policy if exists entries_delete_own on vault_entries;
+drop policy if exists vault_entries_update on vault_entries;
+
+-- Authenticated users can read all their own entries (any status)
+create policy entries_select_own on vault_entries
+for select using (auth.uid() = user_id);
+
+-- Anonymous (web viewer) can read entries that have been sent
+create policy entries_select_sent_anon on vault_entries
+for select to anon using (status = 'sent');
+
+-- Insert policy: enforces free tier limits, subscription gates
+create policy entries_insert_own on vault_entries
+for insert with check (
+  auth.uid() = user_id
+  and status = 'active'
+  -- Destroy mode requires Pro/Lifetime
+  and (
+    action_type <> 'destroy'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+  )
+  -- Audio requires Lifetime
+  and (
+    data_type <> 'audio'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status = 'lifetime'
+    )
+  )
+  -- Free users: max 3 active text items
+  and (
+    exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+    or (
+      select count(*) from vault_entries ve
+      where ve.user_id = auth.uid()
+        and ve.status = 'active'
+        and ve.data_type = 'text'
+    ) < 3
+  )
+);
+
+-- Update policy: only active entries can be edited
+create policy entries_update_own on vault_entries
+for update using (auth.uid() = user_id and status = 'active')
+with check (
+  auth.uid() = user_id
+  and status = 'active'
+  -- Destroy mode requires Pro/Lifetime
+  and (
+    action_type <> 'destroy'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status in ('pro','lifetime')
+    )
+  )
+  -- Audio requires Lifetime
+  and (
+    data_type <> 'audio'
+    or exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.subscription_status = 'lifetime'
+    )
+  )
+);
+
+-- Delete policy: users can delete their own entries in ANY status
+-- (active entries + sent entries during the 30-day grace period)
+create policy entries_delete_own on vault_entries
+for delete using (auth.uid() = user_id);
+
+-- 6c. push_devices policies
+drop policy if exists push_devices_select_own on push_devices;
+drop policy if exists push_devices_insert_own on push_devices;
+drop policy if exists push_devices_update_own on push_devices;
+drop policy if exists push_devices_delete_own on push_devices;
+
+create policy push_devices_select_own on push_devices
+for select to authenticated using (auth.uid() = user_id);
+
+create policy push_devices_insert_own on push_devices
+for insert to authenticated with check (auth.uid() = user_id);
+
+create policy push_devices_update_own on push_devices
+for update to authenticated
+using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy push_devices_delete_own on push_devices
+for delete to authenticated using (auth.uid() = user_id);
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  SECTION 7 — STORAGE (Supabase Storage for encrypted audio)        ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+insert into storage.buckets (id, name, public)
+values ('vault-audio', 'vault-audio', false)
+on conflict (id) do nothing;
+
+drop policy if exists vault_audio_read_owner on storage.objects;
+drop policy if exists vault_audio_read_sent_anon on storage.objects;
+drop policy if exists vault_audio_insert_lifetime on storage.objects;
+drop policy if exists vault_audio_update_lifetime on storage.objects;
+drop policy if exists vault_audio_delete_lifetime on storage.objects;
+
+-- Authenticated owner can read their own audio files
+create policy vault_audio_read_owner on storage.objects
+for select to authenticated
+using (bucket_id = 'vault-audio' and auth.uid() = owner);
+
+-- Anonymous (web viewer) can read audio for sent entries
+create policy vault_audio_read_sent_anon on storage.objects
+for select to anon
+using (
+  bucket_id = 'vault-audio'
+  and exists (
+    select 1 from vault_entries ve
+    where ve.audio_file_path = storage.objects.name
+      and ve.status = 'sent'
+  )
+);
+
+-- Only Lifetime users can upload audio
+create policy vault_audio_insert_lifetime on storage.objects
+for insert to authenticated
+with check (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and name like auth.uid() || '/%'
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+-- Only Lifetime users can overwrite audio
+create policy vault_audio_update_lifetime on storage.objects
+for update to authenticated
+using (bucket_id = 'vault-audio' and auth.uid() = owner)
+with check (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and name like auth.uid() || '/%'
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+-- Only Lifetime users can delete audio
+create policy vault_audio_delete_lifetime on storage.objects
+for delete to authenticated
+using (
+  bucket_id = 'vault-audio'
+  and auth.uid() = owner
+  and exists (
+    select 1 from profiles p
+    where p.id = auth.uid() and p.subscription_status = 'lifetime'
+  )
+);
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  SECTION 8 — COLUMN-LEVEL GRANTS (lockdown sensitive columns)      ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- Revoke broad UPDATE on profiles from client roles
+revoke update on profiles from authenticated, anon;
+
+-- Authenticated users can only update hmac_key_encrypted via direct UPDATE
+-- (all other profile mutations go through security-definer RPCs)
+grant update (hmac_key_encrypted) on profiles to authenticated;
+
+-- Service role (heartbeat.py / webhooks) can update server-managed columns
+grant update (subscription_status, status, warning_sent_at, push_66_sent_at, push_33_sent_at) on profiles to service_role;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  SECTION 9 — CRON JOBS                                             ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- Schedule daily cleanup at 03:00 UTC
+select cron.unschedule(jobid) from cron.job where jobname = 'cleanup-sent-entries';
+select cron.schedule(
+  'cleanup-sent-entries',
+  '0 3 * * *',
+  $$select cleanup_sent_entries();$$
+);
+
+-- ============================================================================
+-- END OF SQL
+-- ============================================================================
+
+
+18.
+-- 4b. update_sender_name
+drop function if exists update_sender_name(text);
+create or replace function update_sender_name(new_sender_name text)
+returns profiles language plpgsql security definer as $$
+declare result profiles;
+begin
+  update profiles
+  set sender_name = coalesce(nullif(trim(new_sender_name), ''), 'Afterword')
+  where id = auth.uid()
+  returning * into result;
+  return result;
+end;
+$$;
+
+
+19.
+-- ============================================================
+-- Storage RLS policies for the vault-audio bucket.
+-- Run this once in the Supabase SQL Editor (Dashboard → SQL).
+-- ============================================================
+
+-- 1. Make sure the bucket exists (idempotent).
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('vault-audio', 'vault-audio', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Allow authenticated users to INSERT into their own folder.
+--    Path pattern: {user_id}/{entry_id}.enc
+CREATE POLICY "vault_audio_insert"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'vault-audio'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- 3. Allow authenticated users to SELECT (download) their own files.
+CREATE POLICY "vault_audio_select"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'vault-audio'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- 4. Allow authenticated users to UPDATE their own files (needed for upsert).
+CREATE POLICY "vault_audio_update"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (
+  bucket_id = 'vault-audio'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- 5. Allow authenticated users to DELETE their own files.
+CREATE POLICY "vault_audio_delete"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'vault-audio'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+
+20.
+-- Allows the authenticated user to sync their own subscription_status.
+-- SECURITY DEFINER bypasses the guard_subscription_status trigger's
+-- service_role check because this function runs as the DB owner.
+--
+-- Run this in the Supabase SQL Editor (Dashboard → SQL Editor → New Query).
+
+create or replace function public.sync_my_subscription_status(new_status text)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  if new_status not in ('free', 'pro', 'lifetime') then
+    raise exception 'invalid subscription status: %', new_status;
+  end if;
+
+  update profiles
+  set subscription_status = new_status
+  where id = auth.uid();
+end;
+$$;
+
+-- Grant to authenticated users only (not anon).
+revoke all on function public.sync_my_subscription_status(text) from anon;
+grant execute on function public.sync_my_subscription_status(text) to authenticated;
+
+
+21.
+create or replace function public.sync_my_subscription_status(new_status text)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  if new_status not in ('free', 'pro', 'lifetime') then
+    raise exception 'invalid subscription status: %', new_status;
+  end if;
+
+  update profiles
+  set subscription_status = new_status
+  where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.sync_my_subscription_status(text) from anon;
+grant execute on function public.sync_my_subscription_status(text) to authenticated;
+
+
+22.
+create or replace function public.sync_my_subscription_status(new_status text)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  old_role text;
+begin
+  if new_status not in ('free', 'pro', 'lifetime') then
+    raise exception 'invalid subscription status: %', new_status;
+  end if;
+
+  old_role := coalesce(current_setting('request.jwt.claim.role', true), '');
+  perform set_config('request.jwt.claim.role', 'service_role', true);
+
+  update profiles
+  set subscription_status = new_status
+  where id = auth.uid();
+
+  perform set_config('request.jwt.claim.role', old_role, true);
+end;
+$$;
+
+revoke all on function public.sync_my_subscription_status(text) from anon;
+grant execute on function public.sync_my_subscription_status(text) to authenticated;
+
+
+23.
+drop function if exists public.sync_my_subscription_status(text);
+
+24.
+-- DROP the vulnerable sync_my_subscription_status RPC.
+drop function if exists public.sync_my_subscription_status(text);
+
+-- edge_set_subscription_status: called ONLY by the verify-subscription Edge Function.
+create or replace function public.edge_set_subscription_status(
+  target_user_id uuid,
+  new_status text
+)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  old_role text;
+begin
+  if new_status not in ('free', 'pro', 'lifetime') then
+    raise exception 'invalid subscription status: %', new_status;
+  end if;
+
+  old_role := coalesce(current_setting('request.jwt.claim.role', true), '');
+  perform set_config('request.jwt.claim.role', 'service_role', true);
+
+  update profiles
+  set subscription_status = new_status
+  where id = target_user_id;
+
+  perform set_config('request.jwt.claim.role', old_role, true);
+end;
+$$;
+
+revoke all on function public.edge_set_subscription_status(uuid, text) from anon, authenticated;
+grant execute on function public.edge_set_subscription_status(uuid, text) to service_role;
+
+25.
+-- ============================================================================
+-- SECURITY HARDENING — Run in Supabase SQL Editor
+-- Belt-and-suspenders checks to ensure no modded app can access pro features.
+-- Safe to run multiple times (all statements are idempotent).
+-- ============================================================================
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  1. DROP any leftover vulnerable functions                         ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- The old sync_my_subscription_status let any authenticated user set their
+-- own subscription_status to 'lifetime'. It must be gone.
+drop function if exists public.sync_my_subscription_status(text);
+
+-- The original block_subscription_status_changes (SQL.txt #2) was replaced
+-- by guard_subscription_status. Drop the old trigger function if lingering.
+drop function if exists public.block_subscription_status_changes() cascade;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  2. Ensure EXECUTE grants are locked down                          ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- set_subscription_status: service_role ONLY (used by webhook / heartbeat)
+revoke all on function public.set_subscription_status(uuid, text) from anon, authenticated;
+grant execute on function public.set_subscription_status(uuid, text) to service_role;
+
+-- edge_set_subscription_status: service_role ONLY (used by verify-subscription Edge Function)
+revoke all on function public.edge_set_subscription_status(uuid, text) from anon, authenticated;
+grant execute on function public.edge_set_subscription_status(uuid, text) to service_role;
+
+-- cleanup_sent_entries: no client access needed (cron / heartbeat only)
+revoke all on function public.cleanup_sent_entries() from anon, authenticated;
+grant execute on function public.cleanup_sent_entries() to service_role;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  3. Column-level grants (ensure push columns are included)         ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- Revoke broad UPDATE from client roles
+revoke update on profiles from authenticated, anon;
+
+-- Authenticated users can only directly UPDATE hmac_key_encrypted
+-- (all other mutations go through SECURITY DEFINER RPCs)
+grant update (hmac_key_encrypted) on profiles to authenticated;
+
+-- Service role can update server-managed columns
+grant update (subscription_status, status, warning_sent_at, push_66_sent_at, push_33_sent_at) on profiles to service_role;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  4. Verify guard triggers exist                                    ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- Re-create guard_subscription_status trigger (idempotent)
+drop trigger if exists protect_subscription_status on profiles;
+create trigger protect_subscription_status
+before update on profiles
+for each row execute function guard_subscription_status();
+
+-- Re-create guard_timer_days trigger (idempotent)
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row execute function guard_timer_days();
+
+-- Re-create audio time bank trigger (idempotent)
+drop trigger if exists vault_entries_audio_bank on vault_entries;
+create trigger vault_entries_audio_bank
+before insert or update on vault_entries
+for each row execute function enforce_audio_time_bank();
+
+-- Re-create rate limit trigger (idempotent)
+drop trigger if exists vault_entries_rate_limit on vault_entries;
+create trigger vault_entries_rate_limit
+before insert on vault_entries
+for each row execute function enforce_entry_rate_limit();
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  5. Ensure RLS is ON for all tables                                ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+alter table profiles enable row level security;
+alter table vault_entries enable row level security;
+alter table push_devices enable row level security;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  6. Diagnostic: list all public functions callable by authenticated ║
+-- ║     (Run this SELECT separately to review — should show only       ║
+-- ║     update_check_in, update_sender_name, viewer_entry_status)      ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- Uncomment to audit:
+-- SELECT p.proname, r.rolname
+-- FROM pg_proc p
+-- JOIN pg_namespace n ON p.pronamespace = n.oid
+-- JOIN pg_roles r ON has_function_privilege(r.oid, p.oid, 'EXECUTE')
+-- WHERE n.nspname = 'public'
+--   AND r.rolname IN ('authenticated', 'anon')
+-- ORDER BY p.proname, r.rolname;
+
+
+26.
+create or replace function public.update_check_in(user_id uuid, timer_days int default null)
+returns profiles
+language plpgsql
+security definer
+as $$
+declare
+  result profiles;
+  sub text;
+  effective_timer int;
+  max_timer int;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status, timer_days
+  into sub, effective_timer
+  from profiles
+  where id = user_id;
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub = 'lifetime' then
+    max_timer := 3650;
+  elsif sub = 'pro' then
+    max_timer := 365;
+  else
+    max_timer := 30;
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  elsif timer_days is not null then
+    effective_timer := greatest(7, least(max_timer, timer_days));
+  end if;
+
+  update profiles
+  set last_check_in = now(),
+      timer_days = effective_timer,
+      warning_sent_at = null,
+      push_66_sent_at = null,
+      push_33_sent_at = null
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function public.guard_timer_days()
+returns trigger
+language plpgsql
+as $$
+declare
+  max_timer int;
+begin
+  if new.timer_days is distinct from old.timer_days then
+    if auth.role() <> 'service_role' then
+      if old.subscription_status = 'lifetime' then
+        max_timer := 3650;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      elsif old.subscription_status = 'pro' then
+        max_timer := 365;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      else
+        new.timer_days := 30;
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row
+execute function public.guard_timer_days();
+
+
+27.
+-- ============================================================================
+-- PRODUCTION READINESS — Run in Supabase SQL Editor after all other SQL files.
+-- Adds performance indexes, missing constraints, and scalability prep.
+-- Safe to run multiple times (all statements are idempotent).
+-- ============================================================================
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  1. Performance indexes for vault_entries                          ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- Heartbeat script queries by user_id + status frequently
+create index if not exists idx_vault_entries_user_status
+  on vault_entries (user_id, status);
+
+-- Cleanup job queries sent entries older than 30 days
+create index if not exists idx_vault_entries_sent_at
+  on vault_entries (sent_at)
+  where status = 'sent';
+
+-- Entry list ordered by created_at (app fetches with ORDER BY created_at DESC)
+create index if not exists idx_vault_entries_user_created
+  on vault_entries (user_id, created_at desc);
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  2. Performance indexes for profiles                               ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- Heartbeat script scans profiles by status + last_check_in for expired users
+create index if not exists idx_profiles_active_checkin
+  on profiles (last_check_in)
+  where status = 'active';
+
+-- Heartbeat push notification passes query by push_66/33_sent_at IS NULL
+create index if not exists idx_profiles_push_pending
+  on profiles (last_check_in)
+  where status = 'active'
+    and push_66_sent_at is null;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  3. Performance indexes for push_devices                           ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- FCM token lookup by user
+create index if not exists idx_push_devices_user
+  on push_devices (user_id);
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  4. Ensure NOT NULL constraints on critical columns                ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- These are safe even if already set (Postgres ignores if already NOT NULL)
+do $$
+begin
+  -- vault_entries.user_id must never be null
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'vault_entries'
+      and column_name = 'user_id'
+      and is_nullable = 'YES'
+  ) then
+    alter table vault_entries alter column user_id set not null;
+  end if;
+
+  -- vault_entries.status must never be null
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'vault_entries'
+      and column_name = 'status'
+      and is_nullable = 'YES'
+  ) then
+    alter table vault_entries alter column status set not null;
+  end if;
+
+  -- vault_entries.action_type must never be null
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'vault_entries'
+      and column_name = 'action_type'
+      and is_nullable = 'YES'
+  ) then
+    alter table vault_entries alter column action_type set not null;
+  end if;
+
+  -- profiles.status must never be null (default 'active')
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'profiles'
+      and column_name = 'status'
+      and is_nullable = 'YES'
+  ) then
+    alter table profiles alter column status set default 'active';
+    alter table profiles alter column status set not null;
+  end if;
+
+  -- profiles.subscription_status must never be null (default 'free')
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'profiles'
+      and column_name = 'subscription_status'
+      and is_nullable = 'YES'
+  ) then
+    alter table profiles alter column subscription_status set default 'free';
+    alter table profiles alter column subscription_status set not null;
+  end if;
+
+  -- profiles.timer_days must never be null (default 30)
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'profiles'
+      and column_name = 'timer_days'
+      and is_nullable = 'YES'
+  ) then
+    alter table profiles alter column timer_days set default 30;
+    alter table profiles alter column timer_days set not null;
+  end if;
+end $$;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  5. CHECK constraints for valid enum values                        ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- profiles.status
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'profiles_status_check' and conrelid = 'profiles'::regclass
+  ) then
+    alter table profiles add constraint profiles_status_check
+      check (status in ('active', 'inactive', 'archived'));
+  end if;
+end $$;
+
+-- profiles.subscription_status
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'profiles_sub_status_check' and conrelid = 'profiles'::regclass
+  ) then
+    alter table profiles add constraint profiles_sub_status_check
+      check (subscription_status in ('free', 'pro', 'lifetime'));
+  end if;
+end $$;
+
+-- vault_entries.status
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_status_check' and conrelid = 'vault_entries'::regclass
+  ) then
+    alter table vault_entries add constraint vault_entries_status_check
+      check (status in ('active', 'sending', 'sent'));
+  end if;
+end $$;
+
+-- vault_entries.action_type
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_action_check' and conrelid = 'vault_entries'::regclass
+  ) then
+    alter table vault_entries add constraint vault_entries_action_check
+      check (action_type in ('send', 'destroy'));
+  end if;
+end $$;
+
+-- vault_entries.data_type
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_data_type_check' and conrelid = 'vault_entries'::regclass
+  ) then
+    alter table vault_entries add constraint vault_entries_data_type_check
+      check (data_type in ('text', 'audio'));
+  end if;
+end $$;
+
+-- profiles.timer_days range
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'profiles_timer_days_range' and conrelid = 'profiles'::regclass
+  ) then
+    alter table profiles add constraint profiles_timer_days_range
+      check (timer_days >= 7 and timer_days <= 3650);
+  end if;
+end $$;
+
+-- vault_entries.audio_duration_seconds cap (600s = 10 min bank)
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'vault_entries_audio_duration_cap' and conrelid = 'vault_entries'::regclass
+  ) then
+    alter table vault_entries add constraint vault_entries_audio_duration_cap
+      check (audio_duration_seconds is null or audio_duration_seconds <= 600);
+  end if;
+end $$;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  6. Verify RLS policies exist for profiles (own-row access)        ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- SELECT own profile
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'profiles' and policyname = 'Users can view own profile'
+  ) then
+    create policy "Users can view own profile"
+      on profiles for select
+      using (auth.uid() = id);
+  end if;
+end $$;
+
+-- INSERT own profile (sign-up)
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'profiles' and policyname = 'Users can insert own profile'
+  ) then
+    create policy "Users can insert own profile"
+      on profiles for insert
+      with check (auth.uid() = id);
+  end if;
+end $$;
+
+-- UPDATE own profile (only hmac_key_encrypted via column grant)
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'profiles' and policyname = 'Users can update own profile'
+  ) then
+    create policy "Users can update own profile"
+      on profiles for update
+      using (auth.uid() = id);
+  end if;
+end $$;
+
+-- DELETE own profile (explicit account deletion)
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'profiles' and policyname = 'Users can delete own profile'
+  ) then
+    create policy "Users can delete own profile"
+      on profiles for delete
+      using (auth.uid() = id);
+  end if;
+end $$;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  7. Verify RLS policies exist for vault_entries                    ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'vault_entries' and policyname = 'Users can view own entries'
+  ) then
+    create policy "Users can view own entries"
+      on vault_entries for select
+      using (auth.uid() = user_id);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'vault_entries' and policyname = 'Users can insert own entries'
+  ) then
+    create policy "Users can insert own entries"
+      on vault_entries for insert
+      with check (auth.uid() = user_id);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'vault_entries' and policyname = 'Users can update own entries'
+  ) then
+    create policy "Users can update own entries"
+      on vault_entries for update
+      using (auth.uid() = user_id);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'vault_entries' and policyname = 'Users can delete own entries'
+  ) then
+    create policy "Users can delete own entries"
+      on vault_entries for delete
+      using (auth.uid() = user_id);
+  end if;
+end $$;
+
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  8. Diagnostic queries (run manually to verify)                    ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+-- Check all indexes:
+-- SELECT indexname, tablename FROM pg_indexes WHERE schemaname = 'public' ORDER BY tablename;
+
+-- Check all constraints:
+-- SELECT conname, conrelid::regclass, contype FROM pg_constraint WHERE connamespace = 'public'::regnamespace ORDER BY conrelid::regclass::text;
+
+-- Check all RLS policies:
+-- SELECT tablename, policyname, permissive, cmd FROM pg_policies WHERE schemaname = 'public' ORDER BY tablename;
+
+-- Check all triggers:
+-- SELECT tgname, tgrelid::regclass FROM pg_trigger WHERE tgrelid::regclass::text IN ('profiles', 'vault_entries', 'push_devices') AND NOT tgisinternal ORDER BY tgrelid::regclass::text;
+
+
+28.
+create or replace function public.update_check_in(user_id uuid, timer_days int default null)
+returns profiles
+language plpgsql
+security definer
+as $$
+declare
+  result profiles;
+  sub text;
+  effective_timer int;
+  max_timer int;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status, timer_days
+  into sub, effective_timer
+  from profiles
+  where id = user_id;
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub = 'lifetime' then
+    max_timer := 3650;
+  elsif sub = 'pro' then
+    max_timer := 365;
+  else
+    max_timer := 30;
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  elsif timer_days is not null then
+    effective_timer := greatest(7, least(max_timer, timer_days));
+  end if;
+
+  update profiles
+  set last_check_in = now(),
+      timer_days = effective_timer,
+      warning_sent_at = null,
+      push_66_sent_at = null,
+      push_33_sent_at = null
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function public.update_timer_days(p_timer_days int)
+returns profiles
+language plpgsql
+security definer
+as $$
+declare
+  result profiles;
+  sub text;
+  max_timer int;
+  effective_timer int;
+begin
+  if auth.uid() is null then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status into sub
+  from profiles where id = auth.uid();
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub = 'lifetime' then
+    max_timer := 3650;
+  elsif sub = 'pro' then
+    max_timer := 365;
+  else
+    max_timer := 30;
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  else
+    effective_timer := greatest(7, least(max_timer, p_timer_days));
+  end if;
+
+  update profiles
+  set timer_days = effective_timer
+  where id = auth.uid()
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function public.guard_timer_days()
+returns trigger
+language plpgsql
+as $$
+declare
+  max_timer int;
+begin
+  if new.timer_days is distinct from old.timer_days then
+    if auth.role() <> 'service_role' then
+      if old.subscription_status = 'lifetime' then
+        max_timer := 3650;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      elsif old.subscription_status = 'pro' then
+        max_timer := 365;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      else
+        new.timer_days := 30;
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row
+execute function public.guard_timer_days();
+
+
+29.
+DROP FUNCTION IF EXISTS public.update_check_in(uuid, integer);
+
+create or replace function public.update_check_in(user_id uuid, p_timer_days int default null)
+returns profiles
+language plpgsql
+security definer
+as $$
+declare
+  result profiles;
+  sub text;
+  effective_timer int;
+  max_timer int;
+begin
+  if auth.uid() <> user_id then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status, timer_days
+  into sub, effective_timer
+  from profiles
+  where id = user_id;
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub = 'lifetime' then
+    max_timer := 3650;
+  elsif sub = 'pro' then
+    max_timer := 365;
+  else
+    max_timer := 30;
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  elsif p_timer_days is not null then
+    effective_timer := greatest(7, least(max_timer, p_timer_days));
+  end if;
+
+  update profiles
+  set last_check_in = now(),
+      timer_days = effective_timer,
+      warning_sent_at = null,
+      push_66_sent_at = null,
+      push_33_sent_at = null
+  where id = user_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function public.update_timer_days(p_timer_days int)
+returns profiles
+language plpgsql
+security definer
+as $$
+declare
+  result profiles;
+  sub text;
+  max_timer int;
+  effective_timer int;
+begin
+  if auth.uid() is null then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status into sub
+  from profiles where id = auth.uid();
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub = 'lifetime' then
+    max_timer := 3650;
+  elsif sub = 'pro' then
+    max_timer := 365;
+  else
+    max_timer := 30;
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  else
+    effective_timer := greatest(7, least(max_timer, p_timer_days));
+  end if;
+
+  update profiles
+  set timer_days = effective_timer,
+      last_check_in = now(),
+      warning_sent_at = null,
+      push_66_sent_at = null,
+      push_33_sent_at = null
+  where id = auth.uid()
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+create or replace function public.guard_timer_days()
+returns trigger
+language plpgsql
+as $$
+declare
+  max_timer int;
+begin
+  if new.timer_days is distinct from old.timer_days then
+    if auth.role() <> 'service_role' then
+      if old.subscription_status = 'lifetime' then
+        max_timer := 3650;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      elsif old.subscription_status = 'pro' then
+        max_timer := 365;
+        new.timer_days := greatest(7, least(max_timer, new.timer_days));
+      else
+        new.timer_days := 30;
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_timer_days on profiles;
+create trigger profiles_guard_timer_days
+before update on profiles
+for each row
+execute function public.guard_timer_days();
+
+
+30.
+create or replace function public.update_timer_days(p_timer_days int)
+returns profiles
+language plpgsql
+security definer
+as $$
+declare
+  result profiles;
+  sub text;
+  max_timer int;
+  effective_timer int;
+begin
+  if auth.uid() is null then
+    raise exception 'not authorized';
+  end if;
+
+  select subscription_status into sub
+  from profiles where id = auth.uid();
+
+  if sub is null then
+    raise exception 'profile not found';
+  end if;
+
+  if sub = 'lifetime' then
+    max_timer := 3650;
+  elsif sub = 'pro' then
+    max_timer := 365;
+  else
+    max_timer := 30;
+  end if;
+
+  if sub not in ('pro','lifetime') then
+    effective_timer := 30;
+  else
+    effective_timer := greatest(7, least(max_timer, p_timer_days));
+  end if;
+
+  update profiles
+  set timer_days = effective_timer,
+      last_check_in = now(),
+      warning_sent_at = null,
+      push_66_sent_at = null,
+      push_33_sent_at = null
+  where id = auth.uid()
+  returning * into result;
+
+  return result;
+end;
+$$;
+

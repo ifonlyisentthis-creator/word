@@ -766,345 +766,13 @@ class _VaultSectionView extends StatelessWidget {
 
       builder: (sheetContext) => _SheetContainer(
 
-        child: FutureBuilder<VaultEntryPayload?>(
+        child: _EntryDetailsSheet(
 
-          future: controller.loadPayload(entry),
+          controller: controller,
 
-          builder: (context, snapshot) {
+          entry: entry,
 
-            final payload = snapshot.data;
-
-            final message = payload?.plaintext?.trim() ?? '';
-
-            return SafeArea(
-
-              child: Padding(
-
-                padding: EdgeInsets.fromLTRB(
-
-                  24,
-
-                  16,
-
-                  24,
-
-                  24 + MediaQuery.of(context).viewInsets.bottom,
-
-                ),
-
-                child: Column(
-
-                  mainAxisSize: MainAxisSize.min,
-
-                  crossAxisAlignment: CrossAxisAlignment.start,
-
-                  children: [
-
-                    const _SheetHandle(),
-
-                    const SizedBox(height: 12),
-
-                    Row(
-
-                      children: [
-
-                        Expanded(
-
-                          child: Text(
-
-                            entry.title,
-
-                            style: Theme.of(context).textTheme.titleLarge,
-
-                          ),
-
-                        ),
-
-                        IconButton(
-
-                          tooltip: 'Close',
-
-                          onPressed: () => Navigator.pop(sheetContext),
-
-                          icon: const Icon(Icons.close),
-
-                        ),
-
-                      ],
-
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    Wrap(
-
-                      spacing: 8,
-
-                      runSpacing: 8,
-
-                      children: [
-
-                        _VaultChip(label: entry.actionType.label),
-
-                        _VaultChip(label: entry.dataType.name),
-
-                        _VaultChip(label: entry.status.label),
-
-                      ],
-
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    if (snapshot.connectionState == ConnectionState.waiting)
-
-                      const Center(child: CircularProgressIndicator())
-
-                    else if (payload == null)
-
-                      Text(
-
-                        'Unable to decrypt this entry.',
-
-                        style: Theme.of(context)
-
-                            .textTheme
-
-                            .bodySmall
-
-                            ?.copyWith(color: Colors.white70),
-
-                      )
-
-                    else ...[
-
-                      if (entry.actionType == VaultActionType.send &&
-
-                          payload.recipientEmail != null) ...[
-
-                        Row(
-
-                          children: [
-
-                            const Icon(Icons.alternate_email,
-
-                                size: 16, color: Colors.white60),
-
-                            const SizedBox(width: 6),
-
-                            Text(
-
-                              'Recipient',
-
-                              style: Theme.of(context)
-
-                                  .textTheme
-
-                                  .labelSmall
-
-                                  ?.copyWith(color: Colors.white60),
-
-                            ),
-
-                          ],
-
-                        ),
-
-                        const SizedBox(height: 4),
-
-                        Text(payload.recipientEmail!),
-
-                        const SizedBox(height: 12),
-
-                      ],
-
-                      if (entry.dataType == VaultDataType.audio) ...[
-
-                        Row(
-
-                          children: [
-
-                            const Icon(Icons.graphic_eq,
-
-                                size: 16, color: Colors.white60),
-
-                            const SizedBox(width: 6),
-
-                            Text(
-
-                              'Audio Vault',
-
-                              style: Theme.of(context)
-
-                                  .textTheme
-
-                                  .labelSmall
-
-                                  ?.copyWith(color: Colors.white60),
-
-                            ),
-
-                          ],
-
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        FutureBuilder<String?>(
-
-                          future: controller.loadAudioPath(entry),
-
-                          builder: (context, audioSnapshot) {
-
-                            if (audioSnapshot.connectionState ==
-
-                                ConnectionState.waiting) {
-
-                              return const Center(
-
-                                child: CircularProgressIndicator(),
-
-                              );
-
-                            }
-
-                            final audioPath = audioSnapshot.data;
-
-                            if (audioPath == null) {
-
-                              return Text(
-
-                                'Unable to load audio.',
-
-                                style: Theme.of(context)
-
-                                    .textTheme
-
-                                    .bodySmall
-
-                                    ?.copyWith(color: Colors.white70),
-
-                              );
-
-                            }
-
-                            return Container(
-
-                              padding: const EdgeInsets.all(12),
-
-                              decoration: BoxDecoration(
-
-                                color: Colors.white.withValues(alpha: 0.04),
-
-                                borderRadius: BorderRadius.circular(16),
-
-                                border: Border.all(color: Colors.white12),
-
-                              ),
-
-                              child: _AudioPlaybackSection(
-
-                                audioPath: audioPath,
-
-                                durationSeconds: entry.audioDurationSeconds,
-
-                              ),
-
-                            );
-
-                          },
-
-                        ),
-
-                        const SizedBox(height: 16),
-
-                      ],
-
-                      if (message.isNotEmpty) ...[
-
-                        Row(
-
-                          children: [
-
-                            const Icon(Icons.chat_bubble_outline,
-
-                                size: 16, color: Colors.white60),
-
-                            const SizedBox(width: 6),
-
-                            Text(
-
-                              'Message',
-
-                              style: Theme.of(context)
-
-                                  .textTheme
-
-                                  .labelSmall
-
-                                  ?.copyWith(color: Colors.white60),
-
-                            ),
-
-                          ],
-
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        Container(
-
-                          width: double.infinity,
-
-                          padding: const EdgeInsets.all(14),
-
-                          decoration: BoxDecoration(
-
-                            color: Colors.white.withValues(alpha: 0.04),
-
-                            borderRadius: BorderRadius.circular(16),
-
-                            border: Border.all(color: Colors.white12),
-
-                          ),
-
-                          child: Text(
-
-                            message,
-
-                            style: Theme.of(context).textTheme.bodyMedium,
-
-                          ),
-
-                        ),
-
-                      ] else
-
-                        Text(
-
-                          'No message attached.',
-
-                          style: Theme.of(context)
-
-                              .textTheme
-
-                              .bodySmall
-
-                              ?.copyWith(color: Colors.white70),
-
-                        ),
-
-                    ],
-
-                  ],
-
-                ),
-
-              ),
-
-            );
-
-          },
+          sheetContext: sheetContext,
 
         ),
 
@@ -1159,6 +827,215 @@ class _VaultSectionView extends StatelessWidget {
 }
 
 
+
+class _EntryDetailsSheet extends StatefulWidget {
+  const _EntryDetailsSheet({
+    required this.controller,
+    required this.entry,
+    required this.sheetContext,
+  });
+
+  final VaultController controller;
+  final VaultEntry entry;
+  final BuildContext sheetContext;
+
+  @override
+  State<_EntryDetailsSheet> createState() => _EntryDetailsSheetState();
+}
+
+class _EntryDetailsSheetState extends State<_EntryDetailsSheet> {
+  late final Future<VaultEntryPayload?> _payloadFuture;
+  Future<String?>? _audioFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _payloadFuture = widget.controller.loadPayload(widget.entry);
+    if (widget.entry.dataType == VaultDataType.audio) {
+      _audioFuture = widget.controller.loadAudioPath(widget.entry);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<VaultEntryPayload?>(
+      future: _payloadFuture,
+      builder: (context, snapshot) {
+        final payload = snapshot.data;
+        final message = payload?.plaintext?.trim() ?? '';
+
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              16,
+              24,
+              24 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _SheetHandle(),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.entry.title,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.pop(widget.sheetContext),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _VaultChip(label: widget.entry.actionType.label),
+                      _VaultChip(label: widget.entry.dataType.name),
+                      _VaultChip(label: widget.entry.status.label),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    const Center(child: CircularProgressIndicator())
+                  else if (payload == null)
+                    Text(
+                      'Unable to decrypt this entry.',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.white70),
+                    )
+                  else ...[
+                    if (widget.entry.actionType == VaultActionType.send &&
+                        payload.recipientEmail != null) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.alternate_email,
+                              size: 16, color: Colors.white60),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Recipient',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(color: Colors.white60),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(payload.recipientEmail!),
+                      const SizedBox(height: 12),
+                    ],
+                    if (widget.entry.dataType == VaultDataType.audio &&
+                        _audioFuture != null) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.graphic_eq,
+                              size: 16, color: Colors.white60),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Audio Vault',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(color: Colors.white60),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      FutureBuilder<String?>(
+                        future: _audioFuture,
+                        builder: (context, audioSnapshot) {
+                          if (audioSnapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          final audioPath = audioSnapshot.data;
+                          if (audioPath == null) {
+                            return Text(
+                              'Unable to load audio.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: Colors.white70),
+                            );
+                          }
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.04),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white12),
+                            ),
+                            child: _AudioPlaybackSection(
+                              audioPath: audioPath,
+                              durationSeconds:
+                                  widget.entry.audioDurationSeconds,
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (message.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.chat_bubble_outline,
+                              size: 16, color: Colors.white60),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Message',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(color: Colors.white60),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Text(
+                          message,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ] else
+                      Text(
+                        'No message attached.',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.white70),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
 
 class _VaultEntryTile extends StatelessWidget {
 
