@@ -120,71 +120,78 @@ class _SoulFireButtonState extends State<SoulFireButton>
     return SizedBox(
       width: _size + 60,
       height: _size + 60,
-      child: AnimatedBuilder(
-        animation: Listenable.merge([
-          _breathController,
-          _holdController,
-          _orbitController,
-          _flashController,
-        ]),
-        builder: (context, _) {
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              // The magical orb — painted entirely with CustomPainter
-              CustomPaint(
-                size: Size(_size + 60, _size + 60),
-                painter: _OrbPainter(
-                  breath: _breathController.value,
-                  hold: _holdController.value,
-                  orbit: _orbitController.value,
-                  flash: _flashController.value,
-                  completed: _completed,
-                  styleId: widget.styleId,
-                ),
-              ),
-
-              // Hold progress ring
-              if (_holdController.value > 0)
-                SizedBox(
-                  width: _size + 8,
-                  height: _size + 8,
-                  child: CircularProgressIndicator(
-                    value: _holdController.value,
-                    strokeWidth: 2.5,
-                    color: widget.styleId.primaryColor.withValues(alpha: 0.85),
-                    backgroundColor: Colors.white10,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // The magical orb — only this rebuilds at 60fps
+          RepaintBoundary(
+            child: AnimatedBuilder(
+              animation: Listenable.merge([
+                _breathController,
+                _holdController,
+                _orbitController,
+                _flashController,
+              ]),
+              builder: (context, _) {
+                return CustomPaint(
+                  size: Size(_size + 60, _size + 60),
+                  painter: _OrbPainter(
+                    breath: _breathController.value,
+                    hold: _holdController.value,
+                    orbit: _orbitController.value,
+                    flash: _flashController.value,
+                    completed: _completed,
+                    styleId: widget.styleId,
                   ),
-                ),
+                );
+              },
+            ),
+          ),
 
-              // Completion text
-              if (_completed)
-                Positioned(
-                  bottom: 2,
-                  child: Text(
-                    'SIGNAL VERIFIED',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: const Color(0xFFFFB85C),
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2,
-                        ),
-                  ),
+          // Hold progress ring — only rebuilds when hold changes
+          AnimatedBuilder(
+            animation: _holdController,
+            builder: (context, _) {
+              if (_holdController.value <= 0) return const SizedBox.shrink();
+              return SizedBox(
+                width: _size + 8,
+                height: _size + 8,
+                child: CircularProgressIndicator(
+                  value: _holdController.value,
+                  strokeWidth: 2.5,
+                  color: widget.styleId.primaryColor.withValues(alpha: 0.85),
+                  backgroundColor: Colors.white10,
                 ),
+              );
+            },
+          ),
 
-              // Touch target — translucent so taps outside orb pass through
-              ClipOval(
-                child: Listener(
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: _onPointerDown,
-                  onPointerMove: _onPointerMove,
-                  onPointerUp: _onPointerUp,
-                  onPointerCancel: (_) => _cancelHold(),
-                  child: SizedBox(width: _size, height: _size),
-                ),
+          // Completion text
+          if (_completed)
+            Positioned(
+              bottom: 2,
+              child: Text(
+                'SIGNAL VERIFIED',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFFFFB85C),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2,
+                    ),
               ),
-            ],
-          );
-        },
+            ),
+
+          // Touch target — translucent so taps outside orb pass through
+          ClipOval(
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: _onPointerDown,
+              onPointerMove: _onPointerMove,
+              onPointerUp: _onPointerUp,
+              onPointerCancel: (_) => _cancelHold(),
+              child: SizedBox(width: _size, height: _size),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1088,15 +1095,14 @@ class _OrbPainter extends CustomPainter {
         path.lineTo(current.dx, current.dy);
       }
 
-      // Glow layer
+      // Glow layer (wide stroke, no blur for performance)
       canvas.drawPath(
         path,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 4.0 + hold * 4.0
-          ..color = _lerpHold(moltenOrange, _gold).withValues(alpha: 0.08 + hold * 0.12)
-          ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+          ..strokeWidth = 5.0 + hold * 5.0
+          ..color = _lerpHold(moltenOrange, _gold).withValues(alpha: 0.06 + hold * 0.10)
+          ..strokeCap = StrokeCap.round,
       );
       // Core vein
       canvas.drawPath(

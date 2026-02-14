@@ -133,8 +133,9 @@ Future<bool> openVaultEntryEditor(
   bool created = false;
 
   try {
-    await controller.loadEntries();
-    if (!context.mounted) return false;
+    // Fire-and-forget: load entries in background so the sheet opens instantly.
+    // VaultController will notifyListeners() when done, updating audio time bank.
+    unawaited(controller.loadEntries());
 
     final result = await showModalBottomSheet<bool>(
       context: context,
@@ -1387,8 +1388,6 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
   Widget build(BuildContext context) {
 
-    final bottomPadding = MediaQuery.viewInsetsOf(context).bottom;
-
     final isEditing = widget.entry != null;
 
     final controller = context.watch<VaultController>();
@@ -1443,7 +1442,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
       child: SingleChildScrollView(
 
-        padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + bottomPadding),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
 
         child: Column(
 
@@ -2169,6 +2168,8 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
             ),
 
+            const _KeyboardSpacer(),
+
           ],
 
         ),
@@ -2839,7 +2840,7 @@ class _SheetContainer extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
-    final topPad = MediaQuery.of(context).padding.top;
+    final topPad = MediaQuery.paddingOf(context).top;
 
     return Padding(
 
@@ -2849,7 +2850,7 @@ class _SheetContainer extends StatelessWidget {
 
         constraints: BoxConstraints(
 
-          maxHeight: MediaQuery.of(context).size.height * 0.92 - topPad,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.92 - topPad,
 
         ),
 
@@ -2938,6 +2939,17 @@ class _SheetHandle extends StatelessWidget {
 }
 
 
+
+/// Isolates keyboard-aware bottom padding so the entire form does NOT rebuild
+/// when the soft keyboard opens or closes. Only this widget rebuilds.
+class _KeyboardSpacer extends StatelessWidget {
+  const _KeyboardSpacer();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(height: MediaQuery.viewInsetsOf(context).bottom);
+  }
+}
 
 class _VaultCard extends StatelessWidget {
 
