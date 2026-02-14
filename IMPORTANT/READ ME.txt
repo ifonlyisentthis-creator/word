@@ -2346,3 +2346,80 @@ Then encryption means nothing.
 
 
 
+## 20: Themes & Soul Fire Customization (NEW)
+
+---
+
+20.1 The app now supports customizable themes and Soul Fire button styles, gated by subscription tier.
+
+20.2 Themes: All themes are dark OLED-friendly themes with different color palettes. Text visibility and accessibility are ensured across all themes.
+
+20.2.1 Free Users: 1 theme (Void Black — the current default OLED black + warm amber/gold).
+
+20.2.2 Pro Users: 3 additional themes (Obsidian Steel, Midnight Ember, Deep Ocean) = 4 total.
+
+20.2.3 Lifetime Users: 2 additional themes (Aurora Night, Cosmic Dusk) = 6 total.
+
+20.3 Soul Fire Button Styles: Each style has unique color palettes for the orb, glow, particles, and effects.
+
+20.3.1 Free Users: 1 style (Ethereal Orb — cyan/purple energy sphere).
+
+20.3.2 Pro Users: 3 additional styles (Void Portal, Plasma Burst, Plasma Cell) = 4 total.
+
+20.3.3 Lifetime Users: 2 additional styles (Toxic Core, Crystal Ascend) = 6 total.
+
+20.4 Theme and Soul Fire selections are independent — a Lifetime user can use any Soul Fire style with any theme.
+
+20.5 Selections are stored server-side in the profiles table (selected_theme, selected_soul_fire columns) so they persist across devices and reinstalls.
+
+20.6 Server-side enforcement: The update_preferences RPC validates that the user's subscription tier allows the selected theme/soul fire before saving. A modded app cannot unlock premium themes.
+
+20.7 On subscription downgrade: A guard_preferences_on_downgrade trigger automatically resets theme/soul fire to free defaults if the user's subscription no longer qualifies.
+
+20.8 Access: Users access the customization screen via "Themes & Soul Fire" in the app drawer menu.
+
+---
+
+## 21: Hybrid Notifications (NEW)
+
+---
+
+21.1 The app uses a hybrid notification model combining server-side push (FCM via heartbeat.py) and client-side local notifications (flutter_local_notifications).
+
+21.2 Local notifications are always scheduled as a fallback. They fire at:
+- 66% remaining time (Yellow Warning)
+- 33% remaining time (Red Warning)
+
+21.3 Before scheduling local notifications, the app checks the profile's push_66_sent_at and push_33_sent_at timestamps. If the server already sent a push notification for this check-in cycle, the corresponding local notification is skipped to avoid spam.
+
+21.4 If push notifications fail (FCM token not registered, device offline), local notifications still fire independently.
+
+21.5 Double notifications (both push and local) are acceptable but minimized by checking the push flags.
+
+---
+
+## 22: Timer Reset Rules (CRITICAL)
+
+---
+
+22.1 The timer (last_check_in) resets ONLY in these three cases:
+
+22.1.1 Soul Fire button long-press (manualCheckIn -> update_check_in RPC)
+22.1.2 Timer duration change (updateTimerDays -> update_timer_days RPC)
+22.1.3 Account deletion (entire profile row is deleted)
+
+22.2 The timer NEVER resets on:
+- App open / resume (autoCheckIn only fetches profile, no UPDATE)
+- Logout
+- App uninstall / reinstall
+- Device switch
+- Any other action
+
+22.3 The timer_days value chosen by a Pro/Lifetime user persists across all sessions. It only changes when the user explicitly adjusts it or when the account is deleted.
+
+22.4 On subscription downgrade (Pro -> Free), the guard_timer_days trigger clamps timer_days to 30. On upgrade, the user can adjust it again.
+
+---
+
+
+

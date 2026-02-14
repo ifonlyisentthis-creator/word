@@ -544,17 +544,65 @@ a {
   height: 84px;
   border-radius: 50%;
   background: radial-gradient(circle, var(--accent), var(--accent-strong));
-  box-shadow: 0 0 30px rgba(242, 180, 100, 0.6);
+  box-shadow:
+    0 0 30px rgba(242, 180, 100, 0.6),
+    0 0 60px rgba(0, 229, 255, 0.08),
+    0 0 100px rgba(0, 229, 255, 0.04);
+  animation: coreGlow 3s ease-in-out infinite alternate;
+}
+
+@keyframes coreGlow {
+  0% { box-shadow: 0 0 30px rgba(242, 180, 100, 0.6), 0 0 60px rgba(0, 229, 255, 0.06); }
+  50% { box-shadow: 0 0 40px rgba(242, 180, 100, 0.7), 0 0 80px rgba(0, 229, 255, 0.12); }
+  100% { box-shadow: 0 0 30px rgba(242, 180, 100, 0.6), 0 0 60px rgba(0, 229, 255, 0.06); }
+}
+
+.pulse::after {
+  content: "";
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 229, 255, 0.06) 0%, transparent 70%);
+  animation: auraBreath 4s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes auraBreath {
+  0% { transform: scale(0.95); opacity: 0.4; }
+  100% { transform: scale(1.08); opacity: 0.8; }
 }
 
 .pulse.is-holding .pulse__core {
   transform: scale(0.98);
-  box-shadow: 0 0 36px rgba(242, 180, 100, 0.72);
+  box-shadow:
+    0 0 36px rgba(242, 180, 100, 0.72),
+    0 0 80px rgba(0, 229, 255, 0.25),
+    0 0 120px rgba(0, 229, 255, 0.12);
+  animation: none;
+}
+
+.pulse.is-holding::after {
+  animation: none;
+  transform: scale(1.15);
+  opacity: 1;
+  background: radial-gradient(circle, rgba(0, 229, 255, 0.15) 0%, transparent 70%);
 }
 
 .pulse.is-success .pulse__core {
   background: radial-gradient(circle, rgba(91, 192, 180, 0.95), rgba(91, 192, 180, 0.65));
-  box-shadow: 0 0 40px rgba(91, 192, 180, 0.55);
+  box-shadow:
+    0 0 40px rgba(91, 192, 180, 0.55),
+    0 0 80px rgba(91, 192, 180, 0.2);
+  animation: none;
+}
+
+.pulse.is-success::after {
+  animation: flashBurst 0.6s ease-out forwards;
+}
+
+@keyframes flashBurst {
+  0% { transform: scale(1); opacity: 1; background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 60%); }
+  100% { transform: scale(2); opacity: 0; background: radial-gradient(circle, rgba(255, 255, 255, 0) 0%, transparent 60%); }
 }
 
 .pulse span {

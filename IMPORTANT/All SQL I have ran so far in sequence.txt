@@ -3449,3 +3449,21 @@ $$;
 31.
 DROP FUNCTION IF EXISTS public.cleanup_sent_entries();
 
+
+32.
+-- COMPREHENSIVE UPDATE: Run the full file at D:\Afterword\supabase\comprehensive_update.sql
+-- This single file handles everything:
+--   - New columns: selected_theme, selected_soul_fire on profiles
+--   - New RPC: update_preferences (theme/soul fire with tier validation)
+--   - Fixed: update_check_in (p_timer_days param rename, Lazarus fix)
+--   - Fixed: update_timer_days (now resets last_check_in)
+--   - Drops ALL existing RLS policies across all tables
+--   - Recreates complete RLS from scratch (profiles, vault_entries, push_devices, tombstones, storage)
+--   - New trigger: guard_preferences_on_downgrade (resets theme/soul fire on sub downgrade)
+--   - All guard triggers recreated (subscription, timer_days, rate limit, audio bank)
+--   - Column-level grants locked down
+--   - Drops broken cleanup_sent_entries SQL function (now in Python heartbeat.py)
+--   - Unschedules old cron jobs
+--   - Performance indexes
+-- RUN: Copy entire contents of supabase/comprehensive_update.sql into Supabase SQL Editor
+
