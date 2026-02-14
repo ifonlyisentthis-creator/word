@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_controller.dart';
 import '../services/home_controller.dart';
 import '../services/revenuecat_controller.dart';
+import '../services/theme_provider.dart';
 import 'account_settings_screen.dart';
 import 'customization_screen.dart';
 import 'history_screen.dart';
@@ -277,7 +278,9 @@ class AppDrawer extends StatelessWidget {
               label: 'Sign Out',
               onTap: () {
                 final rc = context.read<RevenueCatController>();
+                final tp = context.read<ThemeProvider>();
                 Navigator.pop(context);
+                tp.reset();
                 authController.prepareSignOut();
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   await rc.logOut();

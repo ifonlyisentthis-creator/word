@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../services/auth_controller.dart';
 import '../services/home_controller.dart';
 import '../services/revenuecat_controller.dart';
+import '../services/theme_provider.dart';
 import '../widgets/ambient_background.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
@@ -224,6 +226,10 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                       // Pop this screen first.
                                       if (context.mounted) {
                                         Navigator.of(context).pop();
+                                      }
+                                      // Reset theme to free defaults before signing out
+                                      if (context.mounted) {
+                                        context.read<ThemeProvider>().reset();
                                       }
                                       // Phase 1: Remove HomeScreen from tree
                                       // BEFORE any listener fires.

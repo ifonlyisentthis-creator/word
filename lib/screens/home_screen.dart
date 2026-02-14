@@ -741,9 +741,9 @@ class _PlanChip extends StatelessWidget {
 
         : isPro
 
-            ? 'Pro Active'
+            ? 'Pro'
 
-            : 'Free Tier';
+            : 'Free';
 
     final icon = isLifetime
 
@@ -1080,49 +1080,52 @@ class _TimerCardState extends State<_TimerCard> {
 
             Row(
 
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
               children: [
 
-                Container(
+                Flexible(
+                  child: Container(
 
-                  padding:
+                    padding:
 
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
 
-                  decoration: BoxDecoration(
+                    decoration: BoxDecoration(
 
-                    color: statusColor.withValues(alpha: 0.18),
+                      color: statusColor.withValues(alpha: 0.18),
 
-                    borderRadius: BorderRadius.circular(999),
+                      borderRadius: BorderRadius.circular(999),
 
-                    border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                      border: Border.all(color: statusColor.withValues(alpha: 0.4)),
 
-                  ),
+                    ),
 
-                  child: Text(
+                    child: Text(
 
-                    statusMessage.toUpperCase(),
+                      statusMessage.toUpperCase(),
 
-                    style: theme.textTheme.labelSmall?.copyWith(
+                      style: theme.textTheme.labelSmall?.copyWith(
 
-                      color: statusColor,
+                        color: statusColor,
 
-                      letterSpacing: 1.6,
+                        letterSpacing: 1.6,
+
+                      ),
+
+                      overflow: TextOverflow.ellipsis,
 
                     ),
 
                   ),
-
                 ),
 
-                const Spacer(),
+                const SizedBox(width: 8),
 
-                Flexible(
-                  child: Text(
-                    'Cycle ${resolvedProfile.timerDays} days',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: Colors.white54,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  'Cycle ${resolvedProfile.timerDays}d',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white54,
                   ),
                 ),
 

@@ -92,4 +92,13 @@ class ThemeProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// Reset to free defaults. Call on sign-out so the next user
+  /// doesn't inherit the previous user's premium theme.
+  void reset() {
+    _themeId = AppThemeId.oledVoid;
+    _soulFireId = SoulFireStyleId.etherealOrb;
+    _subscriptionStatus = 'free';
+    notifyListeners();
+  }
 }

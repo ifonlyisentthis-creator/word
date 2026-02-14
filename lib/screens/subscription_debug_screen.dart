@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 
 import '../services/revenuecat_controller.dart';
+import '../services/theme_provider.dart';
 
 import '../widgets/ambient_background.dart';
 
@@ -131,6 +132,14 @@ class SubscriptionDebugScreen extends StatelessWidget {
                       onPurchase: () async {
 
                         await controller.purchasePackage(package);
+                        if (context.mounted) {
+                          final newStatus = controller.isLifetime
+                              ? 'lifetime'
+                              : controller.isPro
+                                  ? 'pro'
+                                  : 'free';
+                          context.read<ThemeProvider>().enforceSubscriptionLimits(newStatus);
+                        }
 
                       },
 
