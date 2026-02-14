@@ -52,9 +52,13 @@ class NotificationService {
 
     DateTime lastCheckIn,
 
-    int timerDays,
+    int timerDays, {
 
-  ) async {
+    DateTime? push66SentAt,
+
+    DateTime? push33SentAt,
+
+  }) async {
 
     await _plugin.cancel(id: _reminderId);
 
@@ -78,35 +82,57 @@ class NotificationService {
 
 
 
-    await _scheduleIfBeforeExpiry(
+    // Hybrid: only schedule local if server push was NOT already sent
 
-      id: _reminderId,
+    // for this check-in cycle (push timestamp must be after lastCheckIn)
 
-      title: 'Reminder',
+    final push66AlreadySent = push66SentAt != null &&
 
-      body: 'Open Afterword to refresh your check-in timer.',
+        push66SentAt.isAfter(lastCheckIn);
 
-      scheduledFor: base.add(Duration(days: yellowDay)),
+    final push33AlreadySent = push33SentAt != null &&
 
-      expiry: expiry,
-
-    );
+        push33SentAt.isAfter(lastCheckIn);
 
 
 
-    await _scheduleIfBeforeExpiry(
+    if (!push66AlreadySent) {
 
-      id: _urgentId,
+      await _scheduleIfBeforeExpiry(
 
-      title: 'URGENT',
+        id: _reminderId,
 
-      body: 'Your timer is almost up. Check in now.',
+        title: 'Reminder',
 
-      scheduledFor: base.add(Duration(days: redDay)),
+        body: 'Open Afterword to refresh your check-in timer.',
 
-      expiry: expiry,
+        scheduledFor: base.add(Duration(days: yellowDay)),
 
-    );
+        expiry: expiry,
+
+      );
+
+    }
+
+
+
+    if (!push33AlreadySent) {
+
+      await _scheduleIfBeforeExpiry(
+
+        id: _urgentId,
+
+        title: 'URGENT',
+
+        body: 'Your timer is almost up. Check in now.',
+
+        scheduledFor: base.add(Duration(days: redDay)),
+
+        expiry: expiry,
+
+      );
+
+    }
 
   }
 

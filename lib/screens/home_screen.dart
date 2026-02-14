@@ -28,6 +28,8 @@ import '../services/profile_service.dart';
 
 import '../services/revenuecat_controller.dart';
 
+import '../services/theme_provider.dart';
+
 import '../services/server_crypto_service.dart';
 
 import '../services/vault_service.dart';
@@ -380,6 +382,12 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
     final profile = controller.profile;
 
+    // Sync theme provider from profile whenever profile updates
+    if (profile != null) {
+      final tp = context.read<ThemeProvider>();
+      tp.syncFromProfile(profile);
+    }
+
     final protocolExecutedAt = controller.protocolExecutedAt;
 
     final protocolWasArchived = controller.protocolWasArchived;
@@ -486,6 +494,8 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                 Center(
 
                   child: RepaintBoundary(child: SoulFireButton(
+
+                    styleId: context.watch<ThemeProvider>().soulFireId,
 
                     enabled: !controller.isLoading && profile != null,
 

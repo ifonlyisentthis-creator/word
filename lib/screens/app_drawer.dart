@@ -6,6 +6,7 @@ import '../services/auth_controller.dart';
 import '../services/home_controller.dart';
 import '../services/revenuecat_controller.dart';
 import 'account_settings_screen.dart';
+import 'customization_screen.dart';
 import 'how_it_works_screen.dart';
 import 'my_vault_page.dart';
 import 'privacy_policy_screen.dart';
@@ -160,6 +161,19 @@ class AppDrawer extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (_) => const HowItWorksScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.palette_outlined,
+                    label: 'Themes & Soul Fire',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CustomizationScreen(),
                         ),
                       );
                     },

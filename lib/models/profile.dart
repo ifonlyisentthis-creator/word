@@ -11,6 +11,10 @@ class Profile {
     this.updatedAt,
     this.warningSentAt,
     this.hmacKeyEncrypted,
+    this.selectedTheme,
+    this.selectedSoulFire,
+    this.push66SentAt,
+    this.push33SentAt,
   });
 
   final String id;
@@ -24,6 +28,10 @@ class Profile {
   final DateTime? updatedAt;
   final DateTime? warningSentAt;
   final String? hmacKeyEncrypted;
+  final String? selectedTheme;
+  final String? selectedSoulFire;
+  final DateTime? push66SentAt;
+  final DateTime? push33SentAt;
 
   factory Profile.fromMap(Map<String, dynamic> map) {
     return Profile(
@@ -46,6 +54,14 @@ class Profile {
           ? DateTime.parse(map['warning_sent_at'] as String)
           : null,
       hmacKeyEncrypted: map['hmac_key_encrypted'] as String?,
+      selectedTheme: map['selected_theme'] as String?,
+      selectedSoulFire: map['selected_soul_fire'] as String?,
+      push66SentAt: map['push_66_sent_at'] != null
+          ? DateTime.parse(map['push_66_sent_at'] as String)
+          : null,
+      push33SentAt: map['push_33_sent_at'] != null
+          ? DateTime.parse(map['push_33_sent_at'] as String)
+          : null,
     );
   }
 
@@ -58,6 +74,8 @@ class Profile {
     DateTime? updatedAt,
     DateTime? warningSentAt,
     String? hmacKeyEncrypted,
+    String? selectedTheme,
+    String? selectedSoulFire,
   }) {
     return Profile(
       id: id,
@@ -71,6 +89,8 @@ class Profile {
       updatedAt: updatedAt ?? this.updatedAt,
       warningSentAt: warningSentAt ?? this.warningSentAt,
       hmacKeyEncrypted: hmacKeyEncrypted ?? this.hmacKeyEncrypted,
+      selectedTheme: selectedTheme ?? this.selectedTheme,
+      selectedSoulFire: selectedSoulFire ?? this.selectedSoulFire,
     );
   }
 

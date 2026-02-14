@@ -23,12 +23,14 @@ import 'services/auth_controller.dart';
 import 'services/push_service.dart';
 
 import 'services/revenuecat_controller.dart';
+import 'services/theme_provider.dart';
 
 
 
 late AppConfig _appConfig;
 late RevenueCatController _revenueCatController;
 late AuthController _authController;
+final ThemeProvider _themeProvider = ThemeProvider();
 
 Future<void> main() async {
 
@@ -141,6 +143,8 @@ class _AfterwordAppState extends State<AfterwordApp> {
         ChangeNotifierProvider.value(value: _revenueCatController),
 
         ChangeNotifierProvider.value(value: _authController),
+
+        ChangeNotifierProvider.value(value: _themeProvider),
 
       ],
 

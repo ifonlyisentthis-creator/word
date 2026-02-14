@@ -67,6 +67,11 @@ class HomeController extends ChangeNotifier {
 
   Profile? get profile => _profile;
 
+  void updateProfileFromPreferences(Profile updated) {
+    _profile = updated;
+    notifyListeners();
+  }
+
   bool get isLoading => _isLoading;
 
   String? get errorMessage => _errorMessage;
@@ -421,6 +426,10 @@ class HomeController extends ChangeNotifier {
         profile.lastCheckIn,
 
         profile.timerDays,
+
+        push66SentAt: profile.push66SentAt,
+
+        push33SentAt: profile.push33SentAt,
 
       );
 

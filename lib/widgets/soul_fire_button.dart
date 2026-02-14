@@ -4,15 +4,19 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/app_theme.dart';
+
 class SoulFireButton extends StatefulWidget {
   const SoulFireButton({
     super.key,
     required this.enabled,
     required this.onConfirmed,
+    this.styleId = SoulFireStyleId.etherealOrb,
   });
 
   final bool enabled;
   final VoidCallback onConfirmed;
+  final SoulFireStyleId styleId;
 
   @override
   State<SoulFireButton> createState() => _SoulFireButtonState();
@@ -136,6 +140,8 @@ class _SoulFireButtonState extends State<SoulFireButton>
                   orbit: _orbitController.value,
                   flash: _flashController.value,
                   completed: _completed,
+                  primaryColor: widget.styleId.primaryColor,
+                  secondaryColor: widget.styleId.secondaryColor,
                 ),
               ),
 
@@ -147,7 +153,7 @@ class _SoulFireButtonState extends State<SoulFireButton>
                   child: CircularProgressIndicator(
                     value: _holdController.value,
                     strokeWidth: 2.5,
-                    color: const Color(0xFF00E5FF).withValues(alpha: 0.85),
+                    color: widget.styleId.primaryColor.withValues(alpha: 0.85),
                     backgroundColor: Colors.white10,
                   ),
                 ),
@@ -190,6 +196,8 @@ class _OrbPainter extends CustomPainter {
     required this.orbit,
     required this.flash,
     required this.completed,
+    required this.primaryColor,
+    required this.secondaryColor,
   });
 
   final double breath;
@@ -197,11 +205,13 @@ class _OrbPainter extends CustomPainter {
   final double orbit;
   final double flash;
   final bool completed;
+  final Color primaryColor;
+  final Color secondaryColor;
 
-  // Cool palette (idle)
-  static const _cyan = Color(0xFF00E5FF);
-  static const _deepBlue = Color(0xFF0055AA);
-  static const _paleBlue = Color(0xFFCDFCFF);
+  // Derived cool palette from style
+  Color get _cyan => primaryColor;
+  Color get _deepBlue => HSLColor.fromColor(primaryColor).withLightness(0.25).toColor();
+  Color get _paleBlue => Color.lerp(primaryColor, Colors.white, 0.75)!;
   // Warm palette (hold → confirm)
   static const _amber = Color(0xFFFFB85C);
   static const _gold = Color(0xFFFFD700);
@@ -512,6 +522,8 @@ class _OrbPainter extends CustomPainter {
         oldDelegate.hold != hold ||
         oldDelegate.orbit != orbit ||
         oldDelegate.flash != flash ||
-        oldDelegate.completed != completed;
+        oldDelegate.completed != completed ||
+        oldDelegate.primaryColor != primaryColor ||
+        oldDelegate.secondaryColor != secondaryColor;
   }
 }

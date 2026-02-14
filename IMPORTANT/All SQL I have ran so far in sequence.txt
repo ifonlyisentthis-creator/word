@@ -3445,3 +3445,7 @@ begin
 end;
 $$;
 
+
+31.
+DROP FUNCTION IF EXISTS public.cleanup_sent_entries();
+

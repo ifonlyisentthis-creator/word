@@ -57,6 +57,19 @@ class ProfileService {
     return Profile.fromMap(response);
   }
 
+  Future<Profile> updatePreferences(
+    String userId, {
+    String? selectedTheme,
+    String? selectedSoulFire,
+  }) async {
+    final params = <String, dynamic>{'target_user_id': userId};
+    if (selectedTheme != null) params['p_theme'] = selectedTheme;
+    if (selectedSoulFire != null) params['p_soul_fire'] = selectedSoulFire;
+    final response =
+        await _client.rpc('update_preferences', params: params).single();
+    return Profile.fromMap(response);
+  }
+
   String _defaultSenderName(User user) {
     final metadata = user.userMetadata ?? <String, dynamic>{};
     final possibleName = (metadata['full_name'] ?? metadata['name']) as String?;
