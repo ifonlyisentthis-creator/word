@@ -150,21 +150,10 @@ class _AfterwordAppState extends State<AfterwordApp> {
 
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
-          final selectedTheme = themeProvider.themeData.toFlutterTheme();
-          // Merge the selected theme colors into our rich base theme
-          final merged = _cachedTheme.copyWith(
-            scaffoldBackgroundColor: selectedTheme.scaffoldBackgroundColor,
-            colorScheme: _cachedTheme.colorScheme.copyWith(
-              primary: selectedTheme.colorScheme.primary,
-              secondary: selectedTheme.colorScheme.secondary,
-              surface: selectedTheme.colorScheme.surface,
-            ),
-            appBarTheme: _cachedTheme.appBarTheme.copyWith(
-              backgroundColor: selectedTheme.appBarTheme.backgroundColor,
-            ),
-            cardTheme: _cachedTheme.cardTheme.copyWith(
-              color: selectedTheme.colorScheme.surface,
-            ),
+          final selected = themeProvider.themeData.toFlutterTheme();
+          // Use the full selected theme — only keep GoogleFonts textTheme
+          final merged = selected.copyWith(
+            textTheme: _cachedTheme.textTheme,
           );
           return MaterialApp(
             title: 'Afterword',

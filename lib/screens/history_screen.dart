@@ -27,11 +27,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final client = Supabase.instance.client;
 
       // Fetch sent entries (grace period — still viewable)
+      // Only show 'send' type entries in history — 'destroy' entries leave no trace
       final sentRows = await client
           .from('vault_entries')
           .select('id, title, action_type, data_type, sent_at')
           .eq('user_id', widget.userId)
           .eq('status', 'sent')
+          .eq('action_type', 'send')
           .order('sent_at', ascending: false);
 
       // Fetch tombstones (permanently deleted after 30-day grace)

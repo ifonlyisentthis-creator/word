@@ -34,6 +34,7 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
         final isLifetime = controller.isLifetime;
         final isPro = controller.isPro;
+        final activeProductId = controller.activeProductId;
 
         return Scaffold(
 
@@ -125,7 +126,7 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
                       isLoading: controller.isLoading,
 
-                      currentlyPro: isPro,
+                      isCurrentPackage: isPro && package.storeProduct.identifier == activeProductId,
 
                       onPurchase: () async {
 
@@ -527,7 +528,7 @@ class _PackageTile extends StatelessWidget {
 
     required this.isLoading,
 
-    required this.currentlyPro,
+    required this.isCurrentPackage,
 
     required this.onPurchase,
 
@@ -539,7 +540,7 @@ class _PackageTile extends StatelessWidget {
 
   final bool isLoading;
 
-  final bool currentlyPro;
+  final bool isCurrentPackage;
 
   final Future<void> Function() onPurchase;
 
@@ -653,7 +654,7 @@ class _PackageTile extends StatelessWidget {
 
                 FilledButton.icon(
 
-                  onPressed: (isLoading || (currentlyPro && !_isLifetimePackage(package)))
+                  onPressed: (isLoading || isCurrentPackage)
 
                       ? null
 
@@ -663,11 +664,11 @@ class _PackageTile extends StatelessWidget {
 
                         },
 
-                  icon: Icon(currentlyPro && !_isLifetimePackage(package)
+                  icon: Icon(isCurrentPackage
                       ? Icons.check_circle_outline
                       : Icons.shopping_bag_outlined),
 
-                  label: Text(currentlyPro && !_isLifetimePackage(package)
+                  label: Text(isCurrentPackage
                       ? 'Current Plan'
                       : isLoading ? 'Processing' : 'Subscribe'),
 
@@ -740,11 +741,6 @@ class _ActionButton extends StatelessWidget {
 }
 
 
-
-bool _isLifetimePackage(Package package) {
-  final id = package.storeProduct.identifier.toLowerCase();
-  return id.contains('lifetime');
-}
 
 String _formatPackageType(PackageType type) {
 

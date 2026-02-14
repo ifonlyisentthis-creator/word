@@ -35,6 +35,12 @@ class RevenueCatController extends ChangeNotifier {
         .any((ent) => ent.productIdentifier.toLowerCase().contains('lifetime'));
   }
 
+  /// The product identifier of the user's active entitlement (if any).
+  String? get activeProductId {
+    final ent = _customerInfo?.entitlements.active[entitlementId];
+    return ent?.productIdentifier;
+  }
+
   Future<void> configure({required String apiKey}) async {
     if (_isConfigured) return;
     if (!Platform.isAndroid && !Platform.isIOS) {

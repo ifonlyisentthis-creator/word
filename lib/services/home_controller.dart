@@ -12,6 +12,8 @@ import 'notification_service.dart';
 
 import 'profile_service.dart';
 
+import 'theme_provider.dart';
+
 
 
 class HomeController extends ChangeNotifier {
@@ -24,11 +26,15 @@ class HomeController extends ChangeNotifier {
 
     required AccountService accountService,
 
+    required ThemeProvider themeProvider,
+
   })  : _profileService = profileService,
 
         _notificationService = notificationService,
 
-        _accountService = accountService;
+        _accountService = accountService,
+
+        _themeProvider = themeProvider;
 
 
 
@@ -41,6 +47,8 @@ class HomeController extends ChangeNotifier {
   final NotificationService _notificationService;
 
   final AccountService _accountService;
+
+  final ThemeProvider _themeProvider;
 
 
 
@@ -142,6 +150,9 @@ class HomeController extends ChangeNotifier {
       _setProtocolState(ensured);
 
       _profile = ensured;
+
+      // Sync theme/soul fire from profile ONCE on load (not on every build)
+      _themeProvider.syncFromProfile(ensured);
 
       _errorMessage = null;
 

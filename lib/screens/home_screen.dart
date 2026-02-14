@@ -79,7 +79,7 @@ class HomeScreen extends StatelessWidget {
 
       key: ValueKey(user.id),
 
-      create: (_) => HomeController(
+      create: (ctx) => HomeController(
 
         profileService: ProfileService(Supabase.instance.client),
 
@@ -106,6 +106,8 @@ class HomeScreen extends StatelessWidget {
           deviceSecretService: DeviceSecretService(),
 
         ),
+
+        themeProvider: ctx.read<ThemeProvider>(),
 
       )..initialize(user, subscriptionStatus: subStatus),
 
@@ -382,13 +384,8 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
     final profile = controller.profile;
 
-    // Sync theme provider from profile (deferred to avoid build-during-build)
-    if (profile != null) {
-      final tp = context.read<ThemeProvider>();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        tp.syncFromProfile(profile);
-      });
-    }
+    // Theme sync is now handled in HomeController.initialize() — not here.
+    // Syncing in build() was overriding user selections with stale data.
 
     final protocolExecutedAt = controller.protocolExecutedAt;
 
@@ -434,7 +431,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
               controller: _scrollController,
 
               physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
+                parent: ClampingScrollPhysics(),
               ),
 
               cacheExtent: 500,
@@ -1034,7 +1031,7 @@ class _TimerCardState extends State<_TimerCard> {
                 : '${hours}h remaining';
 
     final timerSub = vaultEmpty
-        ? 'Paused — add a vault entry to activate'
+        ? null
         : remaining.isNegative
             ? 'Check in to reactivate'
             : days > 0 && hours > 0
@@ -1119,16 +1116,14 @@ class _TimerCardState extends State<_TimerCard> {
 
                 const Spacer(),
 
-                Text(
-
-                  'Cycle ${resolvedProfile.timerDays} days',
-
-                  style: theme.textTheme.labelSmall?.copyWith(
-
-                    color: Colors.white54,
-
+                Flexible(
+                  child: Text(
+                    'Cycle ${resolvedProfile.timerDays} days',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: Colors.white54,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-
                 ),
 
               ],
@@ -1161,12 +1156,12 @@ class _TimerCardState extends State<_TimerCard> {
 
                   const SizedBox(width: 8),
 
-                  Text(
-
-                    timerSub,
-
-                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54),
-
+                  Flexible(
+                    child: Text(
+                      timerSub,
+                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
 
                 ],
