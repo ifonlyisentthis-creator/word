@@ -59,14 +59,13 @@ extension AppThemeIdX on AppThemeId {
   }
 
   bool isUnlocked(String subscriptionStatus) {
-    final normalizedStatus = subscriptionStatus.trim().toLowerCase();
     switch (requiredTier) {
       case 'free':
         return true;
       case 'pro':
-        return normalizedStatus == 'pro' || normalizedStatus == 'lifetime';
+        return subscriptionStatus == 'pro' || subscriptionStatus == 'lifetime';
       case 'lifetime':
-        return normalizedStatus == 'lifetime';
+        return subscriptionStatus == 'lifetime';
       default:
         return false;
     }
@@ -108,14 +107,13 @@ extension SoulFireStyleIdX on SoulFireStyleId {
   }
 
   bool isUnlocked(String subscriptionStatus) {
-    final normalizedStatus = subscriptionStatus.trim().toLowerCase();
     switch (requiredTier) {
       case 'free':
         return true;
       case 'pro':
-        return normalizedStatus == 'pro' || normalizedStatus == 'lifetime';
+        return subscriptionStatus == 'pro' || subscriptionStatus == 'lifetime';
       case 'lifetime':
-        return normalizedStatus == 'lifetime';
+        return subscriptionStatus == 'lifetime';
       default:
         return false;
     }

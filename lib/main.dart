@@ -148,16 +148,31 @@ class _AfterwordAppState extends State<AfterwordApp> {
 
       ],
 
-      child: MaterialApp(
-
-        title: 'Afterword',
-
-        theme: _cachedTheme,
-
-        debugShowCheckedModeBanner: false,
-
-        home: const AuthGate(),
-
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          final selectedTheme = themeProvider.themeData.toFlutterTheme();
+          // Merge the selected theme colors into our rich base theme
+          final merged = _cachedTheme.copyWith(
+            scaffoldBackgroundColor: selectedTheme.scaffoldBackgroundColor,
+            colorScheme: _cachedTheme.colorScheme.copyWith(
+              primary: selectedTheme.colorScheme.primary,
+              secondary: selectedTheme.colorScheme.secondary,
+              surface: selectedTheme.colorScheme.surface,
+            ),
+            appBarTheme: _cachedTheme.appBarTheme.copyWith(
+              backgroundColor: selectedTheme.appBarTheme.backgroundColor,
+            ),
+            cardTheme: _cachedTheme.cardTheme.copyWith(
+              color: selectedTheme.colorScheme.surface,
+            ),
+          );
+          return MaterialApp(
+            title: 'Afterword',
+            theme: merged,
+            debugShowCheckedModeBanner: false,
+            home: const AuthGate(),
+          );
+        },
       ),
 
     );

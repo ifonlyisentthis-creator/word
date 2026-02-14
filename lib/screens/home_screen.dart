@@ -329,8 +329,6 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
   final DateFormat _dateFormat = DateFormat('MMM d, yyyy');
 
-  String? _lastThemeSyncSignature;
-
 
 
 
@@ -384,23 +382,12 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
     final profile = controller.profile;
 
-    // Sync ThemeProvider from profile only when relevant profile fields change.
-    // Avoid re-syncing on every build, which can overwrite a just-selected theme
-    // from CustomizationScreen before RPC persistence completes.
+    // Sync theme provider from profile (deferred to avoid build-during-build)
     if (profile != null) {
       final tp = context.read<ThemeProvider>();
-      final syncSignature = [
-        profile.subscriptionStatus.trim().toLowerCase(),
-        profile.selectedTheme ?? '',
-        profile.selectedSoulFire ?? '',
-      ].join('|');
-      if (_lastThemeSyncSignature != syncSignature) {
-        _lastThemeSyncSignature = syncSignature;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          tp.syncFromProfile(profile);
-        });
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        tp.syncFromProfile(profile);
+      });
     }
 
     final protocolExecutedAt = controller.protocolExecutedAt;
@@ -446,7 +433,11 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
               controller: _scrollController,
 
-              physics: const AlwaysScrollableScrollPhysics(),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+
+              cacheExtent: 500,
 
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
 
@@ -484,7 +475,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                 const SizedBox(height: 16),
 
-                _TimerCard(
+                RepaintBoundary(child: _TimerCard(
 
                   profile: profile,
 
@@ -502,7 +493,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                   onTimerChanged: (days) => controller.updateTimerDays(days),
 
-                ),
+                )),
 
                 const SizedBox(height: 24),
 
@@ -558,7 +549,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                 const SizedBox(height: 28),
 
-                _VaultSummaryCard(
+                RepaintBoundary(child: _VaultSummaryCard(
                   entryCount: controller.vaultEntryCount,
                   isLoading: controller.isLoading,
                   onViewAll: () {
@@ -585,7 +576,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                       context.read<HomeController>().refreshVaultStatus();
                     }
                   },
-                ),
+                )),
 
               ],
 

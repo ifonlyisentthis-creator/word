@@ -411,6 +411,14 @@ class HomeController extends ChangeNotifier {
 
     if (profile == null || profile.status.toLowerCase() != 'active') return;
 
+    // No notifications if vault is empty — timer has no effect
+    if (!_hasVaultEntries) {
+      if (_notificationsReady) {
+        try { await _notificationService.cancelAll(); } catch (_) {}
+      }
+      return;
+    }
+
     if (!_notificationsReady) {
 
       await _ensureNotifications();

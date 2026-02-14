@@ -1015,6 +1015,15 @@ def main() -> int:
 
                 )
 
+                # After vault release, reset timer to default 30 days
+                # Custom timer only persists while user is actively checking in
+                client.table("profiles").update({
+                    "timer_days": 30,
+                    "warning_sent_at": None,
+                    "push_66_sent_at": None,
+                    "push_33_sent_at": None,
+                }).eq("id", user_id).execute()
+
             if (profile.get("status") or "").lower() != "archived":
 
                 mark_profile_status(client, user_id, "inactive")

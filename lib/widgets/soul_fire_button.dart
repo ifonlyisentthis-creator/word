@@ -172,14 +172,16 @@ class _SoulFireButtonState extends State<SoulFireButton>
                   ),
                 ),
 
-              // Touch target
-              Listener(
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: _onPointerDown,
-                onPointerMove: _onPointerMove,
-                onPointerUp: _onPointerUp,
-                onPointerCancel: (_) => _cancelHold(),
-                child: SizedBox(width: _size, height: _size),
+              // Touch target — translucent so taps outside orb pass through
+              ClipOval(
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: _onPointerDown,
+                  onPointerMove: _onPointerMove,
+                  onPointerUp: _onPointerUp,
+                  onPointerCancel: (_) => _cancelHold(),
+                  child: SizedBox(width: _size, height: _size),
+                ),
               ),
             ],
           );
