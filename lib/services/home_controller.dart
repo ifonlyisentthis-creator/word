@@ -468,8 +468,13 @@ class HomeController extends ChangeNotifier {
   }
 
   Future<void> refreshVaultStatus() async {
+    final hadEntries = _hasVaultEntries;
     await _fetchVaultEntryStatus();
     notifyListeners();
+    // If vault status changed, reschedule (or cancel) notifications
+    if (_hasVaultEntries != hadEntries) {
+      await _scheduleReminders();
+    }
   }
 
   void _setProtocolState(Profile profile) {
