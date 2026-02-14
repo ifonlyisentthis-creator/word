@@ -41,73 +41,72 @@ class HowItWorksScreen extends StatelessWidget {
                         number: '1',
                         title: 'Create Your Vault',
                         body:
-                            'Write messages, record audio, or store secrets. '
-                            'Each item is encrypted on your device before it ever '
-                            'leaves your phone. Not even we can read it.',
+                            'Write messages, record encrypted audio, or store your most important words. '
+                            'Everything is encrypted with AES-256 on your device before upload. '
+                            'Our servers only ever see ciphertext — never your plaintext.',
                         icon: Icons.enhanced_encryption,
                       ),
                       _StepCard(
                         number: '2',
-                        title: 'Set Your Timer',
+                        title: 'Set Your Heartbeat Timer',
                         body:
-                            'Choose how often you want to check in — from 7 days '
-                            'to 10 years. If you stop opening the app, the countdown '
-                            'begins. Free users have a fixed 30-day timer.',
+                            'Choose a check-in cadence that fits your life — from 7 days to 10 years. '
+                            'Free users have a 30-day timer. Pro unlocks 7–365 days, and Lifetime '
+                            'extends up to 3,650 days (10 years).',
                         icon: Icons.timer_outlined,
                       ),
                       _StepCard(
                         number: '3',
-                        title: 'Assign Beneficiaries',
+                        title: 'Assign Recipients',
                         body:
-                            'For each vault item, enter the email of the person '
-                            'you want to receive it. Different items can go to '
-                            'different people.',
+                            'Each vault entry can be sent to a different person. '
+                            'Recipient emails are encrypted and sealed with HMAC — '
+                            'no one (including Afterword admins) can swap or read them.',
                         icon: Icons.people_outline,
                       ),
                       _StepCard(
                         number: '4',
-                        title: 'Check In to Stay Safe',
+                        title: 'Check In to Keep Your Vault Locked',
                         body:
-                            'Simply open the app to reset your timer. You can also '
-                            'long-press the Soul Fire ring for a satisfying confirmation. '
-                            'Every time you open Afterword, your vault stays locked.',
+                            'Open the app or long-press the Soul Fire orb to reset your timer. '
+                            'As long as you keep checking in, your vault stays sealed. '
+                            'Push notifications remind you at 66% and 33% remaining time.',
                         icon: Icons.favorite_border,
                       ),
                       _StepCard(
                         number: '5',
-                        title: 'If You Disappear…',
+                        title: 'Protocol Executes',
                         body:
-                            'When your timer expires, Afterword sends each beneficiary '
-                            'a secure link and a unique key. They open a website, enter '
-                            'the key, and read your message — decrypted in their browser. '
-                            'No one else can access it.',
+                            'If your timer expires, Afterword delivers each entry to its recipient. '
+                            'They receive a secure link and a unique key, then decrypt your '
+                            'message entirely in their browser — no login required. '
+                            'Sent items auto-purge after 30 days.',
                         icon: Icons.send_outlined,
                       ),
                       _StepCard(
                         number: '6',
-                        title: 'Or Destroy Everything',
+                        title: 'Or Destroy Forever',
                         body:
-                            'Pro and Lifetime users can set items to "Destroy" instead '
-                            'of "Send." If the timer expires, the data is permanently '
-                            'deleted. No emails. No trace. Gone forever.',
+                            'Pro and Lifetime users can set any item to "Destroy" mode. '
+                            'When the timer expires, the data is permanently and irreversibly deleted. '
+                            'No emails sent. No trace left. Protocol Zero.',
                         icon: Icons.delete_forever_outlined,
                       ),
-                      const SizedBox(height: 20),
-                      _SectionTitle('Security'),
-                      _BulletPoint('All data is encrypted with AES-256 on your device.'),
-                      _BulletPoint('Encryption keys are wrapped with a server secret '
-                          'stored only in secure infrastructure.'),
-                      _BulletPoint('HMAC signatures prevent anyone — including admins — '
-                          'from swapping beneficiary emails.'),
-                      _BulletPoint('Row-Level Security ensures only you can access your data.'),
-                      _BulletPoint('Sent items auto-delete after 30 days.'),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
+                      _SectionTitle('Security Architecture'),
+                      _BulletPoint('AES-256-GCM encryption — keys generated on your device, never stored server-side.'),
+                      _BulletPoint('HMAC integrity seals — prevent tampering with recipient addresses.'),
+                      _BulletPoint('Row-Level Security (RLS) — your data is isolated at the database level.'),
+                      _BulletPoint('Subscription-gated features verified server-side via RevenueCat.'),
+                      _BulletPoint('Audio files encrypted before upload and stored in a private bucket.'),
+                      _BulletPoint('Sent vault entries auto-purge after 30 days.'),
+                      const SizedBox(height: 24),
                       _SectionTitle('Plans'),
-                      _BulletPoint('Free: 3 text items, 30-day timer, push notifications.'),
-                      _BulletPoint('Pro: Unlimited text, custom timer (7–365 days), '
-                          'destroy mode, email warning failsafe.'),
-                      _BulletPoint('Lifetime: Everything in Pro + audio vault (10 min), '
-                          'timer up to 10 years.'),
+                      _BulletPoint('Free — 3 text items, 30-day timer, push notifications at 66% and 33%.'),
+                      _BulletPoint('Pro — Unlimited text items, custom timer (7–365 days), '
+                          'Protocol Zero (destroy mode), email warning 24h before expiry.'),
+                      _BulletPoint('Lifetime — Everything in Pro, plus encrypted audio vault '
+                          '(10 minute bank), timer up to 10 years, all 6 themes and Soul Fire styles.'),
                     ],
                   ),
                 ),

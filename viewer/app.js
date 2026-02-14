@@ -15,7 +15,7 @@ function getClient() {
 
 const entryInput = document.getElementById("entry-id");
 const keyInput = document.getElementById("security-key");
-const unlockButton = null; // replaced by orb button
+const unlockButton = document.getElementById("unlock");
 const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
 const resultTitle = document.getElementById("result-title");
@@ -175,7 +175,7 @@ async function unlock() {
   }
 
   setStatus("Unlocking vault…");
-  if (window._btnOrb) window._btnOrb.setDisabled(true);
+  unlockButton.disabled = true;
 
   try {
     const { data: entryStatus, error: statusError } = await client.rpc(
@@ -285,8 +285,7 @@ async function unlock() {
 
     resultEl.classList.remove("hidden");
     setStatus("Vault unlocked.", "success");
-    if (window._btnOrb) window._btnOrb.triggerUnlock();
-    else if (typeof window._orbPulseVerified === 'function') window._orbPulseVerified();
+    if (typeof window._orbPulseVerified === 'function') window._orbPulseVerified();
   } catch (error) {
     const msg = error.message || "";
     const friendly = {
@@ -299,16 +298,10 @@ async function unlock() {
     };
     setStatus(friendly[msg] || "Something went wrong. Please check your Entry ID and Security Key and try again.", "error");
   } finally {
-    if (window._btnOrb) window._btnOrb.setDisabled(false);
+    unlockButton.disabled = false;
   }
 }
 
-// Poll the orb button for hold completion
-setInterval(function () {
-  if (window._btnOrb && window._btnOrb.isHoldComplete()) {
-    unlock();
-  }
-}, 60);
-
+unlockButton.addEventListener("click", unlock);
 entryInput.addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
 keyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });

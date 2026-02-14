@@ -371,6 +371,18 @@ class _OrbPainter extends CustomPainter {
             .createShader(Rect.fromCircle(center: center, radius: coreR)),
     );
 
+    // Specular highlight — top-left for 3D depth
+    final specR1 = r * 0.30;
+    final specC1 = center + Offset(-r * 0.18, -r * 0.22);
+    canvas.drawCircle(
+      specC1, specR1,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.10 + hold * 0.06),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: specC1, radius: specR1)),
+    );
+
     // Pulsing violet rim
     canvas.drawCircle(
       center, r * bs,
@@ -483,6 +495,24 @@ class _OrbPainter extends CustomPainter {
         ..strokeWidth = 1.0 + hold * 1.5
         ..color = _lerpHold(dimViolet, _amber).withValues(alpha: 0.15 + hold * 0.25),
     );
+
+    // Subtle rim glow — gives depth to the void edge
+    canvas.drawCircle(
+      center, r * bs,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0 + hold * 1.5
+        ..shader = SweepGradient(
+          colors: [
+            _lerpHold(silver, _gold).withValues(alpha: 0.0),
+            _lerpHold(silver, _gold).withValues(alpha: 0.08 + hold * 0.15),
+            _lerpHold(indigo, _amber).withValues(alpha: 0.03),
+            _lerpHold(silver, _gold).withValues(alpha: 0.0),
+          ],
+          stops: const [0.0, 0.25, 0.65, 1.0],
+          transform: GradientRotation(orbit * 2 * pi * 0.3),
+        ).createShader(Rect.fromCircle(center: center, radius: r * bs)),
+    );
   }
 
   // ═══════════════════════════════════════════════════════
@@ -588,6 +618,18 @@ class _OrbPainter extends CustomPainter {
             .createShader(Rect.fromCircle(center: center, radius: coreR)),
     );
 
+    // Specular highlight for depth
+    final specR3 = r * 0.25;
+    final specC3 = center + Offset(-r * 0.16, -r * 0.20);
+    canvas.drawCircle(
+      specC3, specR3,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.14 + hold * 0.08),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: specC3, radius: specR3)),
+    );
+
     // Thin electric rim
     canvas.drawCircle(
       center, r * bs,
@@ -599,109 +641,153 @@ class _OrbPainter extends CustomPainter {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 4. PLASMA CELL (Pro) — Bio-luminescent organism
-  //    Pulsing membrane ring, internal organelles connected
-  //    by network web. Organic, alive, breathing.
-  //    Colors: deep teal, seafoam, warm amber nucleus.
+  // 4. PLASMA CELL (Pro) — Synaptic Network
+  //    Neural dendrite branches that fork outward, firing
+  //    synapses at junctions, pulse waves racing along paths.
+  //    Colors: warm rose-pink, soft peach, ivory white core.
   // ═══════════════════════════════════════════════════════
   void _paintPlasmaCell(
       Canvas canvas, Offset center, double r, double bs) {
-    const teal = Color(0xFF008B8B);
-    const seafoam = Color(0xFF20B2AA);
-    const warmNucleus = Color(0xFFE8A060);
-    const darkOcean = Color(0xFF002020);
+    const rosePink = Color(0xFFFF6B9D);
+    const peach = Color(0xFFFFAA85);
+    const ivory = Color(0xFFFFF5EB);
+    const deepRose = Color(0xFF200A12);
+    const hotPink = Color(0xFFFF3388);
 
-    // Outer bioluminescent glow
+    // Warm rose outer halo
     canvas.drawCircle(
-      center, r * 1.6 * bs,
+      center, r * 1.8 * bs,
       Paint()
         ..shader = RadialGradient(colors: [
-          _lerpHold(teal, _amber).withValues(alpha: 0.08 + hold * 0.12),
+          _lerpHold(rosePink, _amber).withValues(alpha: 0.06 + hold * 0.10),
+          _lerpHold(hotPink, _gold).withValues(alpha: 0.02),
           Colors.transparent,
-        ], stops: const [0.0, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: r * 1.6)),
+        ], stops: const [0.0, 0.5, 1.0])
+            .createShader(Rect.fromCircle(center: center, radius: r * 1.8)),
     );
 
-    // Main body — translucent dark ocean sphere
+    // Main body — deep rose-black sphere
     canvas.drawCircle(
       center, r * bs,
       Paint()
         ..shader = RadialGradient(colors: [
-          _lerpHold(darkOcean, const Color(0xFF0A0500)),
-          _lerpHold(const Color(0xFF004040), const Color(0xFF1A0800)),
-          _lerpHold(teal, _amber),
-        ], stops: const [0.0, 0.5, 1.0])
+          _lerpHold(deepRose, const Color(0xFF0A0500)),
+          _lerpHold(const Color(0xFF30101A), const Color(0xFF1A0800)),
+          _lerpHold(rosePink, _amber).withValues(alpha: 0.6),
+        ], stops: const [0.0, 0.55, 1.0])
             .createShader(Rect.fromCircle(center: center, radius: r)),
     );
 
-    // PULSING MEMBRANE — ring that expands/contracts with breath
-    final membraneR = r * (0.92 + breath * 0.06) * bs;
-    canvas.drawCircle(
-      center, membraneR,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0 + breath * 1.5 + hold * 2.0
-        ..color = _lerpHold(seafoam, _gold).withValues(alpha: 0.15 + hold * 0.25 + breath * 0.08),
-    );
-    // Inner membrane ring
-    canvas.drawCircle(
-      center, membraneR * 0.94,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.8 + breath * 0.5
-        ..color = _lerpHold(teal, _amber).withValues(alpha: 0.08 + hold * 0.12),
-    );
-
-    // INTERNAL ORGANELLES — floating bodies connected by web
-    final rng = Random(77);
-    const orgCount = 8;
-    final orgPts = <Offset>[];
-    for (int i = 0; i < orgCount; i++) {
-      final a = (i / orgCount) * 2 * pi + orbit * pi * 0.15 + rng.nextDouble() * 0.5;
-      final d = r * (0.15 + rng.nextDouble() * 0.55) * bs;
-      orgPts.add(center + Offset(cos(a) * d, sin(a) * d));
+    // DENDRITE BRANCHES — fork outward from core like neurons
+    final nRng = Random(93);
+    for (int branch = 0; branch < 7; branch++) {
+      final rootAngle = (branch / 7) * 2 * pi + orbit * pi * 0.08;
+      _drawDendrite(canvas, center, rootAngle, r * 0.12 * bs,
+          r * (0.55 + nRng.nextDouble() * 0.30 + hold * 0.15) * bs,
+          nRng, 0, rosePink, peach);
     }
 
-    // Network web connections
-    final webAlpha = (0.06 + hold * 0.15 + breath * 0.03).clamp(0.0, 1.0);
-    for (int i = 0; i < orgPts.length; i++) {
-      for (int j = i + 1; j < orgPts.length; j++) {
-        final d = (orgPts[i] - orgPts[j]).distance;
-        if (d < r * 0.6) {
-          canvas.drawLine(orgPts[i], orgPts[j],
-            Paint()
-              ..color = _lerpHold(seafoam, _gold).withValues(alpha: webAlpha * (1 - d / (r * 0.6)))
-              ..strokeWidth = 0.5 + hold * 0.6);
-        }
+    // SYNAPSE FIRES — bright pulse dots at random junctions
+    for (int s = 0; s < 12; s++) {
+      final sAngle = (s / 12) * 2 * pi + orbit * 2 * pi * 0.25;
+      final sDist = r * (0.20 + nRng.nextDouble() * 0.55) * bs;
+      final spt = center + Offset(cos(sAngle) * sDist, sin(sAngle) * sDist);
+      final firePhase = (sin(orbit * 2 * pi * 3 + s * 2.3) + 1) / 2;
+      final sAlpha = (firePhase * (0.15 + hold * 0.45)).clamp(0.0, 1.0);
+      if (sAlpha > 0.02) {
+        // Glow halo
+        canvas.drawCircle(spt, r * 0.06 * firePhase,
+            Paint()..color = _lerpHold(hotPink, _gold).withValues(alpha: sAlpha * 0.4)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+        // Bright dot
+        canvas.drawCircle(spt, r * 0.015 + firePhase * r * 0.015,
+            Paint()..color = _lerpHold(ivory, _warmWhite).withValues(alpha: sAlpha));
       }
     }
 
-    // Organelle bodies — glowing ellipses
-    for (int i = 0; i < orgPts.length; i++) {
-      final orgR = r * (0.04 + rng.nextDouble() * 0.04 + hold * 0.02);
-      final orgAlpha = (0.20 + hold * 0.30 + breath * 0.08).clamp(0.0, 1.0);
-      canvas.drawCircle(
-        orgPts[i], orgR * 2.5,
-        Paint()..color = _lerpHold(seafoam, _gold).withValues(alpha: orgAlpha * 0.15),
-      );
-      canvas.drawCircle(
-        orgPts[i], orgR,
-        Paint()..color = _lerpHold(seafoam, _gold).withValues(alpha: orgAlpha),
-      );
+    // PULSE WAVES — rings that expand along the network
+    for (int pw = 0; pw < 3; pw++) {
+      final pulsePhase = (orbit * 1.5 + pw * 0.33) % 1.0;
+      final pulseR = r * (0.08 + pulsePhase * 0.85) * bs;
+      final pAlpha = ((1 - pulsePhase) * (0.06 + hold * 0.18)).clamp(0.0, 1.0);
+      if (pAlpha > 0.01) {
+        canvas.drawCircle(
+          center, pulseR,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5 * (1 - pulsePhase) + 0.5
+            ..color = _lerpHold(rosePink, _gold).withValues(alpha: pAlpha),
+        );
+      }
     }
 
-    // Warm nucleus core
-    final coreR = r * (0.14 + breath * 0.03 + hold * 0.15);
+    // Warm ivory core glow
+    final coreR = r * (0.16 + breath * 0.04 + hold * 0.18);
     canvas.drawCircle(
       center, coreR,
       Paint()
         ..shader = RadialGradient(colors: [
-          _lerpHold(warmNucleus, _warmWhite).withValues(alpha: 0.70),
-          _lerpHold(teal, _amber).withValues(alpha: 0.25),
+          _lerpHold(ivory, _warmWhite).withValues(alpha: 0.85),
+          _lerpHold(peach, _gold).withValues(alpha: 0.35),
           Colors.transparent,
-        ], stops: const [0.0, 0.5, 1.0])
+        ], stops: const [0.0, 0.45, 1.0])
             .createShader(Rect.fromCircle(center: center, radius: coreR)),
     );
+
+    // Specular highlight — top-left
+    final specR = r * 0.28;
+    final specC = center + Offset(-r * 0.20, -r * 0.22);
+    canvas.drawCircle(
+      specC, specR,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.12 + hold * 0.08),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: specC, radius: specR)),
+    );
+
+    // Soft rose rim
+    canvas.drawCircle(
+      center, r * bs,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5 + hold * 2.5 + breath * 0.5
+        ..color = _lerpHold(rosePink, _gold).withValues(alpha: 0.10 + hold * 0.22 + breath * 0.04),
+    );
+  }
+
+  // Recursive dendrite branch drawer for Plasma Cell
+  void _drawDendrite(Canvas canvas, Offset from, double angle,
+      double dist, double maxDist, Random rng, int depth,
+      Color mainColor, Color tipColor) {
+    if (depth > 3 || dist > maxDist) return;
+
+    final segLen = maxDist * (0.18 + rng.nextDouble() * 0.12);
+    final to = from + Offset(cos(angle) * segLen, sin(angle) * segLen);
+    final alpha = (0.08 + hold * 0.20 - depth * 0.02 + breath * 0.03).clamp(0.0, 1.0);
+    final width = (2.5 - depth * 0.5 + hold * 1.5).clamp(0.5, 4.0);
+
+    // Glow under the branch
+    canvas.drawLine(from, to,
+      Paint()
+        ..color = _lerpHold(mainColor, _gold).withValues(alpha: alpha * 0.3)
+        ..strokeWidth = width + 3
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+    // Branch line
+    canvas.drawLine(from, to,
+      Paint()
+        ..color = _lerpHold(depth < 2 ? mainColor : tipColor, depth < 2 ? _amber : _gold)
+            .withValues(alpha: alpha)
+        ..strokeWidth = width
+        ..strokeCap = StrokeCap.round);
+
+    // Fork into 2 sub-branches
+    final forkSpread = 0.4 + rng.nextDouble() * 0.5;
+    _drawDendrite(canvas, to, angle - forkSpread + rng.nextDouble() * 0.2,
+        dist + segLen, maxDist, rng, depth + 1, mainColor, tipColor);
+    _drawDendrite(canvas, to, angle + forkSpread - rng.nextDouble() * 0.2,
+        dist + segLen, maxDist, rng, depth + 1, mainColor, tipColor);
   }
 
   // ═══════════════════════════════════════════════════════
@@ -795,6 +881,18 @@ class _OrbPainter extends CustomPainter {
       canvas.drawCircle(pt, bubR,
           Paint()..color = _lerpHold(lavaRed, _warmWhite).withValues(alpha: bAlpha));
     }
+
+    // Specular highlight — subtle warm shine
+    final specR5 = r * 0.22;
+    final specC5 = center + Offset(-r * 0.20, -r * 0.24);
+    canvas.drawCircle(
+      specC5, specR5,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.08 + hold * 0.05),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: specC5, radius: specR5)),
+    );
 
     // Hot core — deep red/orange
     final coreR = r * (0.15 + breath * 0.03 + hold * 0.18);
@@ -933,6 +1031,18 @@ class _OrbPainter extends CustomPainter {
           ..strokeWidth = 1.5 + hold * 1.5
           ..strokeCap = StrokeCap.round);
     }
+
+    // Specular highlight — prismatic shine
+    final specR6 = r * 0.26;
+    final specC6 = center + Offset(-r * 0.18, -r * 0.22);
+    canvas.drawCircle(
+      specC6, specR6,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.15 + hold * 0.10),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: specC6, radius: specR6)),
+    );
 
     // Crystal core — white with prismatic tint
     final coreR = r * (0.18 + breath * 0.04 + hold * 0.22);

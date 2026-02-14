@@ -203,11 +203,10 @@
           </div>
           <div class="hero__panel card">
             <span class="panel__eyebrow">Protocol preview</span>
-            <button class="pulse" type="button" aria-label="Hold to check in" data-hold="">
-              <div class="pulse__ring" aria-hidden="true"></div>
-              <div class="pulse__core" aria-hidden="true"></div>
-              <span class="pulse__label" data-hold-label="">Hold to check in</span>
-            </button>
+            <div class="orb-hold" data-hold="">
+              <canvas class="orb-hold__canvas" width="520" height="520"></canvas>
+              <span class="orb-hold__label" data-hold-label="">Hold to check in</span>
+            </div>
             <div class="panel__details">
               <div class="detail">
                 <span class="detail__label">Timer</span>
@@ -489,6 +488,7 @@
       </footer>
     </div>
 
+    <script src="orb-hold.js"></script>
     <script src="landing.js"></script>
   
 

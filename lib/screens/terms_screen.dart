@@ -52,17 +52,19 @@ class TermsScreen extends StatelessWidget {
                       Text(
                         'By downloading, installing, or using Afterword ("the App"), '
                         'you agree to be bound by these Terms & Conditions. '
-                        'If you do not agree, do not use the App.',
+                        'If you do not agree, please do not use the App.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('2. Description of Service', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'Afterword is a secure digital vault that allows you to create, '
-                        'encrypt, and store messages and audio recordings. These entries '
-                        'can be configured to be delivered to a recipient via email '
-                        'if you do not check in within a user-defined time period.',
+                        'Afterword is a zero-knowledge encrypted legacy vault. It allows you to '
+                        'create, encrypt, and store text messages and audio recordings on your device '
+                        'before uploading them to secure servers. Entries can be configured to:\n\n'
+                        '• Send to a designated recipient when your check-in timer expires\n'
+                        '• Permanently destroy when your timer expires (Protocol Zero)\n\n'
+                        'Recipients access sent items via a secure browser viewer using a private key.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
@@ -70,34 +72,39 @@ class TermsScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'You must sign in with a Google account to use Afterword. '
-                        'You are responsible for maintaining the security of your account. '
-                        'You may delete your account at any time from Account Settings, '
-                        'which permanently removes all your data.',
+                        'You are responsible for maintaining the security of your account '
+                        'and any devices used to access the App.\n\n'
+                        'You may permanently delete your account and all associated data '
+                        'at any time from Account Settings. This action is irreversible.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('4. Subscriptions & Payments', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'Afterword offers free and paid subscription tiers:\n\n'
-                        '• Free — Up to 3 text vault entries, 30-day timer\n'
-                        '• Pro Monthly — Unlimited entries, custom timer (7-365 days), Protocol Zero\n'
-                        '• Pro Annual — Same as Pro Monthly, billed annually\n'
-                        '• Lifetime — All Pro features plus Audio Vault, custom timer up to 10 years\n\n'
-                        'Subscriptions are billed through Google Play. '
-                        'Monthly and annual subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. '
-                        'You can manage or cancel subscriptions in your Google Play settings.\n\n'
-                        'Refunds are handled by Google Play according to their refund policy.',
+                        'Afterword offers tiered access:\n\n'
+                        '• Free — Up to 3 text entries, 30-day fixed timer, push notifications\n'
+                        '• Pro Monthly — Unlimited text entries, custom timer (7–365 days), '
+                        'Protocol Zero (destroy mode), email warning 24h before expiry\n'
+                        '• Pro Annual — Same as Pro Monthly, billed annually at a discount\n'
+                        '• Lifetime — All Pro features plus encrypted audio vault (10 min bank), '
+                        'timer up to 10 years, all 6 themes and Soul Fire styles\n\n'
+                        'Subscriptions are processed through Google Play. '
+                        'Monthly and annual plans auto-renew unless cancelled at least 24 hours '
+                        'before the end of the current billing period. '
+                        'Manage or cancel subscriptions in your Google Play settings.\n\n'
+                        'Refunds are handled by Google Play per their refund policy.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
-                      Text('5. User Content', style: headingStyle),
+                      Text('5. User Content & Encryption', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'You retain ownership of all content you create in the App. '
-                        'Your vault entries are encrypted on your device — we cannot read them.\n\n'
-                        'You are solely responsible for the content of your vault entries '
-                        'and the email addresses you designate as recipients.',
+                        'You retain full ownership of all content you create. '
+                        'Vault entries are encrypted on your device with AES-256-GCM — '
+                        'Afterword cannot read, access, or recover your plaintext content.\n\n'
+                        'You are solely responsible for the content of your vault entries, '
+                        'the accuracy of recipient email addresses, and keeping your security keys safe.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
@@ -106,30 +113,32 @@ class TermsScreen extends StatelessWidget {
                       Text(
                         'You agree not to:\n\n'
                         '• Use the App for any unlawful purpose\n'
-                        '• Attempt to gain unauthorized access to the service\n'
+                        '• Attempt to gain unauthorized access to the service or other accounts\n'
                         '• Reverse engineer, decompile, or modify the App\n'
-                        '• Use the App to harass, threaten, or harm others\n'
-                        '• Circumvent subscription or payment mechanisms',
+                        '• Use the App to harass, threaten, or cause harm\n'
+                        '• Circumvent subscription, payment, or security mechanisms',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('7. Delivery & Reliability', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'While we strive for reliable delivery of vault entries, '
-                        'Afterword does not guarantee delivery of emails or notifications. '
-                        'The service is provided on a best-effort basis. '
-                        'Do not rely on Afterword as a sole means of critical communication.',
+                        'While we engineer for reliable delivery, Afterword operates on a '
+                        'best-effort basis and does not guarantee delivery of emails, '
+                        'push notifications, or vault content.\n\n'
+                        'Do not rely on Afterword as your sole means of critical communication. '
+                        'Sent items remain accessible for 30 days, then auto-purge permanently.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('8. Limitation of Liability', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'Afterword is provided "as is" without warranties of any kind. '
-                        'To the maximum extent permitted by law, we shall not be liable '
-                        'for any indirect, incidental, or consequential damages arising '
-                        'from your use of the App.',
+                        'Afterword is provided "as is" without warranties of any kind, '
+                        'express or implied. To the maximum extent permitted by law, '
+                        'we shall not be liable for any indirect, incidental, special, or '
+                        'consequential damages arising from your use of the App, including '
+                        'but not limited to failed delivery, data loss, or service interruption.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
@@ -137,8 +146,8 @@ class TermsScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'We reserve the right to suspend or terminate accounts that '
-                        'violate these terms. You may terminate your account at any time '
-                        'by deleting it from Account Settings.',
+                        'violate these Terms or engage in abusive behavior. '
+                        'You may terminate your account at any time via Account Settings.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
@@ -146,16 +155,16 @@ class TermsScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'We may update these Terms from time to time. '
-                        'Continued use of the App after changes constitutes acceptance '
-                        'of the updated terms.',
+                        'The "Last updated" date will reflect changes. '
+                        'Continued use of the App after updates constitutes acceptance.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('11. Contact', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'For questions about these Terms, contact us at:\n\n'
-                        'afterword.app@gmail.com',
+                        'Questions about these Terms? Contact us:\n\n'
+                        'hello@afterword-app.com',
                         style: bodyStyle,
                       ),
                     ],

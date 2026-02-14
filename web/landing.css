@@ -482,133 +482,42 @@ a {
   margin-bottom: 6px;
 }
 
-.pulse {
+.orb-hold {
   position: relative;
   width: clamp(160px, 48vw, 220px);
-  height: clamp(160px, 48vw, 220px);
   margin: 0 auto;
-  border-radius: 50%;
   display: flex;
-  align-items: center;
-  justify-content: center;
   flex-direction: column;
-  gap: 12px;
-  color: var(--text);
-  border: 0;
-  background: transparent;
+  align-items: center;
   cursor: pointer;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
-  --hold-progress: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.pulse:focus-visible {
-  outline: 2px solid rgba(242, 180, 100, 0.6);
-  outline-offset: 6px;
+.orb-hold__canvas {
+  width: 100%;
+  aspect-ratio: 1;
+  display: block;
 }
 
-.pulse__ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(
-    rgba(242, 180, 100, 0.92) calc(var(--hold-progress) * 1turn),
-    rgba(255, 255, 255, 0.12) 0
-  );
-  animation: breathe 4s ease-in-out infinite;
-}
-
-.pulse__ring::before {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.08), rgba(10, 10, 12, 0.92));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-}
-
-.pulse.is-holding .pulse__ring {
-  animation: none;
-}
-
-.pulse.is-success .pulse__ring {
-  animation: none;
-  background: conic-gradient(
-    rgba(91, 192, 180, 0.95) 1turn,
-    rgba(91, 192, 180, 0.95) 0
-  );
-}
-
-.pulse__core {
-  width: 84px;
-  height: 84px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--accent), var(--accent-strong));
-  box-shadow:
-    0 0 30px rgba(242, 180, 100, 0.6),
-    0 0 60px rgba(0, 229, 255, 0.08),
-    0 0 100px rgba(0, 229, 255, 0.04);
-  animation: coreGlow 3s ease-in-out infinite alternate;
-}
-
-@keyframes coreGlow {
-  0% { box-shadow: 0 0 30px rgba(242, 180, 100, 0.6), 0 0 60px rgba(0, 229, 255, 0.06); }
-  50% { box-shadow: 0 0 40px rgba(242, 180, 100, 0.7), 0 0 80px rgba(0, 229, 255, 0.12); }
-  100% { box-shadow: 0 0 30px rgba(242, 180, 100, 0.6), 0 0 60px rgba(0, 229, 255, 0.06); }
-}
-
-.pulse::after {
-  content: "";
-  position: absolute;
-  inset: -20px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(0, 229, 255, 0.06) 0%, transparent 70%);
-  animation: auraBreath 4s ease-in-out infinite alternate;
+.orb-hold__label {
+  margin-top: 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--accent);
+  opacity: 0.85;
+  transition: opacity 0.4s ease, color 0.4s ease;
+  text-align: center;
   pointer-events: none;
 }
 
-@keyframes auraBreath {
-  0% { transform: scale(0.95); opacity: 0.4; }
-  100% { transform: scale(1.08); opacity: 0.8; }
-}
-
-.pulse.is-holding .pulse__core {
-  transform: scale(0.98);
-  box-shadow:
-    0 0 36px rgba(242, 180, 100, 0.72),
-    0 0 80px rgba(0, 229, 255, 0.25),
-    0 0 120px rgba(0, 229, 255, 0.12);
-  animation: none;
-}
-
-.pulse.is-holding::after {
-  animation: none;
-  transform: scale(1.15);
+.orb-hold.is-success .orb-hold__label {
+  color: var(--accent-cool);
   opacity: 1;
-  background: radial-gradient(circle, rgba(0, 229, 255, 0.15) 0%, transparent 70%);
-}
-
-.pulse.is-success .pulse__core {
-  background: radial-gradient(circle, rgba(91, 192, 180, 0.95), rgba(91, 192, 180, 0.65));
-  box-shadow:
-    0 0 40px rgba(91, 192, 180, 0.55),
-    0 0 80px rgba(91, 192, 180, 0.2);
-  animation: none;
-}
-
-.pulse.is-success::after {
-  animation: flashBurst 0.6s ease-out forwards;
-}
-
-@keyframes flashBurst {
-  0% { transform: scale(1); opacity: 1; background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 60%); }
-  100% { transform: scale(2); opacity: 0; background: radial-gradient(circle, rgba(255, 255, 255, 0) 0%, transparent 60%); }
-}
-
-.pulse span {
-  font-size: 0.85rem;
-  color: var(--muted);
-  text-align: center;
 }
 
 .signal-row {

@@ -49,61 +49,68 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       Text('1. Information We Collect', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'Afterword collects the minimum information necessary to provide the service:\n\n'
-                        '• Google account email address (for authentication)\n'
-                        '• Vault entries you create (stored encrypted)\n'
+                        'Afterword collects only the minimum data necessary to operate:\n\n'
+                        '• Google account email (authentication only)\n'
+                        '• Vault entries (stored as AES-256-GCM ciphertext — never plaintext)\n'
+                        '• Recipient email addresses (encrypted and HMAC-sealed on your device)\n'
                         '• Subscription status (managed by RevenueCat)\n'
-                        '• Push notification tokens (for timer notifications)\n\n'
-                        'We do not collect analytics, location data, contacts, or browsing history.',
+                        '• Push notification token (for timer reminders at 66% and 33%)\n\n'
+                        'We do not collect analytics, location data, contacts, browsing history, or any telemetry.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
-                      Text('2. Encryption & Data Security', style: headingStyle),
+                      Text('2. Zero-Knowledge Encryption', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'All vault entries are encrypted on your device before being stored on our servers. '
-                        'We use AES-256-GCM encryption with keys derived on your device. '
-                        'Our servers never see your plaintext content.\n\n'
-                        'Audio files are encrypted before upload and stored in a private bucket accessible only to you.',
+                        'All vault content — text messages, recipient addresses, and audio recordings — '
+                        'is encrypted on your device with AES-256-GCM before upload. Encryption keys '
+                        'are generated locally and never transmitted to or stored on our servers.\n\n'
+                        'HMAC integrity seals protect against tampering — even Afterword admins '
+                        'cannot read, modify, or swap your data.\n\n'
+                        'Audio files are encrypted into noise before storage in a private, '
+                        'access-controlled bucket.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('3. How We Use Your Information', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        '• To authenticate you and manage your account\n'
-                        '• To store and deliver your encrypted vault entries\n'
-                        '• To send timer-related push notifications\n'
-                        '• To process subscription purchases via Google Play\n\n'
-                        'We do not sell, share, or use your data for advertising.',
+                        '• Authenticate your identity via Google Sign-In\n'
+                        '• Store and deliver your encrypted vault entries when your timer expires\n'
+                        '• Send push notifications for timer reminders (66% and 33% remaining)\n'
+                        '• Send email warnings to paid users 24 hours before expiry\n'
+                        '• Verify subscription entitlements server-side via RevenueCat\n\n'
+                        'We do not sell, share, rent, or use your data for advertising or profiling.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('4. Third-Party Services', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        '• Google Sign-In — for authentication\n'
-                        '• Supabase — for secure data storage (encrypted at rest)\n'
-                        '• RevenueCat — for subscription management\n'
-                        '• Firebase Cloud Messaging — for push notifications\n\n'
-                        'Each service processes data according to their own privacy policies.',
+                        '• Google Sign-In — authentication\n'
+                        '• Supabase — secure data storage with Row-Level Security and encryption at rest\n'
+                        '• RevenueCat — subscription management and entitlement verification\n'
+                        '• Firebase Cloud Messaging — push notifications only\n\n'
+                        'Each service operates under their respective privacy policies. '
+                        'No third party has access to your decrypted vault content.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('5. Data Retention & Deletion', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'Your data is retained as long as your account is active. '
-                        'Sent vault entries are automatically deleted after 30 days.\n\n'
+                        'Active data is retained as long as your account exists. '
+                        'Sent vault entries are automatically purged 30 days after delivery.\n\n'
                         'You can permanently delete your account and all associated data '
-                        'at any time from Account Settings. This action is irreversible.',
+                        'at any time from Account Settings. This action is immediate and irreversible — '
+                        'all vault entries, encryption keys, and profile data are destroyed.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('6. Children\'s Privacy', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'Afterword is not intended for use by children under 13. '
+                        'Afterword is not intended for use by anyone under 13 years of age. '
                         'We do not knowingly collect personal information from children.',
                         style: bodyStyle,
                       ),
@@ -113,15 +120,15 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       Text(
                         'We may update this Privacy Policy from time to time. '
                         'Changes will be reflected by the "Last updated" date above. '
-                        'Continued use of the app after changes constitutes acceptance.',
+                        'Continued use of the app after changes constitutes acceptance of the updated policy.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
                       Text('8. Contact', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'If you have questions about this Privacy Policy, please contact us at:\n\n'
-                        'afterword.app@gmail.com',
+                        'Questions about this Privacy Policy? Contact us:\n\n'
+                        'hello@afterword-app.com',
                         style: bodyStyle,
                       ),
                     ],
