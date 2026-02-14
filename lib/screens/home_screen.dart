@@ -329,6 +329,8 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
   final DateFormat _dateFormat = DateFormat('MMM d, yyyy');
 
+  String? _lastThemeSyncSignature;
+
 
 
 
@@ -382,12 +384,23 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
     final profile = controller.profile;
 
-    // Sync theme provider from profile (deferred to avoid build-during-build)
+    // Sync ThemeProvider from profile only when relevant profile fields change.
+    // Avoid re-syncing on every build, which can overwrite a just-selected theme
+    // from CustomizationScreen before RPC persistence completes.
     if (profile != null) {
       final tp = context.read<ThemeProvider>();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        tp.syncFromProfile(profile);
-      });
+      final syncSignature = [
+        profile.subscriptionStatus.trim().toLowerCase(),
+        profile.selectedTheme ?? '',
+        profile.selectedSoulFire ?? '',
+      ].join('|');
+      if (_lastThemeSyncSignature != syncSignature) {
+        _lastThemeSyncSignature = syncSignature;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          tp.syncFromProfile(profile);
+        });
+      }
     }
 
     final protocolExecutedAt = controller.protocolExecutedAt;
