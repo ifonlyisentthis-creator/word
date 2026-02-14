@@ -76,6 +76,8 @@ class Profile {
     String? hmacKeyEncrypted,
     String? selectedTheme,
     String? selectedSoulFire,
+    DateTime? push66SentAt,
+    DateTime? push33SentAt,
   }) {
     return Profile(
       id: id,
@@ -91,6 +93,8 @@ class Profile {
       hmacKeyEncrypted: hmacKeyEncrypted ?? this.hmacKeyEncrypted,
       selectedTheme: selectedTheme ?? this.selectedTheme,
       selectedSoulFire: selectedSoulFire ?? this.selectedSoulFire,
+      push66SentAt: push66SentAt ?? this.push66SentAt,
+      push33SentAt: push33SentAt ?? this.push33SentAt,
     );
   }
 

@@ -437,6 +437,13 @@ body {
 
 }
 
+.result__meta {
+  font-size: 0.85rem;
+  color: var(--accent);
+  margin-top: 4px;
+  letter-spacing: 0.05em;
+}
+
 
 
 .result__actions {

@@ -23,6 +23,7 @@ const resultBody = document.getElementById("result-body");
 const resultActions = document.getElementById("result-actions");
 
 let currentObjectUrl = null;
+let lastSenderName = null;
 
 const params = new URLSearchParams(window.location.search);
 const entryParam = params.get("entry") || params.get("id");
@@ -193,13 +194,11 @@ async function unlock() {
       return;
     }
 
-    if (entryStatus?.state === "not_found") {
-      throw new Error("not_found");
-    }
-
     if (entryStatus?.state === "unavailable") {
       throw new Error("unavailable");
     }
+
+    lastSenderName = entryStatus?.sender_name || null;
 
     if (!keyValue) {
       setStatus("Please enter the Security Key from your email.", "error");
@@ -231,6 +230,15 @@ async function unlock() {
 
     resultTitle.textContent = entry.title || "Untitled";
 
+    // Show sender metadata
+    const metaEl = document.getElementById("result-meta");
+    if (metaEl) {
+      const parts = [];
+      if (lastSenderName) parts.push(`From ${lastSenderName}`);
+      if (entry.data_type === "audio") parts.push("Audio message");
+      metaEl.textContent = parts.join(" · ") || "";
+    }
+
     if (entry.data_type === "audio") {
       if (!entry.audio_file_path) {
         throw new Error("audio_missing");
@@ -259,7 +267,7 @@ async function unlock() {
       resultBody.appendChild(audio);
 
       resultActions.appendChild(
-        createDownloadButton("Download .mp3", decryptedBlob, "afterword.mp3")
+        createDownloadButton("Download Audio", decryptedBlob, "afterword.m4a")
       );
     } else {
       let decoded;
@@ -279,7 +287,7 @@ async function unlock() {
 
       const textBlob = new Blob([decoded], { type: "text/plain" });
       resultActions.appendChild(
-        createDownloadButton("Download .txt", textBlob, "afterword.txt")
+        createDownloadButton("Download Text", textBlob, "afterword.txt")
       );
     }
 
@@ -290,8 +298,6 @@ async function unlock() {
     const msg = error.message || "";
     const friendly = {
       could_not_verify: "Unable to verify this entry. Please check the Entry ID and try again.",
-      not_found: "No entry found with that ID. Please double-check the Entry ID from your email.",
-      unavailable: "This message is not available yet. It will be released when the sender’s protocol executes.",
       invalid_key_format: "The security key format is invalid. Please copy the full key from your email.",
       audio_missing: "The audio file for this entry could not be found.",
       decrypt_failed: "Unable to decrypt this message. Please make sure you entered the correct Security Key from your email.",
