@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../models/app_theme.dart';
 import '../services/profile_service.dart';
-import '../services/revenuecat_controller.dart';
 import '../services/theme_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -14,12 +13,7 @@ class CustomizationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final td = themeProvider.themeData;
-    final rc = context.watch<RevenueCatController>();
-    final sub = rc.isLifetime
-        ? 'lifetime'
-        : rc.isPro
-            ? 'pro'
-            : 'free';
+    final sub = themeProvider.subscriptionStatus;
 
     return Scaffold(
       backgroundColor: td.scaffoldColor,
