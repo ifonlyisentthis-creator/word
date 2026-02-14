@@ -1023,37 +1023,35 @@ class _TimerCardState extends State<_TimerCard> {
 
     final hours = remaining.inHours.remainder(24);
 
-    final timerLabel = remaining.isNegative
+    final vaultEmpty = !widget.hasVaultEntries;
 
-        ? 'Expired'
+    final timerLabel = vaultEmpty
+        ? '${resolvedProfile.timerDays} days'
+        : remaining.isNegative
+            ? 'Expired'
+            : days > 0
+                ? '$days days'
+                : '${hours}h remaining';
 
-        : days > 0
+    final timerSub = vaultEmpty
+        ? 'Paused — add a vault entry to activate'
+        : remaining.isNegative
+            ? 'Check in to reactivate'
+            : days > 0 && hours > 0
+                ? '+ ${hours}h'
+                : null;
 
-            ? '$days days'
+    final statusMessage = vaultEmpty
+        ? 'Standby'
+        : resolvedProfile.status.toLowerCase() == 'active'
+            ? 'Protocol secure'
+            : 'Protocol executed';
 
-            : '${hours}h remaining';
-
-    final timerSub = remaining.isNegative
-
-        ? 'Check in to reactivate'
-
-        : days > 0 && hours > 0
-
-            ? '+ ${hours}h'
-
-            : null;
-
-    final statusMessage = resolvedProfile.status.toLowerCase() == 'active'
-
-        ? 'Protocol secure'
-
-        : 'Protocol executed';
-
-    final statusColor = resolvedProfile.status.toLowerCase() == 'active'
-
-        ? theme.colorScheme.secondary
-
-        : theme.colorScheme.error;
+    final statusColor = vaultEmpty
+        ? Colors.white38
+        : resolvedProfile.status.toLowerCase() == 'active'
+            ? theme.colorScheme.secondary
+            : theme.colorScheme.error;
 
     final totalSeconds = resolvedProfile.timerDays * 24 * 60 * 60;
 

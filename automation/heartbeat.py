@@ -991,38 +991,41 @@ def main() -> int:
 
         if remaining.total_seconds() <= 0:
 
-            if has_entries:
+            if not has_entries:
+                # Empty vault = timer has no effect. Do NOT mark inactive.
+                # User stays active; timer just sits expired until they add entries.
+                continue
 
-                process_expired_entries(
+            process_expired_entries(
 
-                    client,
+                client,
 
-                    profile,
+                profile,
 
-                    active_entries,
+                active_entries,
 
-                    server_secret,
+                server_secret,
 
-                    resend_key,
+                resend_key,
 
-                    from_email,
+                from_email,
 
-                    viewer_base_url,
+                viewer_base_url,
 
-                    firebase_sa_json,
+                firebase_sa_json,
 
-                    now,
+                now,
 
-                )
+            )
 
-                # After vault release, reset timer to default 30 days
-                # Custom timer only persists while user is actively checking in
-                client.table("profiles").update({
-                    "timer_days": 30,
-                    "warning_sent_at": None,
-                    "push_66_sent_at": None,
-                    "push_33_sent_at": None,
-                }).eq("id", user_id).execute()
+            # After vault release, reset timer to default 30 days
+            # Custom timer only persists while user is actively checking in
+            client.table("profiles").update({
+                "timer_days": 30,
+                "warning_sent_at": None,
+                "push_66_sent_at": None,
+                "push_33_sent_at": None,
+            }).eq("id", user_id).execute()
 
             if (profile.get("status") or "").lower() != "archived":
 
