@@ -1387,7 +1387,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
   Widget build(BuildContext context) {
 
-    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+    final bottomPadding = MediaQuery.viewInsetsOf(context).bottom;
 
     final isEditing = widget.entry != null;
 
