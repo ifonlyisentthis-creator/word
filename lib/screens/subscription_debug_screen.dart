@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 
 
+import '../services/home_controller.dart';
 import '../services/revenuecat_controller.dart';
 import '../services/theme_provider.dart';
 
@@ -139,6 +140,10 @@ class SubscriptionDebugScreen extends StatelessWidget {
                                   ? 'pro'
                                   : 'free';
                           context.read<ThemeProvider>().enforceSubscriptionLimits(newStatus);
+                          // Re-fetch profile so all screens see updated subscription
+                          try {
+                            context.read<HomeController>().refreshAfterPurchase();
+                          } catch (_) {}
                         }
 
                       },

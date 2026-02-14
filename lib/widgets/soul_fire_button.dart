@@ -319,11 +319,17 @@ class _OrbPainter extends CustomPainter {
             .createShader(Rect.fromCircle(center: center, radius: coreR)),
     );
 
+    // Light rays
+    _drawLightRays(canvas, center, r, bs, _lerpHold(cyan, _gold));
+
+    // Outer flames — always emitting energy
+    _drawOuterFlames(canvas, center, r, bs, _lerpHold(cyan, _gold), count: 12);
+
     // Particle ring orbiting around the sphere
     _drawParticleRing(canvas, center, r, bs, cyan, purple);
 
     // Orbiting wisps
-    _drawOrbitalWisps(canvas, center, r, bs, _lerpHold(cyan, _gold), 12);
+    _drawOrbitalWisps(canvas, center, r, bs, _lerpHold(cyan, _gold), 14);
 
     // Specular
     _drawSpecular(canvas, center, r);
@@ -427,8 +433,12 @@ class _OrbPainter extends CustomPainter {
         ).createShader(Rect.fromCircle(center: center, radius: r * bs)),
     );
 
+    // Outer flames — swirling energy
+    _drawOuterFlames(canvas, center, r, bs,
+        _lerpHold(purple, _amber), count: 10, intensity: 0.8);
+
     // Floating particles
-    _drawScatteredParticles(canvas, center, r, bs, _lerpHold(cyan, _gold), 16);
+    _drawScatteredParticles(canvas, center, r, bs, _lerpHold(cyan, _gold), 20);
   }
 
   // ═══════════════════════════════════════════════════════
@@ -514,8 +524,15 @@ class _OrbPainter extends CustomPainter {
             .createShader(Rect.fromCircle(center: center, radius: coreR)),
     );
 
+    // Light rays — intense
+    _drawLightRays(canvas, center, r, bs, _lerpHold(cyan, _gold), count: 20);
+
+    // Outer flames — electric energy bursts
+    _drawOuterFlames(canvas, center, r, bs,
+        _lerpHold(cyan, _gold), count: 18, intensity: 1.3);
+
     // Scattered particles
-    _drawScatteredParticles(canvas, center, r, bs, _lerpHold(iceWhite, _warmWhite), 24);
+    _drawScatteredParticles(canvas, center, r, bs, _lerpHold(iceWhite, _warmWhite), 30);
   }
 
   // ═══════════════════════════════════════════════════════
@@ -609,6 +626,10 @@ class _OrbPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
     }
+
+    // Outer flames — wispy blue energy
+    _drawOuterFlames(canvas, center, r, bs,
+        _lerpHold(blue, _amber), count: 12, intensity: 0.9);
 
     // Specular + rim
     _drawSpecular(canvas, center, r);
@@ -710,6 +731,10 @@ class _OrbPainter extends CustomPainter {
             .createShader(Rect.fromCircle(center: center, radius: coreR)),
     );
 
+    // Outer flames — intense green energy
+    _drawOuterFlames(canvas, center, r, bs,
+        _lerpHold(neonGreen, _gold), count: 16, intensity: 1.4);
+
     // Thick glowing rim
     canvas.drawCircle(
       center, r * bs,
@@ -726,6 +751,10 @@ class _OrbPainter extends CustomPainter {
           transform: GradientRotation(orbit * 2 * pi * 0.5),
         ).createShader(Rect.fromCircle(center: center, radius: r * bs)),
     );
+
+    // Scattered particles
+    _drawScatteredParticles(canvas, center, r, bs,
+        _lerpHold(neonGreen, _gold), 20);
   }
 
   // ═══════════════════════════════════════════════════════
@@ -835,10 +864,14 @@ class _OrbPainter extends CustomPainter {
       );
     }
 
+    // Outer flames — ethereal ascending wisps
+    _drawOuterFlames(canvas, center, r, bs,
+        _lerpHold(skyBlue, _gold), count: 12, intensity: 1.1);
+
     // Specular
     _drawSpecular(canvas, center, r);
 
-    // Subtle rim
+    // Rim
     _drawRimLight(canvas, center, r, bs, _lerpHold(skyBlue, _gold));
   }
 
@@ -846,19 +879,84 @@ class _OrbPainter extends CustomPainter {
   // SHARED HELPERS
   // ═══════════════════════════════════════════════════════
 
+  /// Outer ring flames — energy wisps that always radiate outward
+  /// from the orb edge, like the Pro 2/3 reference images.
+  void _drawOuterFlames(Canvas canvas, Offset center, double r, double bs,
+      Color color, {int count = 14, double intensity = 1.0}) {
+    final rng = Random(777);
+    for (int i = 0; i < count; i++) {
+      final baseAngle = (i / count) * 2 * pi;
+      final angle = baseAngle + orbit * 2 * pi * 0.2 + rng.nextDouble() * 0.3;
+      final flameLen = r * (0.20 + rng.nextDouble() * 0.35 + hold * 0.25 + breath * 0.08) * intensity;
+      final startDist = r * (0.88 + rng.nextDouble() * 0.10) * bs;
+      final startPt = center + Offset(cos(angle) * startDist, sin(angle) * startDist);
+      final endPt = startPt + Offset(cos(angle) * flameLen, sin(angle) * flameLen);
+      final width = 3.0 + rng.nextDouble() * 4.0 + hold * 3.0;
+      final alpha = (0.06 + rng.nextDouble() * 0.10 + hold * 0.12).clamp(0.0, 1.0) * intensity;
+
+      // Flame wisp as a tapered line with glow
+      final midPt = Offset.lerp(startPt, endPt, 0.5)!;
+      final glowR = width * 2.5;
+      canvas.drawCircle(midPt, glowR,
+          Paint()..color = color.withValues(alpha: alpha * 0.2));
+
+      final path = Path();
+      final perpX = -sin(angle) * width * 0.5;
+      final perpY = cos(angle) * width * 0.5;
+      path.moveTo(startPt.dx + perpX, startPt.dy + perpY);
+      path.lineTo(endPt.dx, endPt.dy);
+      path.lineTo(startPt.dx - perpX, startPt.dy - perpY);
+      path.close();
+
+      canvas.drawPath(path,
+          Paint()..color = color.withValues(alpha: alpha));
+    }
+  }
+
+  /// Radial light rays emanating from the orb
+  void _drawLightRays(Canvas canvas, Offset center, double r, double bs,
+      Color color, {int count = 16}) {
+    final rng = Random(77);
+    final rayLength = r * (0.4 + hold * 1.2) * bs;
+    final baseAlpha = 0.025 + hold * 0.10;
+
+    for (int i = 0; i < count; i++) {
+      final angle = (i / count) * 2 * pi + orbit * 2 * pi * 0.25;
+      final spread = 0.03 + rng.nextDouble() * 0.025;
+      final alpha = (baseAlpha + rng.nextDouble() * 0.015).clamp(0.0, 1.0);
+      final rayEnd = r * 0.85 + rayLength;
+
+      final path = Path();
+      path.moveTo(
+        center.dx + cos(angle - spread) * r * 0.75,
+        center.dy + sin(angle - spread) * r * 0.75,
+      );
+      path.lineTo(center.dx + cos(angle) * rayEnd,
+          center.dy + sin(angle) * rayEnd);
+      path.lineTo(
+        center.dx + cos(angle + spread) * r * 0.75,
+        center.dy + sin(angle + spread) * r * 0.75,
+      );
+      path.close();
+
+      canvas.drawPath(path,
+          Paint()..color = color.withValues(alpha: alpha));
+    }
+  }
+
   void _drawParticleRing(Canvas canvas, Offset center, double r, double bs,
       Color c1, Color c2) {
     final rng = Random(123);
-    final count = 24 + (hold * 12).toInt();
+    final count = 30 + (hold * 16).toInt();
     for (int i = 0; i < count; i++) {
       final angle = (i / count) * 2 * pi + orbit * 2 * pi * 0.6;
-      final dist = r * (0.75 + rng.nextDouble() * 0.35) * bs;
+      final dist = r * (0.70 + rng.nextDouble() * 0.45) * bs;
       final pt = center + Offset(cos(angle) * dist, sin(angle) * dist);
-      final pr = 0.8 + rng.nextDouble() * 1.8 + hold * 1.0;
-      final alpha = (0.12 + rng.nextDouble() * 0.30 + hold * 0.30).clamp(0.0, 1.0);
+      final pr = 0.8 + rng.nextDouble() * 2.0 + hold * 1.2;
+      final alpha = (0.15 + rng.nextDouble() * 0.35 + hold * 0.35).clamp(0.0, 1.0);
       final c = Color.lerp(c1, c2, rng.nextDouble())!;
-      canvas.drawCircle(pt, pr * 2.5,
-          Paint()..color = c.withValues(alpha: alpha * 0.15));
+      canvas.drawCircle(pt, pr * 3.0,
+          Paint()..color = c.withValues(alpha: alpha * 0.12));
       canvas.drawCircle(pt, pr, Paint()..color = c.withValues(alpha: alpha));
     }
   }
@@ -868,10 +966,10 @@ class _OrbPainter extends CustomPainter {
     final rng = Random(42);
     for (int i = 0; i < count; i++) {
       final angle = (i / count) * 2 * pi + orbit * 2 * pi + rng.nextDouble() * 0.4;
-      final dist = r * (0.45 + rng.nextDouble() * 0.40) * bs;
+      final dist = r * (0.40 + rng.nextDouble() * 0.45) * bs;
       final wc = center + Offset(cos(angle) * dist, sin(angle) * dist);
-      final wr = r * (0.05 + rng.nextDouble() * 0.08 + hold * 0.06);
-      final alpha = (0.12 + rng.nextDouble() * 0.18 + hold * 0.25).clamp(0.0, 1.0);
+      final wr = r * (0.06 + rng.nextDouble() * 0.10 + hold * 0.08);
+      final alpha = (0.15 + rng.nextDouble() * 0.22 + hold * 0.30).clamp(0.0, 1.0);
       canvas.drawCircle(
         wc, wr,
         Paint()
@@ -890,9 +988,9 @@ class _OrbPainter extends CustomPainter {
       final angle = rng.nextDouble() * 2 * pi + orbit * pi * 0.5;
       final dist = r * (0.3 + rng.nextDouble() * 0.9) * bs;
       final pt = center + Offset(cos(angle) * dist, sin(angle) * dist);
-      final pr = 0.6 + rng.nextDouble() * 1.5 + hold * 0.8;
-      final alpha = (0.10 + rng.nextDouble() * 0.25 + hold * 0.25).clamp(0.0, 1.0);
-      canvas.drawCircle(pt, pr * 2.5,
+      final pr = 0.6 + rng.nextDouble() * 1.8 + hold * 1.0;
+      final alpha = (0.12 + rng.nextDouble() * 0.30 + hold * 0.30).clamp(0.0, 1.0);
+      canvas.drawCircle(pt, pr * 3.0,
           Paint()..color = color.withValues(alpha: alpha * 0.12));
       canvas.drawCircle(pt, pr,
           Paint()..color = color.withValues(alpha: alpha));
@@ -902,31 +1000,48 @@ class _OrbPainter extends CustomPainter {
   void _drawSpecular(Canvas canvas, Offset center, double r) {
     final specOff = center + Offset(-r * 0.20, -r * 0.26);
     canvas.drawCircle(
-      specOff, r * 0.28,
+      specOff, r * 0.30,
       Paint()
         ..shader = RadialGradient(colors: [
-          Colors.white.withValues(alpha: 0.18 + hold * 0.08),
+          Colors.white.withValues(alpha: 0.22 + hold * 0.10),
           Colors.transparent,
-        ]).createShader(Rect.fromCircle(center: specOff, radius: r * 0.28)),
+        ]).createShader(Rect.fromCircle(center: specOff, radius: r * 0.30)),
     );
   }
 
   void _drawRimLight(
       Canvas canvas, Offset center, double r, double bs, Color color) {
+    // Primary rim
     canvas.drawCircle(
       center, r * bs,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2 + hold * 2.0
+        ..strokeWidth = 1.5 + hold * 2.5
         ..shader = SweepGradient(
           colors: [
             color.withValues(alpha: 0.0),
-            color.withValues(alpha: 0.15 + hold * 0.35),
-            color.withValues(alpha: 0.05),
+            color.withValues(alpha: 0.20 + hold * 0.40),
+            color.withValues(alpha: 0.06),
             color.withValues(alpha: 0.0),
           ],
           stops: const [0.0, 0.25, 0.65, 1.0],
           transform: GradientRotation(orbit * 2 * pi),
+        ).createShader(Rect.fromCircle(center: center, radius: r * bs)),
+    );
+    // Counter-rotating secondary rim
+    canvas.drawCircle(
+      center, r * bs * 0.97,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8 + hold * 1.2
+        ..shader = SweepGradient(
+          colors: [
+            color.withValues(alpha: 0.0),
+            color.withValues(alpha: 0.08 + hold * 0.15),
+            color.withValues(alpha: 0.0),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+          transform: GradientRotation(-orbit * 2 * pi * 0.7),
         ).createShader(Rect.fromCircle(center: center, radius: r * bs)),
     );
   }

@@ -178,6 +178,19 @@ class HomeController extends ChangeNotifier {
 
 
 
+  /// Re-fetch profile + sync theme after a purchase so Pro/Lifetime
+  /// features unlock instantly without restarting.
+  Future<void> refreshAfterPurchase() async {
+    if (_user == null) return;
+    try {
+      final profile = await _profileService.fetchProfile(_user!.id);
+      if (_isDisposed) return;
+      _profile = profile;
+      _themeProvider.syncFromProfile(profile);
+      notifyListeners();
+    } catch (_) {}
+  }
+
   Future<bool> deleteAccount() async {
 
     if (_user == null) return false;

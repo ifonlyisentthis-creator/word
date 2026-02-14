@@ -285,6 +285,7 @@ async function unlock() {
 
     resultEl.classList.remove("hidden");
     setStatus("Vault unlocked.", "success");
+    if (typeof window._orbPulseVerified === 'function') window._orbPulseVerified();
   } catch (error) {
     const msg = error.message || "";
     const friendly = {

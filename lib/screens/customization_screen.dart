@@ -7,191 +7,84 @@ import '../services/theme_provider.dart';
 import '../widgets/ambient_background.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class CustomizationScreen extends StatefulWidget {
+class CustomizationScreen extends StatelessWidget {
   const CustomizationScreen({super.key});
 
   @override
-  State<CustomizationScreen> createState() => _CustomizationScreenState();
-}
-
-class _CustomizationScreenState extends State<CustomizationScreen> {
-  bool _themesExpanded = true;
-  bool _soulFireExpanded = true;
-
-  @override
   Widget build(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
-    final theme = Theme.of(context);
-    final sub = themeProvider.subscriptionStatus;
-    final td = themeProvider.themeData;
-    final currentTheme = AppThemeData.fromId(themeProvider.themeId);
+    final tp = context.watch<ThemeProvider>();
+    final sub = tp.subscriptionStatus;
+    final td = tp.themeData;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Customization'),
-        backgroundColor: theme.appBarTheme.backgroundColor,
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
+        elevation: 0,
       ),
+      extendBodyBehindAppBar: true,
       body: Stack(
         children: [
           const RepaintBoundary(child: AmbientBackground()),
-          ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-            children: [
-              // ── Current Selection Summary ──
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      currentTheme.cardGradientStart,
-                      currentTheme.cardGradientEnd,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: currentTheme.primaryColor.withValues(alpha: 0.3),
-                  ),
+          SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+              physics: const ClampingScrollPhysics(),
+              children: [
+                // ── Section: Themes ──
+                _SectionLabel(
+                  label: 'THEMES',
+                  accent: td.primaryColor,
                 ),
-                child: Row(
-                  children: [
-                    // Theme preview
-                    _ColorDot(color: currentTheme.primaryColor, size: 28),
-                    const SizedBox(width: 8),
-                    _ColorDot(color: currentTheme.secondaryColor, size: 28),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            themeProvider.themeId.label,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            themeProvider.soulFireId.label,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: themeProvider.soulFireId.primaryColor
-                                  .withValues(alpha: 0.8),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Soul fire mini preview
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            themeProvider.soulFireId.primaryColor
-                                .withValues(alpha: 0.9),
-                            themeProvider.soulFireId.secondaryColor
-                                .withValues(alpha: 0.3),
-                            Colors.black,
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 12),
+                ...AppThemeId.values.map((id) => _ThemeCard(
+                      themeId: id,
+                      isSelected: tp.themeId == id,
+                      isUnlocked: id.isUnlocked(sub),
+                      onTap: () => _selectTheme(context, id),
+                    )),
+
+                const SizedBox(height: 28),
+
+                // ── Section: Soul Fire ──
+                _SectionLabel(
+                  label: 'SOUL FIRE',
+                  accent: tp.soulFireId.primaryColor,
                 ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // ── Themes Section ──
-              _DropdownHeader(
-                label: 'THEMES',
-                expanded: _themesExpanded,
-                onToggle: () =>
-                    setState(() => _themesExpanded = !_themesExpanded),
-                accentColor: td.primaryColor,
-              ),
-              AnimatedCrossFade(
-                firstChild: Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Column(
-                    children: AppThemeId.values
-                        .map((id) => _ThemeTile(
-                              themeId: id,
-                              isSelected: themeProvider.themeId == id,
-                              isUnlocked: id.isUnlocked(sub),
-                              onTap: () => _selectTheme(id),
-                            ))
-                        .toList(),
-                  ),
-                ),
-                secondChild: const SizedBox.shrink(),
-                crossFadeState: _themesExpanded
-                    ? CrossFadeState.showFirst
-                    : CrossFadeState.showSecond,
-                duration: const Duration(milliseconds: 250),
-              ),
-
-              const SizedBox(height: 20),
-
-              // ── Soul Fire Section ──
-              _DropdownHeader(
-                label: 'SOUL FIRE',
-                expanded: _soulFireExpanded,
-                onToggle: () =>
-                    setState(() => _soulFireExpanded = !_soulFireExpanded),
-                accentColor: themeProvider.soulFireId.primaryColor,
-              ),
-              AnimatedCrossFade(
-                firstChild: Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Column(
-                    children: SoulFireStyleId.values
-                        .map((id) => _SoulFireTile(
-                              styleId: id,
-                              isSelected: themeProvider.soulFireId == id,
-                              isUnlocked: id.isUnlocked(sub),
-                              onTap: () => _selectSoulFire(id),
-                            ))
-                        .toList(),
-                  ),
-                ),
-                secondChild: const SizedBox.shrink(),
-                crossFadeState: _soulFireExpanded
-                    ? CrossFadeState.showFirst
-                    : CrossFadeState.showSecond,
-                duration: const Duration(milliseconds: 250),
-              ),
-            ],
+                const SizedBox(height: 12),
+                ...SoulFireStyleId.values.map((id) => _SoulFireCard(
+                      styleId: id,
+                      isSelected: tp.soulFireId == id,
+                      isUnlocked: id.isUnlocked(sub),
+                      onTap: () => _selectSoulFire(context, id),
+                    )),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _selectTheme(AppThemeId id) async {
+  void _selectTheme(BuildContext context, AppThemeId id) async {
     final tp = context.read<ThemeProvider>();
     if (!tp.selectTheme(id)) return;
-    await _persistPreferences(selectedTheme: id.key);
+    await _persist(context, selectedTheme: id.key);
   }
 
-  Future<void> _selectSoulFire(SoulFireStyleId id) async {
+  void _selectSoulFire(BuildContext context, SoulFireStyleId id) async {
     final tp = context.read<ThemeProvider>();
     if (!tp.selectSoulFire(id)) return;
-    await _persistPreferences(selectedSoulFire: id.key);
+    await _persist(context, selectedSoulFire: id.key);
   }
 
-  Future<void> _persistPreferences({
-    String? selectedTheme,
-    String? selectedSoulFire,
-  }) async {
+  Future<void> _persist(BuildContext context,
+      {String? selectedTheme, String? selectedSoulFire}) async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
-    final profileService = ProfileService(Supabase.instance.client);
     try {
-      await profileService.updatePreferences(
+      await ProfileService(Supabase.instance.client).updatePreferences(
         userId,
         selectedTheme: selectedTheme,
         selectedSoulFire: selectedSoulFire,
@@ -202,57 +95,42 @@ class _CustomizationScreenState extends State<CustomizationScreen> {
   }
 }
 
-class _DropdownHeader extends StatelessWidget {
-  const _DropdownHeader({
-    required this.label,
-    required this.expanded,
-    required this.onToggle,
-    required this.accentColor,
-  });
+// ─── Section label ───
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.label, required this.accent});
   final String label;
-  final bool expanded;
-  final VoidCallback onToggle;
-  final Color accentColor;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onToggle,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        children: [
-          Container(
-            width: 3,
-            height: 16,
-            decoration: BoxDecoration(
-              color: accentColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 18,
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(2),
           ),
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.5,
-            ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white60,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2,
           ),
-          const Spacer(),
-          AnimatedRotation(
-            turns: expanded ? 0.5 : 0.0,
-            duration: const Duration(milliseconds: 200),
-            child: Icon(Icons.expand_more, size: 20, color: Colors.white38),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _ThemeTile extends StatelessWidget {
-  const _ThemeTile({
+// ─── Theme selection card ───
+class _ThemeCard extends StatelessWidget {
+  const _ThemeCard({
     required this.themeId,
     required this.isSelected,
     required this.isUnlocked,
@@ -267,76 +145,154 @@ class _ThemeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = AppThemeData.fromId(themeId);
-    final tierLabel = themeId.requiredTier == 'free'
-        ? null
-        : themeId.requiredTier.toUpperCase();
+    final tier = themeId.requiredTier;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: isUnlocked ? onTap : null,
-          borderRadius: BorderRadius.circular(14),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [data.cardGradientStart, data.cardGradientEnd],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: isSelected
-                    ? data.primaryColor.withValues(alpha: 0.6)
-                    : Colors.white10,
-                width: isSelected ? 1.5 : 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                _ColorDot(color: data.primaryColor),
-                const SizedBox(width: 5),
-                _ColorDot(color: data.secondaryColor),
-                const SizedBox(width: 5),
-                _ColorDot(color: data.scaffoldColor),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        themeId.label,
-                        style: TextStyle(
-                          color:
-                              isUnlocked ? data.textPrimary : Colors.white38,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                      if (tierLabel != null)
-                        Text(
-                          tierLabel,
-                          style: TextStyle(
-                            color: isUnlocked
-                                ? data.primaryColor.withValues(alpha: 0.7)
-                                : Colors.white24,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                if (!isUnlocked)
-                  const Icon(Icons.lock_outline,
-                      size: 18, color: Colors.white24)
-                else if (isSelected)
-                  Icon(Icons.check_circle,
-                      size: 20, color: data.primaryColor),
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GestureDetector(
+        onTap: isUnlocked ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                data.cardGradientStart,
+                data.cardGradientEnd,
               ],
             ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected
+                  ? data.primaryColor.withValues(alpha: 0.7)
+                  : Colors.white.withValues(alpha: 0.06),
+              width: isSelected ? 1.5 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: data.primaryColor.withValues(alpha: 0.15),
+                      blurRadius: 20,
+                      spreadRadius: -2,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            children: [
+              // Color swatch strip
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      data.primaryColor,
+                      data.secondaryColor,
+                    ],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
+                ),
+                child: Center(
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: data.scaffoldColor,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      themeId.label,
+                      style: TextStyle(
+                        color: isUnlocked ? data.textPrimary : Colors.white38,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        if (tier != 'free')
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: data.primaryColor
+                                  .withValues(alpha: isUnlocked ? 0.15 : 0.06),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              tier.toUpperCase(),
+                              style: TextStyle(
+                                color: isUnlocked
+                                    ? data.primaryColor
+                                    : Colors.white24,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
+                        if (tier == 'free')
+                          Text(
+                            'INCLUDED',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (!isUnlocked)
+                Icon(Icons.lock_outline, size: 18, color: Colors.white24)
+              else if (isSelected)
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: data.primaryColor.withValues(alpha: 0.2),
+                    border: Border.all(color: data.primaryColor, width: 1.5),
+                  ),
+                  child: Icon(Icons.check, size: 14, color: data.primaryColor),
+                )
+              else
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -344,8 +300,9 @@ class _ThemeTile extends StatelessWidget {
   }
 }
 
-class _SoulFireTile extends StatelessWidget {
-  const _SoulFireTile({
+// ─── Soul Fire selection card ───
+class _SoulFireCard extends StatelessWidget {
+  const _SoulFireCard({
     required this.styleId,
     required this.isSelected,
     required this.isUnlocked,
@@ -359,111 +316,159 @@ class _SoulFireTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tierLabel = styleId.requiredTier == 'free'
-        ? null
-        : styleId.requiredTier.toUpperCase();
+    final tier = styleId.requiredTier;
+    final pc = styleId.primaryColor;
+    final sc = styleId.secondaryColor;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: isUnlocked ? onTap : null,
-          borderRadius: BorderRadius.circular(14),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF111111),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: isSelected
-                    ? styleId.primaryColor.withValues(alpha: 0.6)
-                    : Colors.white10,
-                width: isSelected ? 1.5 : 1,
-              ),
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GestureDetector(
+        onTap: isUnlocked ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0A0A0A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected
+                  ? pc.withValues(alpha: 0.65)
+                  : Colors.white.withValues(alpha: 0.06),
+              width: isSelected ? 1.5 : 1,
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        styleId.primaryColor
-                            .withValues(alpha: isUnlocked ? 0.85 : 0.3),
-                        styleId.secondaryColor
-                            .withValues(alpha: isUnlocked ? 0.3 : 0.1),
-                        Colors.black,
-                      ],
-                      stops: const [0.0, 0.5, 1.0],
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: pc.withValues(alpha: 0.12),
+                      blurRadius: 20,
+                      spreadRadius: -2,
                     ),
-                    border: Border.all(
-                      color: styleId.primaryColor
-                          .withValues(alpha: isUnlocked ? 0.35 : 0.12),
-                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            children: [
+              // Orb preview
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      (isUnlocked ? pc : pc.withValues(alpha: 0.3)),
+                      (isUnlocked ? sc : sc.withValues(alpha: 0.1))
+                          .withValues(alpha: 0.4),
+                      Colors.black,
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
                   ),
+                  border: Border.all(
+                    color: pc.withValues(alpha: isUnlocked ? 0.3 : 0.10),
+                  ),
+                  boxShadow: isUnlocked
+                      ? [
+                          BoxShadow(
+                            color: pc.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            spreadRadius: -2,
+                          ),
+                        ]
+                      : null,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        styleId.label,
-                        style: TextStyle(
-                          color: isUnlocked ? Colors.white : Colors.white38,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                child: isUnlocked
+                    ? Center(
+                        child: Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            boxShadow: [
+                              BoxShadow(
+                                color: pc.withValues(alpha: 0.5),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
                         ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      styleId.label,
+                      style: TextStyle(
+                        color: isUnlocked ? Colors.white : Colors.white38,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
                       ),
-                      if (tierLabel != null)
-                        Text(
-                          tierLabel,
+                    ),
+                    const SizedBox(height: 3),
+                    if (tier != 'free')
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color:
+                              pc.withValues(alpha: isUnlocked ? 0.15 : 0.06),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          tier.toUpperCase(),
                           style: TextStyle(
-                            color: isUnlocked
-                                ? styleId.primaryColor
-                                    .withValues(alpha: 0.7)
-                                : Colors.white24,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                            color: isUnlocked ? pc : Colors.white24,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
                             letterSpacing: 1,
                           ),
                         ),
-                    ],
+                      )
+                    else
+                      Text(
+                        'INCLUDED',
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (!isUnlocked)
+                Icon(Icons.lock_outline, size: 18, color: Colors.white24)
+              else if (isSelected)
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: pc.withValues(alpha: 0.2),
+                    border: Border.all(color: pc, width: 1.5),
+                  ),
+                  child: Icon(Icons.check, size: 14, color: pc),
+                )
+              else
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
                   ),
                 ),
-                if (!isUnlocked)
-                  const Icon(Icons.lock_outline,
-                      size: 18, color: Colors.white24)
-                else if (isSelected)
-                  Icon(Icons.check_circle,
-                      size: 20, color: styleId.primaryColor),
-              ],
-            ),
+            ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ColorDot extends StatelessWidget {
-  const _ColorDot({required this.color, this.size = 20});
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
-        border: Border.all(color: Colors.white12),
       ),
     );
   }

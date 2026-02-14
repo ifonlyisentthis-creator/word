@@ -1,12 +1,37 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_theme.dart';
 import '../services/theme_provider.dart';
 
-class AmbientBackground extends StatelessWidget {
+class AmbientBackground extends StatefulWidget {
 
   const AmbientBackground({super.key});
+
+  @override
+  State<AmbientBackground> createState() => _AmbientBackgroundState();
+}
+
+class _AmbientBackgroundState extends State<AmbientBackground>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +39,6 @@ class AmbientBackground extends StatelessWidget {
     final td = tp.themeData;
     final id = tp.themeId;
 
-    // Each theme has unique ambient glow orbs
     final orbs = _orbsForTheme(id, td);
 
     return IgnorePointer(
@@ -29,13 +53,29 @@ class AmbientBackground extends StatelessWidget {
                 color: o.color,
                 opacity: o.opacity,
               ),
+            // Animated floating particles for depth
+            AnimatedBuilder(
+              animation: _ctrl,
+              builder: (context, _) {
+                return CustomPaint(
+                  size: Size.infinite,
+                  painter: _AmbientParticlePainter(
+                    progress: _ctrl.value,
+                    color1: td.primaryColor,
+                    color2: td.accentGlow,
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
     );
   }
 
-  static List<_OrbData> _orbsForTheme(AppThemeId id, AppThemeData td) {
+}
+
+List<_OrbData> _orbsForTheme(AppThemeId id, AppThemeData td) {
     switch (id) {
       case AppThemeId.oledVoid:
         return [
@@ -75,7 +115,6 @@ class AmbientBackground extends StatelessWidget {
           _OrbData(const Alignment(0.0, 0.9), 460, const Color(0xFF2A1440), 0.22),
         ];
     }
-  }
 }
 
 class _OrbData {
@@ -142,5 +181,57 @@ class _GlowOrb extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AmbientParticlePainter extends CustomPainter {
+  _AmbientParticlePainter({
+    required this.progress,
+    required this.color1,
+    required this.color2,
+  });
+
+  final double progress;
+  final Color color1;
+  final Color color2;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rng = Random(42);
+    const count = 18;
+    for (int i = 0; i < count; i++) {
+      final seed = rng.nextDouble();
+      final speed = 0.3 + seed * 0.7;
+      final phase = (progress * speed + seed) % 1.0;
+
+      final x = rng.nextDouble() * size.width;
+      final yStart = size.height + 10;
+      final yEnd = -20.0;
+      final y = yStart + (yEnd - yStart) * phase;
+
+      final fadeIn = (phase * 4).clamp(0.0, 1.0);
+      final fadeOut = ((1 - phase) * 3).clamp(0.0, 1.0);
+      final alpha = (fadeIn * fadeOut * (0.06 + seed * 0.08)).clamp(0.0, 1.0);
+
+      final r = 1.0 + seed * 2.5;
+      final c = Color.lerp(color1, color2, seed)!;
+
+      canvas.drawCircle(
+        Offset(x, y),
+        r * 3,
+        Paint()..color = c.withValues(alpha: alpha * 0.3),
+      );
+      canvas.drawCircle(
+        Offset(x, y),
+        r,
+        Paint()..color = c.withValues(alpha: alpha),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AmbientParticlePainter old) =>
+      old.progress != progress ||
+      old.color1 != color1 ||
+      old.color2 != color2;
 }
 
