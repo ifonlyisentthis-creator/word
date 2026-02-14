@@ -123,15 +123,15 @@ extension SoulFireStyleIdX on SoulFireStyleId {
   Color get primaryColor {
     switch (this) {
       case SoulFireStyleId.etherealOrb:
-        return const Color(0xFF00E5FF); // Cyan
+        return const Color(0xFF7B2FBE); // Violet
       case SoulFireStyleId.voidPortal:
         return const Color(0xFF7B68EE); // Purple-blue
       case SoulFireStyleId.plasmaBurst:
         return const Color(0xFF00BFFF); // Deep sky blue
       case SoulFireStyleId.plasmaCell:
-        return const Color(0xFF1E90FF); // Dodger blue
+        return const Color(0xFFFF6B9D); // Rose pink
       case SoulFireStyleId.toxicCore:
-        return const Color(0xFF39FF14); // Neon green
+        return const Color(0xFFFF6600); // Molten orange
       case SoulFireStyleId.crystalAscend:
         return const Color(0xFF87CEEB); // Light sky blue
     }
@@ -141,15 +141,15 @@ extension SoulFireStyleIdX on SoulFireStyleId {
   Color get secondaryColor {
     switch (this) {
       case SoulFireStyleId.etherealOrb:
-        return const Color(0xFFAA00FF); // Purple
+        return const Color(0xFFFF44CC); // Magenta
       case SoulFireStyleId.voidPortal:
         return const Color(0xFF00E5FF); // Cyan
       case SoulFireStyleId.plasmaBurst:
         return const Color(0xFFCDFCFF); // Ice white
       case SoulFireStyleId.plasmaCell:
-        return const Color(0xFF0077BE); // Ocean blue
+        return const Color(0xFFFFAA85); // Peach
       case SoulFireStyleId.toxicCore:
-        return const Color(0xFF00FF7F); // Spring green
+        return const Color(0xFFFF2200); // Lava red
       case SoulFireStyleId.crystalAscend:
         return const Color(0xFFE0F0FF); // Ice white-blue
     }
