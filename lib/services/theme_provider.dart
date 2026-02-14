@@ -17,7 +17,12 @@ class ThemeProvider extends ChangeNotifier {
   ThemeData get flutterTheme => themeData.toFlutterTheme();
 
   /// Sync state from a fetched Profile.
+  /// Only notifies listeners if something actually changed.
   void syncFromProfile(Profile profile) {
+    final oldSub = _subscriptionStatus;
+    final oldTheme = _themeId;
+    final oldSf = _soulFireId;
+
     _subscriptionStatus = profile.subscriptionStatus;
 
     // Parse theme from profile, fallback to default if invalid or locked
@@ -51,7 +56,11 @@ class ThemeProvider extends ChangeNotifier {
       }
     }
 
-    notifyListeners();
+    if (_subscriptionStatus != oldSub ||
+        _themeId != oldTheme ||
+        _soulFireId != oldSf) {
+      notifyListeners();
+    }
   }
 
   /// Called when user selects a new theme. Returns true if changed.

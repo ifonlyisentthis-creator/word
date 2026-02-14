@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_theme.dart';
-import '../services/home_controller.dart';
 import '../services/profile_service.dart';
 import '../services/revenuecat_controller.dart';
 import '../services/theme_provider.dart';
@@ -78,13 +77,11 @@ class CustomizationScreen extends StatelessWidget {
     final profileService =
         ProfileService(Supabase.instance.client);
     try {
-      final updated = await profileService.updatePreferences(
+      await profileService.updatePreferences(
         userId,
         selectedTheme: selectedTheme,
         selectedSoulFire: selectedSoulFire,
       );
-      if (!context.mounted) return;
-      context.read<HomeController>().updateProfileFromPreferences(updated);
     } catch (e) {
       debugPrint('Failed to save preferences: $e');
     }

@@ -382,10 +382,12 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
     final profile = controller.profile;
 
-    // Sync theme provider from profile whenever profile updates
+    // Sync theme provider from profile (deferred to avoid build-during-build)
     if (profile != null) {
       final tp = context.read<ThemeProvider>();
-      tp.syncFromProfile(profile);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        tp.syncFromProfile(profile);
+      });
     }
 
     final protocolExecutedAt = controller.protocolExecutedAt;
