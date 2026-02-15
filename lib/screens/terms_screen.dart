@@ -17,7 +17,6 @@ class TermsScreen extends StatelessWidget {
     );
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           const RepaintBoundary(child: AmbientBackground()),

@@ -60,7 +60,6 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     final errorColor = theme.colorScheme.error;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           const RepaintBoundary(child: AmbientBackground()),

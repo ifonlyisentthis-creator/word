@@ -398,7 +398,6 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
 
       key: _scaffoldKey,
 

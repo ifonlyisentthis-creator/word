@@ -20,7 +20,6 @@ class MyVaultPage extends StatelessWidget {
     final isPro = revenueCat.isPro || isLifetime;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('My Vault'),
         backgroundColor: const Color(0xFF0E0E0E),

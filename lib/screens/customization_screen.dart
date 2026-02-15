@@ -17,7 +17,6 @@ class CustomizationScreen extends StatelessWidget {
     final td = tp.themeData;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('Customization'),
         backgroundColor: Colors.transparent,

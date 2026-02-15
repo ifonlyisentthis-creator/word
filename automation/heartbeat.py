@@ -851,18 +851,24 @@ def cleanup_sent_entries(client) -> None:
 
     # Now delete the entries (storage files + DB rows)
     for entry in sent_entries:
-        delete_entry(client, entry)
+        try:
+            delete_entry(client, entry)
+        except Exception:  # noqa: BLE001
+            print(f"Failed to delete sent entry {entry.get('id', '?')}")
 
     # Archive users with zero remaining entries
     for uid in user_ids:
-        remaining = (
-            client.table("vault_entries")
-            .select("id", count="exact")
-            .eq("user_id", uid)
-            .execute()
-        )
-        if (remaining.count or 0) == 0:
-            mark_profile_status(client, uid, "archived")
+        try:
+            remaining = (
+                client.table("vault_entries")
+                .select("id", count="exact")
+                .eq("user_id", uid)
+                .execute()
+            )
+            if (remaining.count or 0) == 0:
+                mark_profile_status(client, uid, "archived")
+        except Exception:  # noqa: BLE001
+            print(f"Failed to check/archive user {uid}")
 
 
 def cleanup_bot_accounts(client, now: datetime) -> None:
@@ -1341,10 +1347,15 @@ def main() -> int:
       except Exception as exc:  # noqa: BLE001
           print(f"Processing failed for user {profile.get('id', '?')}: {exc}")
 
-    cleanup_sent_entries(client)
+    try:
+        cleanup_sent_entries(client)
+    except Exception as exc:  # noqa: BLE001
+        print(f"cleanup_sent_entries failed: {exc}")
 
-    # Delete accounts with zero activity after 90 days (bot prevention)
-    cleanup_bot_accounts(client, now)
+    try:
+        cleanup_bot_accounts(client, now)
+    except Exception as exc:  # noqa: BLE001
+        print(f"cleanup_bot_accounts failed: {exc}")
 
     return 0
 
