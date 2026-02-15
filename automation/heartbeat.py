@@ -576,33 +576,53 @@ def send_unlock_email(
 
     text = (
 
-        f"{sender_name} left you a secure message in Afterword.\n\n"
+        f"{sender_name} left you a secure message using Afterword — "
 
-        f"Title: {entry_title}\n"
+        "a time-locked digital vault.\n\n"
 
-        f"Security Key: {security_key}\n"
+        f"Title: {entry_title}\n\n"
 
         f"Open: {viewer_link}\n\n"
 
-        "The key decrypts the message in your browser.\n\n"
+        f"Security Key: {security_key}\n\n"
 
-        "Important: This secure transmission expires 30 days after delivery."
+        "Paste the security key into the viewer to decrypt the message in "
+
+        "your browser. The key is never sent to our servers.\n\n"
+
+        "Do not share this key — anyone with it can read the message.\n\n"
+
+        "This transmission expires 30 days after delivery.\n\n"
+
+        "If you do not recognize the sender, you may safely ignore this email."
 
     )
 
     html = (
 
-        f"<p><strong>{sender_name}</strong> left you a secure message in Afterword.</p>"
+        f"<p><strong>{sender_name}</strong> left you a secure message using "
+
+        "Afterword — a time-locked digital vault.</p>"
 
         f"<p><strong>Title:</strong> {entry_title}</p>"
 
-        f"<p><strong>Security Key:</strong> {security_key}</p>"
+        f"<p><a href=\"{viewer_link}\" style=\"font-size:16px\">Open the secure message</a></p>"
 
-        f"<p><a href=\"{viewer_link}\">Open the secure message</a></p>"
+        f"<p><strong>Security Key:</strong><br>"
 
-        "<p>The key decrypts the message in your browser.</p>"
+        f"<code style=\"background:#f4f4f4;padding:6px 10px;border-radius:4px;font-size:13px;word-break:break-all\">{security_key}</code></p>"
 
-        "<p><strong>Important:</strong> This secure transmission expires 30 days after delivery.</p>"
+        "<p>Paste the security key into the viewer to decrypt the message "
+
+        "in your browser. The key is never sent to our servers.</p>"
+
+        "<p><em>Do not share this key — anyone with it can read the message.</em></p>"
+
+        "<hr>"
+
+        "<p style=\"color:#888;font-size:12px\">This transmission expires 30 days after delivery. "
+
+        "If you do not recognize the sender, you may safely ignore this email.</p>"
 
     )
 
@@ -720,81 +740,83 @@ def process_expired_entries(
 
     for entry in entries:
 
-        action = (entry.get("action_type") or "send").lower()
-
-        if action == "destroy":
-
-            delete_entry(client, entry)
-
-            continue
-
-
-
-        if not claim_entry_for_sending(client, entry["id"]):
-
-            continue
-
-
-
-        if hmac_key_bytes is None:
-
-            delete_entry(client, entry)
-
-            continue
-
-
-
-        recipient_encrypted = entry.get("recipient_email_encrypted") or ""
-
-        signature_message = f"{entry.get('payload_encrypted')}|{recipient_encrypted}"
-
-        expected_signature = compute_hmac_signature(signature_message, hmac_key_bytes)
-
-        if expected_signature != entry.get("hmac_signature"):
-
-            delete_entry(client, entry)
-
-            continue
-
-
-
-        if not recipient_encrypted:
-
-            delete_entry(client, entry)
-
-            continue
-
-
-
-        recipient_ciphertext = extract_server_ciphertext(recipient_encrypted)
-
-        recipient_email = decrypt_with_server_secret(
-
-            recipient_ciphertext, server_secret
-
-        ).decode("utf-8")
-
-        data_key_encrypted = entry.get("data_key_encrypted")
-
-        if not data_key_encrypted:
-
-            delete_entry(client, entry)
-
-            continue
-
-
-
-        data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
-
-        data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
-
-        security_key = base64.b64encode(data_key_bytes).decode("utf-8")
-
-        viewer_link = build_viewer_link(viewer_base_url, entry["id"])
-
-        entry_title = entry.get("title") or "Untitled"
+        entry_id = entry.get("id", "unknown")
 
         try:
+
+            action = (entry.get("action_type") or "send").lower()
+
+            if action == "destroy":
+
+                delete_entry(client, entry)
+
+                continue
+
+
+
+            if not claim_entry_for_sending(client, entry_id):
+
+                continue
+
+
+
+            if hmac_key_bytes is None:
+
+                delete_entry(client, entry)
+
+                continue
+
+
+
+            recipient_encrypted = entry.get("recipient_email_encrypted") or ""
+
+            signature_message = f"{entry.get('payload_encrypted')}|{recipient_encrypted}"
+
+            expected_signature = compute_hmac_signature(signature_message, hmac_key_bytes)
+
+            if expected_signature != entry.get("hmac_signature"):
+
+                delete_entry(client, entry)
+
+                continue
+
+
+
+            if not recipient_encrypted:
+
+                delete_entry(client, entry)
+
+                continue
+
+
+
+            recipient_ciphertext = extract_server_ciphertext(recipient_encrypted)
+
+            recipient_email = decrypt_with_server_secret(
+
+                recipient_ciphertext, server_secret
+
+            ).decode("utf-8")
+
+            data_key_encrypted = entry.get("data_key_encrypted")
+
+            if not data_key_encrypted:
+
+                delete_entry(client, entry)
+
+                continue
+
+
+
+            data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
+
+            data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
+
+            security_key = base64.b64encode(data_key_bytes).decode("utf-8")
+
+            viewer_link = build_viewer_link(viewer_base_url, entry_id)
+
+            entry_title = entry.get("title") or "Untitled"
 
             send_unlock_email(
 
@@ -820,7 +842,7 @@ def process_expired_entries(
 
                 {"status": "sent", "sent_at": now.isoformat()}
 
-            ).eq("id", entry["id"]).execute()
+            ).eq("id", entry_id).execute()
 
 
 
@@ -832,7 +854,7 @@ def process_expired_entries(
 
                     profile["id"],
 
-                    entry["id"],
+                    entry_id,
 
                     entry_title,
 
@@ -842,13 +864,17 @@ def process_expired_entries(
 
             except Exception as exc:  # noqa: BLE001
 
-                print(f"Push executed failed for entry {entry['id']}: {exc}")
+                print(f"Push executed failed for entry {entry_id}: {exc}")
 
         except Exception as exc:  # noqa: BLE001
 
-            release_entry_lock(client, entry["id"])
+            # Release the sending lock so the entry can be retried next cycle
+            try:
+                release_entry_lock(client, entry_id)
+            except Exception:  # noqa: BLE001
+                pass
 
-            print(f"Failed to send entry {entry['id']}: {exc}")
+            print(f"Failed to process entry {entry_id}: {exc}")
 
 
 
@@ -857,29 +883,68 @@ def process_expired_entries(
 def cleanup_sent_entries(client) -> None:
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
 
     sent_entries = (
         client.table("vault_entries")
-        .select("id,user_id,audio_file_path")
+        .select("id,user_id,audio_file_path,sent_at")
         .eq("status", "sent")
-        .lt("updated_at", cutoff)
+        .lt("sent_at", cutoff)
         .execute()
     ).data or []
 
+    if not sent_entries:
+        return
+
+    # Collect user_ids so we can fetch sender_names for tombstones
+    user_ids = {e["user_id"] for e in sent_entries}
+
+    # Fetch sender_names for tombstone records
+    sender_names: dict[str, str] = {}
+    for uid in user_ids:
+        try:
+            profile_row = (
+                client.table("profiles")
+                .select("sender_name")
+                .eq("id", uid)
+                .maybeSingle()
+                .execute()
+            )
+            if profile_row.data:
+                sender_names[uid] = profile_row.data.get("sender_name") or "Afterword"
+            else:
+                sender_names[uid] = "Afterword"
+        except Exception:  # noqa: BLE001
+            sender_names[uid] = "Afterword"
+
+    # Create tombstones BEFORE deleting (preserves History tab data)
+    for entry in sent_entries:
+        try:
+            client.table("vault_entry_tombstones").insert({
+                "vault_entry_id": entry["id"],
+                "user_id": entry["user_id"],
+                "sender_name": sender_names.get(entry["user_id"], "Afterword"),
+                "sent_at": entry.get("sent_at"),
+                "expired_at": now_iso,
+            }).execute()
+        except Exception:  # noqa: BLE001
+            # Tombstone insert may fail on duplicate PK if already exists — safe to skip
+            pass
+
+    # Now delete the entries (storage files + DB rows)
     for entry in sent_entries:
         delete_entry(client, entry)
 
-    if sent_entries:
-        user_ids = {e["user_id"] for e in sent_entries}
-        for uid in user_ids:
-            remaining = (
-                client.table("vault_entries")
-                .select("id", count="exact")
-                .eq("user_id", uid)
-                .execute()
-            )
-            if (remaining.count or 0) == 0:
-                mark_profile_status(client, uid, "archived")
+    # Archive users with zero remaining entries
+    for uid in user_ids:
+        remaining = (
+            client.table("vault_entries")
+            .select("id", count="exact")
+            .eq("user_id", uid)
+            .execute()
+        )
+        if (remaining.count or 0) == 0:
+            mark_profile_status(client, uid, "archived")
 
 
 def cleanup_bot_accounts(client, now: datetime) -> None:
@@ -953,7 +1018,7 @@ def handle_subscription_downgrade(
     resend_key: str,
     from_email: str,
     now: datetime,
-) -> None:
+) -> bool:
     """Handle a user whose subscription was downgraded (refund or non-renewal).
 
     Called when RevenueCat has already set subscription_status to 'free' but the
@@ -1000,7 +1065,7 @@ def handle_subscription_downgrade(
     needs_revert = has_custom_timer or has_custom_theme or has_custom_soul_fire or has_audio
 
     if not needs_revert:
-        return
+        return False
 
     was_lifetime = (
         has_audio
@@ -1079,6 +1144,7 @@ def handle_subscription_downgrade(
         except Exception as exc:  # noqa: BLE001
             print(f"Failed to send downgrade email to {uid}: {exc}")
 
+    return True
 
 
 def main() -> int:
@@ -1189,9 +1255,14 @@ def main() -> int:
         # ── PASS 0: Subscription downgrade → revert to free tier ──
         if sub_status == "free":
             try:
-                handle_subscription_downgrade(
+                reverted = handle_subscription_downgrade(
                     client, profile, resend_key, from_email, now,
                 )
+                if reverted:
+                    # Profile was modified in DB (timer reset, theme cleared).
+                    # In-memory profile dict is now stale — skip remaining passes.
+                    # Next heartbeat cycle will use the fresh values.
+                    continue
             except Exception as exc:  # noqa: BLE001
                 print(f"Subscription downgrade handling failed for {user_id}: {exc}")
 

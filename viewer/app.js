@@ -301,6 +301,8 @@ async function unlock() {
       invalid_key_format: "The security key format is invalid. Please copy the full key from your email.",
       audio_missing: "The audio file for this entry could not be found.",
       decrypt_failed: "Unable to decrypt this message. Please make sure you entered the correct Security Key from your email.",
+      not_found: "No entry found with this ID. Please check the Entry ID from your email.",
+      unavailable: "This entry is not yet available for viewing. It may still be processing.",
     };
     setStatus(friendly[msg] || "Something went wrong. Please check your Entry ID and Security Key and try again.", "error");
   } finally {
