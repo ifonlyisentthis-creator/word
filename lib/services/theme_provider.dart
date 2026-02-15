@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/app_theme.dart';
 import '../models/profile.dart';
 
 /// Manages the selected theme and soul fire style.
-/// Reads from Profile on init, persists changes via ProfileService RPC.
+/// Caches preferences locally so the correct theme is applied before
+/// the network profile fetch completes (prevents theme flicker).
 class ThemeProvider extends ChangeNotifier {
+  static const _storage = FlutterSecureStorage();
+  static const _keyTheme = 'cached_theme';
+  static const _keySoulFire = 'cached_soul_fire';
+  static const _keySub = 'cached_sub_status';
+
   AppThemeId _themeId = AppThemeId.oledVoid;
   SoulFireStyleId _soulFireId = SoulFireStyleId.etherealOrb;
   String _subscriptionStatus = 'free';
@@ -15,6 +22,43 @@ class ThemeProvider extends ChangeNotifier {
 
   AppThemeData get themeData => AppThemeData.fromId(_themeId);
   ThemeData get flutterTheme => themeData.toFlutterTheme();
+
+  /// Load cached preferences from local storage (call during splash).
+  /// This is synchronous-safe: if cache is empty, defaults are kept.
+  Future<void> loadCached() async {
+    try {
+      final cachedTheme = await _storage.read(key: _keyTheme);
+      final cachedSf = await _storage.read(key: _keySoulFire);
+      final cachedSub = await _storage.read(key: _keySub) ?? 'free';
+      _subscriptionStatus = cachedSub;
+      if (cachedTheme != null) {
+        try {
+          final parsed = AppThemeId.values.firstWhere((e) => e.key == cachedTheme);
+          if (parsed.isUnlocked(cachedSub)) _themeId = parsed;
+        } catch (_) {}
+      }
+      if (cachedSf != null) {
+        try {
+          final parsed = SoulFireStyleId.values.firstWhere((e) => e.key == cachedSf);
+          if (parsed.isUnlocked(cachedSub)) _soulFireId = parsed;
+        } catch (_) {}
+      }
+      notifyListeners();
+    } catch (_) {
+      // Cache read failed — keep defaults, no flicker is worse than wrong theme
+    }
+  }
+
+  /// Persist current selections to local cache.
+  Future<void> _saveToCache() async {
+    try {
+      await Future.wait([
+        _storage.write(key: _keyTheme, value: _themeId.key),
+        _storage.write(key: _keySoulFire, value: _soulFireId.key),
+        _storage.write(key: _keySub, value: _subscriptionStatus),
+      ]);
+    } catch (_) {}
+  }
 
   /// Sync state from a fetched Profile.
   /// Only notifies listeners if something actually changed.
@@ -60,6 +104,7 @@ class ThemeProvider extends ChangeNotifier {
         _themeId != oldTheme ||
         _soulFireId != oldSf) {
       notifyListeners();
+      _saveToCache();
     }
   }
 
@@ -69,6 +114,7 @@ class ThemeProvider extends ChangeNotifier {
     if (_themeId == id) return false;
     _themeId = id;
     notifyListeners();
+    _saveToCache();
     return true;
   }
 
@@ -78,6 +124,7 @@ class ThemeProvider extends ChangeNotifier {
     if (_soulFireId == id) return false;
     _soulFireId = id;
     notifyListeners();
+    _saveToCache();
     return true;
   }
 
@@ -100,5 +147,6 @@ class ThemeProvider extends ChangeNotifier {
     _soulFireId = SoulFireStyleId.etherealOrb;
     _subscriptionStatus = 'free';
     notifyListeners();
+    _saveToCache();
   }
 }

@@ -950,9 +950,14 @@ class _TimerCardState extends State<_TimerCard> {
 
     if (resolvedProfile == null) {
 
+      // Fixed-height skeleton prevents CLS (layout jump) when data loads
       return _SurfaceCard(
 
-        child: Padding(
+        child: ConstrainedBox(
+
+          constraints: const BoxConstraints(minHeight: 160),
+
+          child: Padding(
 
           padding: const EdgeInsets.all(20),
 
@@ -1003,6 +1008,8 @@ class _TimerCardState extends State<_TimerCard> {
             ],
 
           ),
+
+        ),
 
         ),
 

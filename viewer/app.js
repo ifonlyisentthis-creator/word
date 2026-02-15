@@ -145,7 +145,7 @@ function renderExpiredMessage(senderName) {
 
   const finality = document.createElement("p");
   finality.textContent =
-    "That time window has passed. In accordance with our Zero-Knowledge security protocols, the encryption keys have been shattered and the data has been permanently erased from our servers. It cannot be recovered by anyone, including our support team.";
+    "That time window has passed. In accordance with our time-locked security protocols, the encryption keys have been removed and the data has been permanently erased from our servers. It cannot be recovered by anyone, including our support team.";
 
   const rule = document.createElement("hr");
 

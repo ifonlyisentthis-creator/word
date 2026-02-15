@@ -1323,6 +1323,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
   String? _audioError;
 
   bool _isSaving = false;
+  bool _consentChecked = false;
 
   String? _saveError;
 
@@ -2126,13 +2127,33 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
             ],
 
+            // Consent checkbox — mandatory before saving
+            CheckboxListTile(
+              value: _consentChecked,
+              onChanged: (v) => setState(() => _consentChecked = v ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(
+                'I confirm this content is lawful and intended for legitimate '
+                'personal use. I understand that if I stop checking in, my vault '
+                'entries will be delivered or erased based on the timer I set.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.white60,
+                  height: 1.4,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
             SizedBox(
 
               width: double.infinity,
 
               child: FilledButton.icon(
 
-                onPressed: _isSaving || _isRecording
+                onPressed: _isSaving || _isRecording || !_consentChecked
 
                     ? null
 

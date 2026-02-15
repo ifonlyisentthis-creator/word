@@ -42,7 +42,7 @@ class HowItWorksScreen extends StatelessWidget {
                         title: 'Create Your Vault',
                         body:
                             'Write messages, record encrypted audio, or store your most important words. '
-                            'Everything is encrypted with AES-256 on your device before upload. '
+                            'Everything is encrypted on your device before upload. '
                             'Our servers only ever see ciphertext — never your plaintext.',
                         icon: Icons.enhanced_encryption,
                       ),
@@ -59,8 +59,8 @@ class HowItWorksScreen extends StatelessWidget {
                         number: '3',
                         title: 'Assign Recipients',
                         body:
-                            'Each vault entry can be sent to a different person. '
-                            'Recipient emails are encrypted and sealed with HMAC — '
+                            'Each vault entry can be delivered to a different person. '
+                            'Recipient emails are encrypted and sealed on your device — '
                             'no one (including Afterword admins) can swap or read them.',
                         icon: Icons.people_outline,
                       ),
@@ -77,29 +77,29 @@ class HowItWorksScreen extends StatelessWidget {
                         number: '5',
                         title: 'Protocol Executes',
                         body:
-                            'If your timer expires, Afterword delivers each entry to its recipient. '
+                            'If your timer expires, Afterword delivers each entry to its designated recipient. '
                             'They receive a secure link and a unique key, then decrypt your '
                             'message entirely in their browser — no login required. '
-                            'Sent items auto-purge after 30 days.',
+                            'Delivered items auto-purge after 30 days.',
                         icon: Icons.send_outlined,
                       ),
                       _StepCard(
                         number: '6',
                         title: 'Or Destroy Forever',
                         body:
-                            'Pro and Lifetime users can set any item to "Destroy" mode. '
-                            'When the timer expires, the data is permanently and irreversibly deleted. '
+                            'Pro and Lifetime users can set any item to "Erase" mode. '
+                            'When the timer expires, the data is permanently and irreversibly removed. '
                             'No emails sent. No trace left. Protocol Zero.',
                         icon: Icons.delete_forever_outlined,
                       ),
                       const SizedBox(height: 24),
                       _SectionTitle('Security Architecture'),
-                      _BulletPoint('AES-256-GCM encryption — keys generated on your device, never stored server-side.'),
-                      _BulletPoint('HMAC integrity seals — prevent tampering with recipient addresses.'),
-                      _BulletPoint('Row-Level Security (RLS) — your data is isolated at the database level.'),
-                      _BulletPoint('Subscription-gated features verified server-side via RevenueCat.'),
+                      _BulletPoint('Industry-standard encryption — keys generated on your device.'),
+                      _BulletPoint('Integrity seals — prevent tampering with recipient addresses.'),
+                      _BulletPoint('Data isolation — your data is fully separated at the database level.'),
+                      _BulletPoint('Subscription features verified securely on the server.'),
                       _BulletPoint('Audio files encrypted before upload and stored in a private bucket.'),
-                      _BulletPoint('Sent vault entries auto-purge after 30 days.'),
+                      _BulletPoint('Delivered vault entries auto-purge after 30 days.'),
                       const SizedBox(height: 24),
                       _SectionTitle('Plans'),
                       _BulletPoint('Free — 3 text items, 30-day timer, push notifications at 66% and 33%.'),

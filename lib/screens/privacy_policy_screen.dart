@@ -51,23 +51,26 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       Text(
                         'Afterword collects only the minimum data necessary to operate:\n\n'
                         '• Google account email (authentication only)\n'
-                        '• Vault entries (stored as AES-256-GCM ciphertext — never plaintext)\n'
-                        '• Recipient email addresses (encrypted and HMAC-sealed on your device)\n'
-                        '• Subscription status (managed by RevenueCat)\n'
-                        '• Push notification token (for timer reminders at 66% and 33%)\n\n'
+                        '• Vault entries (stored as encrypted ciphertext — never plaintext)\n'
+                        '• Recipient email addresses (encrypted and sealed on your device)\n'
+                        '• Subscription status\n'
+                        '• Push notification token (for timer reminders)\n\n'
                         'We do not collect analytics, location data, contacts, browsing history, or any telemetry.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
-                      Text('2. Zero-Knowledge Encryption', style: headingStyle),
+                      Text('2. Time-Locked Encryption', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
                         'All vault content — text messages, recipient addresses, and audio recordings — '
-                        'is encrypted on your device with AES-256-GCM before upload. Encryption keys '
-                        'are generated locally and never transmitted to or stored on our servers.\n\n'
-                        'HMAC integrity seals protect against tampering — even Afterword admins '
-                        'cannot read, modify, or swap your data.\n\n'
-                        'Audio files are encrypted into noise before storage in a private, '
+                        'is encrypted on your device before upload. Content encryption keys '
+                        'are generated locally on your device.\n\n'
+                        'When your check-in timer expires, our secure server retrieves the delivery '
+                        'key and sends it to your designated recipient. The recipient then decrypts '
+                        'the content entirely in their own browser — the key is never sent back to '
+                        'our servers after delivery.\n\n'
+                        'Integrity seals protect against tampering. '
+                        'Audio files are encrypted before storage in a private, '
                         'access-controlled bucket.',
                         style: bodyStyle,
                       ),
@@ -75,11 +78,11 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       Text('3. How We Use Your Information', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        '• Authenticate your identity via Google Sign-In\n'
+                        '• Authenticate your identity via secure sign-in\n'
                         '• Store and deliver your encrypted vault entries when your timer expires\n'
-                        '• Send push notifications for timer reminders (66% and 33% remaining)\n'
-                        '• Send email warnings to paid users 24 hours before expiry\n'
-                        '• Verify subscription entitlements server-side via RevenueCat\n\n'
+                        '• Send push notifications for timer reminders\n'
+                        '• Send email warnings to subscribed users before expiry\n'
+                        '• Verify subscription entitlements securely\n\n'
                         'We do not sell, share, rent, or use your data for advertising or profiling.',
                         style: bodyStyle,
                       ),
@@ -87,11 +90,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       Text('4. Third-Party Services', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        '• Google Sign-In — authentication\n'
-                        '• Supabase — secure data storage with Row-Level Security and encryption at rest\n'
-                        '• RevenueCat — subscription management and entitlement verification\n'
-                        '• Firebase Cloud Messaging — push notifications only\n\n'
-                        'Each service operates under their respective privacy policies. '
+                        'Afterword uses trusted third-party services for authentication, '
+                        'secure data storage, subscription management, and push notifications. '
+                        'Each service operates under their respective privacy policies.\n\n'
                         'No third party has access to your decrypted vault content.',
                         style: bodyStyle,
                       ),

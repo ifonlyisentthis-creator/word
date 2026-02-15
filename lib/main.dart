@@ -78,6 +78,10 @@ Future<void> _initServices() async {
       pushService: PushService(client: Supabase.instance.client),
     );
 
+    // Load cached theme/soul fire from local storage BEFORE first frame
+    // prevents the theme flicker (purple default → user's theme)
+    await _themeProvider.loadCached();
+
     // Quick sync init: reads cached session + starts listener (<1ms)
     // AuthGate will know auth state immediately — no wrong screen flash
     _authController.quickInit();

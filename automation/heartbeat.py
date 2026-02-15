@@ -882,6 +882,202 @@ def cleanup_sent_entries(client) -> None:
                 mark_profile_status(client, uid, "archived")
 
 
+def cleanup_bot_accounts(client, now: datetime) -> None:
+    """Delete accounts with ZERO activity after 90 days.
+
+    An account is considered a bot / abandoned if ALL of the following are true:
+      - created_at is older than 90 days
+      - last_check_in == created_at (never used Soul Fire — timer never reset)
+      - no vault_entries exist (never created a vault)
+      - no vault_entry_tombstones exist (never had executed entries)
+      - status is 'active' (not already archived from a prior protocol execution)
+
+    Real users who interacted (Soul Fire, vaults) are never touched.
+    Users whose timer expired and data was deleted have tombstones → safe.
+    """
+    cutoff = (now - timedelta(days=90)).isoformat()
+
+    # Find candidate profiles: created > 90 days ago, never checked in after creation
+    candidates = (
+        client.table("profiles")
+        .select("id,email,created_at,last_check_in")
+        .eq("status", "active")
+        .lt("created_at", cutoff)
+        .execute()
+    ).data or []
+
+    for profile in candidates:
+        uid = profile["id"]
+        created_at = parse_iso(profile.get("created_at"))
+        last_check_in = parse_iso(profile.get("last_check_in"))
+
+        if created_at is None or last_check_in is None:
+            continue
+
+        # If user ever checked in after account creation, they're real
+        # Allow 60 second tolerance for the initial check-in set at creation
+        if abs((last_check_in - created_at).total_seconds()) > 60:
+            continue
+
+        # Check if they ever had any vault entries
+        vault_count = (
+            client.table("vault_entries")
+            .select("id", count="exact")
+            .eq("user_id", uid)
+            .execute()
+        )
+        if (vault_count.count or 0) > 0:
+            continue
+
+        # Check if they have tombstones (had entries that were executed + purged)
+        tombstone_count = (
+            client.table("vault_entry_tombstones")
+            .select("vault_entry_id", count="exact")
+            .eq("user_id", uid)
+            .execute()
+        )
+        if (tombstone_count.count or 0) > 0:
+            continue
+
+        # No activity at all — delete the auth user (cascades to profile + push_devices)
+        try:
+            client.auth.admin.delete_user(uid)
+            print(f"Deleted inactive bot account: {uid}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"Failed to delete bot account {uid}: {exc}")
+
+
+def handle_subscription_downgrade(
+    client,
+    profile: dict,
+    resend_key: str,
+    from_email: str,
+    now: datetime,
+) -> None:
+    """Handle a user whose subscription was downgraded (refund or non-renewal).
+
+    Called when RevenueCat has already set subscription_status to 'free' but the
+    profile still has pro/lifetime artifacts (custom timer, audio vaults, themes).
+
+    Actions:
+      1. Reset timer_days to 30 (free default) — timer restarts fresh
+      2. Reset last_check_in to now() — user gets full 30 days
+      3. Clear warning timestamps
+      4. Reset theme and soul fire to free defaults
+      5. If former lifetime user: delete all audio vault entries
+      6. Send notification email to user
+    """
+    uid = profile["id"]
+    email = profile.get("email")
+    sender_name = profile.get("sender_name") or "Afterword"
+    timer_days = int(profile.get("timer_days") or 30)
+
+    # Detect if downgrade handling is needed:
+    # subscription_status is already 'free' (set by RevenueCat webhook),
+    # but timer_days > 30 or custom theme/soul_fire is set
+    selected_theme = profile.get("selected_theme")
+    selected_soul_fire = profile.get("selected_soul_fire")
+    has_custom_timer = timer_days > 30
+    has_custom_theme = selected_theme is not None and selected_theme != "oledVoid"
+    has_custom_soul_fire = selected_soul_fire is not None and selected_soul_fire != "etherealOrb"
+
+    # Check for audio vault entries (only lifetime can create those)
+    audio_entries: list[dict] = []
+    has_audio = False
+    try:
+        audio_check = (
+            client.table("vault_entries")
+            .select("id", count="exact")
+            .eq("user_id", uid)
+            .eq("data_type", "audio")
+            .eq("status", "active")
+            .execute()
+        )
+        has_audio = (audio_check.count or 0) > 0
+    except Exception:  # noqa: BLE001
+        pass
+
+    needs_revert = has_custom_timer or has_custom_theme or has_custom_soul_fire or has_audio
+
+    if not needs_revert:
+        return
+
+    was_lifetime = (
+        has_audio
+        or (has_custom_soul_fire and selected_soul_fire in ("toxicCore", "crystalAscend"))
+    )
+
+    # 1. Reset profile to free defaults
+    update_data = {
+        "timer_days": 30,
+        "last_check_in": now.isoformat(),
+        "warning_sent_at": None,
+        "push_66_sent_at": None,
+        "push_33_sent_at": None,
+        "selected_theme": None,
+        "selected_soul_fire": None,
+    }
+    client.table("profiles").update(update_data).eq("id", uid).execute()
+
+    # 2. If former lifetime: delete audio vault entries
+    if was_lifetime:
+        audio_entries = (
+            client.table("vault_entries")
+            .select("id,audio_file_path")
+            .eq("user_id", uid)
+            .eq("data_type", "audio")
+            .eq("status", "active")
+            .execute()
+        ).data or []
+        for entry in audio_entries:
+            delete_entry(client, entry)
+        if audio_entries:
+            print(f"Deleted {len(audio_entries)} audio entries for downgraded lifetime user {uid}")
+
+    # 3. Send notification email
+    if email:
+        reason = "refund or expiration"
+        audio_note = ""
+        if was_lifetime and audio_entries:
+            audio_note = (
+                " Audio vault entries have been removed as they require "
+                "a Lifetime subscription."
+            )
+
+        subject = "Afterword — Subscription update"
+        text = (
+            f"Hi {sender_name},\n\n"
+            f"Your Afterword subscription has been updated due to a {reason}. "
+            "Your account has been reverted to the free tier.\n\n"
+            "What this means:\n"
+            "• Your timer has been reset to the default 30 days\n"
+            "• Custom themes and styles have been reset to defaults\n"
+            "• All your existing vault entries are preserved\n"
+            f"{audio_note}\n\n"
+            "You can continue using Afterword on the free tier, or "
+            "resubscribe at any time to restore premium features.\n\n"
+            "— The Afterword Team"
+        )
+        html = (
+            f"<p>Hi {sender_name},</p>"
+            f"<p>Your Afterword subscription has been updated due to a {reason}. "
+            "Your account has been reverted to the free tier.</p>"
+            "<p><strong>What this means:</strong></p>"
+            "<ul>"
+            "<li>Your timer has been reset to the default 30 days</li>"
+            "<li>Custom themes and styles have been reset to defaults</li>"
+            "<li>All your existing vault entries are preserved</li>"
+            f"{'<li>Audio vault entries have been removed (Lifetime feature)</li>' if was_lifetime and audio_entries else ''}"
+            "</ul>"
+            "<p>You can continue using Afterword on the free tier, or "
+            "resubscribe at any time to restore premium features.</p>"
+            "<p>— The Afterword Team</p>"
+        )
+        try:
+            send_email(resend_key, from_email, email, subject, text, html)
+            print(f"Sent downgrade notification to {uid}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"Failed to send downgrade email to {uid}: {exc}")
 
 
 
@@ -917,7 +1113,9 @@ def main() -> int:
 
             "id,email,sender_name,status,subscription_status,last_check_in,timer_days,"
 
-            "hmac_key_encrypted,warning_sent_at,push_66_sent_at,push_33_sent_at"
+            "hmac_key_encrypted,warning_sent_at,push_66_sent_at,push_33_sent_at,"
+
+            "selected_theme,selected_soul_fire,created_at"
 
         )
 
@@ -984,8 +1182,16 @@ def main() -> int:
         has_entries = len(active_entries) > 0
 
         sender_name = profile.get("sender_name") or "Afterword"
+        sub_status = (profile.get("subscription_status") or "free").lower()
 
-
+        # ── PASS 0: Subscription downgrade → revert to free tier ──
+        if sub_status == "free":
+            try:
+                handle_subscription_downgrade(
+                    client, profile, resend_key, from_email, now,
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"Subscription downgrade handling failed for {user_id}: {exc}")
 
         # ── PASS 1: Timer expired → execute protocol ──
 
@@ -1132,6 +1338,9 @@ def main() -> int:
 
 
     cleanup_sent_entries(client)
+
+    # Delete accounts with zero activity after 90 days (bot prevention)
+    cleanup_bot_accounts(client, now)
 
     return 0
 

@@ -59,12 +59,12 @@ class TermsScreen extends StatelessWidget {
                       Text('2. Description of Service', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'Afterword is a zero-knowledge encrypted legacy vault. It allows you to '
+                        'Afterword is a secure, time-locked digital vault. It allows you to '
                         'create, encrypt, and store text messages and audio recordings on your device '
                         'before uploading them to secure servers. Entries can be configured to:\n\n'
-                        '• Send to a designated recipient when your check-in timer expires\n'
-                        '• Permanently destroy when your timer expires (Protocol Zero)\n\n'
-                        'Recipients access sent items via a secure browser viewer using a private key.',
+                        '• Deliver to a designated recipient when your check-in timer expires\n'
+                        '• Permanently erase when your timer expires (Protocol Zero)\n\n'
+                        'Recipients access delivered items via a secure browser viewer using a private key.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
@@ -85,15 +85,20 @@ class TermsScreen extends StatelessWidget {
                         'Afterword offers tiered access:\n\n'
                         '• Free — Up to 3 text entries, 30-day fixed timer, push notifications\n'
                         '• Pro Monthly — Unlimited text entries, custom timer (7–365 days), '
-                        'Protocol Zero (destroy mode), email warning 24h before expiry\n'
+                        'Protocol Zero (erase mode), email warning before expiry\n'
                         '• Pro Annual — Same as Pro Monthly, billed annually at a discount\n'
-                        '• Lifetime — All Pro features plus encrypted audio vault (10 min bank), '
-                        'timer up to 10 years, all 6 themes and Soul Fire styles\n\n'
-                        'Subscriptions are processed through Google Play. '
+                        '• Lifetime — All Pro features plus encrypted audio vault, '
+                        'extended timer duration, all themes and styles\n\n'
+                        'Subscriptions are processed through your device\'s app store. '
                         'Monthly and annual plans auto-renew unless cancelled at least 24 hours '
                         'before the end of the current billing period. '
-                        'Manage or cancel subscriptions in your Google Play settings.\n\n'
-                        'Refunds are handled by Google Play per their refund policy.',
+                        'Manage or cancel subscriptions in your app store settings.\n\n'
+                        'If a subscription is refunded, all premium features are revoked immediately '
+                        'and the account reverts to the free tier. Existing vault entries are preserved '
+                        'but premium features (custom timer, erase mode, themes) are removed. '
+                        'Audio vault entries from Lifetime plans are deleted upon refund.\n\n'
+                        'If a subscription expires or is not renewed, the same reversion applies '
+                        'at the end of the billing period.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
@@ -101,7 +106,7 @@ class TermsScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'You retain full ownership of all content you create. '
-                        'Vault entries are encrypted on your device with AES-256-GCM — '
+                        'Vault entries are encrypted on your device — '
                         'Afterword cannot read, access, or recover your plaintext content.\n\n'
                         'You are solely responsible for the content of your vault entries, '
                         'the accuracy of recipient email addresses, and keeping your security keys safe.',
@@ -112,11 +117,17 @@ class TermsScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'You agree not to:\n\n'
-                        '• Use the App for any unlawful purpose\n'
+                        '• Use the App for any unlawful, abusive, or harmful purpose\n'
+                        '• Store content that constitutes threats, harassment, or intimidation\n'
+                        '• Use the App to facilitate fraud, extortion, or any criminal activity\n'
                         '• Attempt to gain unauthorized access to the service or other accounts\n'
                         '• Reverse engineer, decompile, or modify the App\n'
-                        '• Use the App to harass, threaten, or cause harm\n'
-                        '• Circumvent subscription, payment, or security mechanisms',
+                        '• Circumvent subscription, payment, or security mechanisms\n\n'
+                        'You are solely responsible for all content stored in your vault. '
+                        'Afterword does not monitor or review vault contents due to encryption, '
+                        'but reserves the right to terminate accounts reported for misuse. '
+                        'By using Afterword, you confirm that your use is lawful, ethical, and '
+                        'intended for legitimate personal purposes only.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),

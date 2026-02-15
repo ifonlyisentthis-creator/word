@@ -4246,23 +4246,277 @@ SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'cleanup-sent-entrie
 33.
 -- ============================================================================
 -- AFTERWORD — SQL #33: Timer/Vault/History Update
--- File: supabase/v33_timer_vault_history.sql
--- Run this in Supabase SQL Editor after #32.
+-- Run this in Supabase SQL Editor after comprehensive_update.sql (#32).
 --
 -- Changes:
---   1. Creates vault_entry_tombstones table (History tab — deletion log)
---   2. Restores cleanup_sent_entries function (creates tombstones before purge,
---      deletes audio objects, purges 30-day-old sent entries, archives profiles)
---   3. Re-schedules daily cron cleanup at 03:00 UTC
---   4. RLS policy for tombstones (select own only)
---   5. Grants service_role UPDATE on timer_days + last_check_in
---      (needed by heartbeat.py to reset timer to 30 after expiry)
---
--- Related app changes:
---   - heartbeat.py now resets timer_days to 30 after processing expired entries
---   - Notifications only scheduled if vault has entries
---   - New History screen shows sent items + permanent deletion log
+--   1. Restores cleanup_sent_entries function (dropped in #31, needed by cron)
+--   2. Re-schedules daily cron cleanup at 03:00 UTC
+--   3. Adds vault_entry_tombstones table if missing (for History tab)
+--   4. Adds RLS policy for tombstones
+--   5. Grants for tombstones
 -- ============================================================================
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  1. VAULT ENTRY TOMBSTONES (History tab — deletion log)                ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+CREATE TABLE IF NOT EXISTS vault_entry_tombstones (
+  vault_entry_id uuid PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  sender_name text NOT NULL,
+  sent_at timestamptz,
+  expired_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS vault_entry_tombstones_user_idx
+  ON vault_entry_tombstones(user_id, expired_at);
+
+ALTER TABLE vault_entry_tombstones ENABLE ROW LEVEL SECURITY;
+
+-- Users can only read their own tombstones
+DROP POLICY IF EXISTS tombstones_select_own ON vault_entry_tombstones;
+CREATE POLICY tombstones_select_own ON vault_entry_tombstones
+FOR SELECT TO authenticated USING (auth.uid() = user_id);
+
+-- Grant select to authenticated users
+GRANT SELECT ON TABLE vault_entry_tombstones TO authenticated;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  2. CLEANUP SENT ENTRIES (restoring for cron + heartbeat)              ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+-- This function:
+--   a. Creates tombstone records for sent entries about to be purged
+--   b. Deletes audio storage objects for those entries
+--   c. Deletes the vault_entries rows
+--   d. Resets timer_days to 30 for users whose entries were just purged
+--   e. Archives profiles with no remaining vault entries
+
+CREATE OR REPLACE FUNCTION public.cleanup_sent_entries()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  -- 2a. Create tombstones for entries about to be purged
+  INSERT INTO vault_entry_tombstones (vault_entry_id, user_id, sender_name, sent_at, expired_at)
+  SELECT ve.id, ve.user_id, p.sender_name, ve.sent_at, now()
+  FROM vault_entries ve
+  JOIN profiles p ON p.id = ve.user_id
+  WHERE ve.status = 'sent'
+    AND ve.sent_at IS NOT NULL
+    AND ve.sent_at < now() - interval '30 days'
+  ON CONFLICT (vault_entry_id) DO NOTHING;
+
+  -- 2b. Delete audio storage objects for entries about to be purged
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name IN (
+      SELECT audio_file_path FROM vault_entries
+      WHERE status = 'sent'
+        AND sent_at < now() - interval '30 days'
+        AND audio_file_path IS NOT NULL
+    );
+
+  -- 2c. Purge sent entries older than 30 days
+  DELETE FROM vault_entries
+  WHERE status = 'sent'
+    AND sent_at IS NOT NULL
+    AND sent_at < now() - interval '30 days';
+
+  -- 2d. Archive profiles that have no remaining vault entries
+  --     and had entries sent (tombstones exist)
+  UPDATE profiles p
+  SET status = 'archived'
+  WHERE p.status IN ('active', 'inactive')
+    AND NOT EXISTS (
+      SELECT 1 FROM vault_entries v WHERE v.user_id = p.id
+    )
+    AND EXISTS (
+      SELECT 1 FROM vault_entry_tombstones t WHERE t.user_id = p.id
+    );
+END;
+$$;
+
+ALTER FUNCTION public.cleanup_sent_entries() SET search_path = public, auth, storage;
+
+-- Lock down: only service_role (cron / heartbeat)
+REVOKE ALL ON FUNCTION public.cleanup_sent_entries() FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_sent_entries() TO service_role;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  3. SCHEDULE DAILY CRON CLEANUP                                        ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'cleanup-sent-entries';
+SELECT cron.schedule(
+  'cleanup-sent-entries',
+  '0 3 * * *',
+  $$SELECT cleanup_sent_entries();$$
+);
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  4. SERVICE ROLE GRANTS for timer_days reset (heartbeat.py)            ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+-- Ensure service_role can update timer_days (for post-expiry reset to 30)
+GRANT UPDATE (timer_days, last_check_in) ON profiles TO service_role;
+
+-- ============================================================================
+-- END OF SQL #33
+-- ============================================================================
+
+
+34.
+-- ============================================================================
+-- AFTERWORD — PRODUCTION HARDENING SQL
+-- Run this in Supabase SQL Editor AFTER comprehensive_update.sql.
+--
+-- This script:
+--   1. Ensures last_entry_at column exists (rate-limit trigger dependency)
+--   2. Adds missing indexes for scalability (millions of users)
+--   3. Adds connection-pool-friendly settings
+--   4. Adds cleanup for sent entries (30-day purge safety net)
+--   5. Adds NOT NULL defaults for safety
+-- ============================================================================
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  1. ENSURE last_entry_at COLUMN (rate-limit trigger dependency)        ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_entry_at timestamptz;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  2. ADDITIONAL PERFORMANCE INDEXES                                     ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+-- Speed up heartbeat.py expired-user scan (profiles WHERE active + deadline passed)
+CREATE INDEX IF NOT EXISTS idx_profiles_status ON profiles (status);
+
+-- Speed up heartbeat.py push notification queries
+CREATE INDEX IF NOT EXISTS idx_profiles_active_push ON profiles (last_check_in, timer_days)
+  WHERE status = 'active';
+
+-- Speed up push_devices lookup by token (for dedup on upsert)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_push_devices_token ON push_devices (fcm_token);
+
+-- Speed up vault_entries count for free-tier check in RLS
+CREATE INDEX IF NOT EXISTS idx_vault_entries_user_active_type
+  ON vault_entries (user_id, data_type) WHERE status = 'active';
+
+-- Speed up viewer: audio file path lookup for storage RLS
+CREATE INDEX IF NOT EXISTS idx_vault_entries_audio_path
+  ON vault_entries (audio_file_path) WHERE audio_file_path IS NOT NULL;
+
+-- Speed up tombstone queries
+CREATE INDEX IF NOT EXISTS idx_tombstones_user ON vault_entry_tombstones (user_id);
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  3. ENFORCE VALID SUBSCRIPTION STATUS VALUES                           ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'profiles_subscription_status_check'
+      AND conrelid = 'profiles'::regclass
+  ) THEN
+    ALTER TABLE profiles ADD CONSTRAINT profiles_subscription_status_check
+      CHECK (subscription_status IN ('free', 'pro', 'lifetime'));
+  END IF;
+END $$;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  4. ENFORCE VALID PROFILE STATUS VALUES                                ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'profiles_status_check'
+      AND conrelid = 'profiles'::regclass
+  ) THEN
+    ALTER TABLE profiles ADD CONSTRAINT profiles_status_check
+      CHECK (status IN ('active', 'archived', 'inactive'));
+  END IF;
+END $$;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  5. ENFORCE VALID VAULT ENTRY STATUS VALUES                            ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'vault_entries_status_check'
+      AND conrelid = 'vault_entries'::regclass
+  ) THEN
+    ALTER TABLE vault_entries ADD CONSTRAINT vault_entries_status_check
+      CHECK (status IN ('active', 'sending', 'sent'));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'vault_entries_action_type_check'
+      AND conrelid = 'vault_entries'::regclass
+  ) THEN
+    ALTER TABLE vault_entries ADD CONSTRAINT vault_entries_action_type_check
+      CHECK (action_type IN ('send', 'destroy'));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'vault_entries_data_type_check'
+      AND conrelid = 'vault_entries'::regclass
+  ) THEN
+    ALTER TABLE vault_entries ADD CONSTRAINT vault_entries_data_type_check
+      CHECK (data_type IN ('text', 'audio'));
+  END IF;
+END $$;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  6. TIMER BOUNDS CONSTRAINT                                            ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'profiles_timer_days_bounds'
+      AND conrelid = 'profiles'::regclass
+  ) THEN
+    ALTER TABLE profiles ADD CONSTRAINT profiles_timer_days_bounds
+      CHECK (timer_days >= 7 AND timer_days <= 3650);
+  END IF;
+END $$;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  7. AUDIO DURATION BOUNDS CONSTRAINT                                   ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'vault_entries_audio_duration_bounds'
+      AND conrelid = 'vault_entries'::regclass
+  ) THEN
+    ALTER TABLE vault_entries ADD CONSTRAINT vault_entries_audio_duration_bounds
+      CHECK (audio_duration_seconds IS NULL OR (audio_duration_seconds > 0 AND audio_duration_seconds <= 600));
+  END IF;
+END $$;
+
+-- ============================================================================
+-- END OF PRODUCTION HARDENING SQL
+-- ============================================================================
+
 
 
 

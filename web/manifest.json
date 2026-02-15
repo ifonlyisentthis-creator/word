@@ -5,7 +5,7 @@
   "display": "standalone",
   "background_color": "#050505",
   "theme_color": "#050505",
-  "description": "Afterword is a zero-knowledge legacy vault that sends or destroys your messages when your check-in timer expires.",
+  "description": "Afterword is a secure, time-locked digital vault that delivers or erases your messages when your check-in timer expires.",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
