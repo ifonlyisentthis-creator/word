@@ -76,7 +76,7 @@ extension VaultActionTypeX on VaultActionType {
 
   String get label => switch (this) {
         VaultActionType.send => 'Send',
-        VaultActionType.destroy => 'Destroy',
+        VaultActionType.destroy => 'Erase',
       };
 
   static VaultActionType fromString(String? value) {

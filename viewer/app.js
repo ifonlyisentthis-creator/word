@@ -141,7 +141,7 @@ function renderExpiredMessage(senderName) {
 
   const policy = document.createElement("p");
   policy.textContent =
-    "To protect the sender's privacy and security, all data in this vault was configured to permanently self-destruct 30 days after delivery.";
+    "To protect the sender's privacy and security, all data in this vault was configured to permanently auto-erase 30 days after delivery.";
 
   const finality = document.createElement("p");
   finality.textContent =

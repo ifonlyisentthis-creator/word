@@ -261,7 +261,7 @@ class _HistoryGroupCard extends StatelessWidget {
                           ),
                           child: Text(
                             item.actionType == 'destroy'
-                                ? 'DESTROYED'
+                                ? 'ERASED'
                                 : 'SENT',
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: item.actionType == 'destroy'

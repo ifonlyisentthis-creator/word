@@ -1587,7 +1587,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
                       const SizedBox(width: 4),
 
-                      const Text('Destroy'),
+                      const Text('Erase'),
 
                       const SizedBox(width: 4),
 
@@ -1627,7 +1627,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
               Text(
 
-                'Protocol Zero (destroy) is unlocked on Pro.',
+                'Protocol Zero (erase) is unlocked on Pro.',
 
                 style: Theme.of(context)
 

@@ -1119,6 +1119,8 @@ def main() -> int:
 
         )
 
+        .eq("status", "active")
+
         .execute()
 
     )
