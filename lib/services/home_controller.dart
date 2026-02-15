@@ -241,13 +241,20 @@ class HomeController extends ChangeNotifier {
 
       if (_isDisposed) return;
 
+      // Only notify if data actually changed — prevents UI flicker on resume
+      final changed = _profile == null ||
+          profile.lastCheckIn != _profile!.lastCheckIn ||
+          profile.timerDays != _profile!.timerDays ||
+          profile.status != _profile!.status ||
+          profile.subscriptionStatus != _profile!.subscriptionStatus;
+
       _setProtocolState(profile);
 
       _profile = profile;
 
       _errorMessage = null;
 
-      notifyListeners();
+      if (changed) notifyListeners();
 
     } catch (_) {
 
@@ -335,11 +342,11 @@ class HomeController extends ChangeNotifier {
 
     if (currentUser == null || currentUser.id != _user!.id) return;
 
-    _setLoading(true);
-
     try {
 
       final profile = await _profileService.fetchProfile(_user!.id);
+
+      if (_isDisposed) return;
 
       _profile = profile;
 
@@ -347,15 +354,13 @@ class HomeController extends ChangeNotifier {
 
       _errorMessage = null;
 
+      notifyListeners();
+
       await _scheduleReminders();
 
     } catch (_) {
 
-      _errorMessage = 'Unable to refresh your profile.';
-
-    } finally {
-
-      _setLoading(false);
+      // Silent refresh — no error shown
 
     }
 

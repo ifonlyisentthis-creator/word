@@ -14,6 +14,7 @@ import 'my_vault_page.dart';
 import 'privacy_policy_screen.dart';
 import 'subscription_debug_screen.dart';
 import 'terms_screen.dart';
+import '../utils/page_routes.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({
@@ -148,9 +149,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => MyVaultPage(userId: userId),
-                        ),
+                        FadeRoute(page: MyVaultPage(userId: userId)),
                       );
                     },
                   ),
@@ -161,9 +160,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => HistoryScreen(userId: userId),
-                        ),
+                        FadeRoute(page: HistoryScreen(userId: userId)),
                       );
                     },
                   ),
@@ -174,9 +171,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const HowItWorksScreen(),
-                        ),
+                        FadeRoute(page: const HowItWorksScreen()),
                       );
                     },
                   ),
@@ -187,9 +182,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const CustomizationScreen(),
-                        ),
+                        FadeRoute(page: const CustomizationScreen()),
                       );
                     },
                   ),
@@ -201,9 +194,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const SubscriptionDebugScreen(),
-                        ),
+                        FadeRoute(page: const SubscriptionDebugScreen()),
                       );
                     },
                   ),
@@ -215,9 +206,7 @@ class AppDrawer extends StatelessWidget {
                         Navigator.pop(context);
                         Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => const SubscriptionDebugScreen(),
-                          ),
+                          FadeRoute(page: const SubscriptionDebugScreen()),
                         );
                       },
                     ),
@@ -233,13 +222,11 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => AccountSettingsScreen(
+                        FadeRoute(page: AccountSettingsScreen(
                             homeController: homeController,
                             authController: authController,
                             revenueCatController: rcController,
-                          ),
-                        ),
+                        )),
                       );
                     },
                   ),
@@ -250,9 +237,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const PrivacyPolicyScreen(),
-                        ),
+                        FadeRoute(page: const PrivacyPolicyScreen()),
                       );
                     },
                   ),
@@ -263,9 +248,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const TermsScreen(),
-                        ),
+                        FadeRoute(page: const TermsScreen()),
                       );
                     },
                   ),

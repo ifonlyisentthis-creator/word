@@ -44,7 +44,7 @@ import 'my_vault_page.dart';
 
 import 'vault_section.dart';
 
-
+import '../utils/page_routes.dart';
 
 class HomeScreen extends StatelessWidget {
 
@@ -418,14 +418,18 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
           SafeArea(
 
             child: RefreshIndicator(
-              displacement: 60,
-              strokeWidth: 2.5,
+              displacement: 50,
+              edgeOffset: 10,
+              strokeWidth: 2,
               onRefresh: () async {
                 final hc = context.read<HomeController>();
-                await hc.autoCheckIn();
-                await hc.refreshVaultStatus();
+                await Future.wait([
+                  hc.autoCheckIn(),
+                  hc.refreshVaultStatus(),
+                ]);
               },
               color: Theme.of(context).colorScheme.primary,
+              backgroundColor: const Color(0xFF1A1A1A),
               child: ListView(
 
               controller: _scrollController,
@@ -552,9 +556,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                   onViewAll: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => MyVaultPage(userId: widget.userId),
-                      ),
+                      FadeRoute(page: MyVaultPage(userId: widget.userId)),
                     ).then((_) {
                       // Refresh vault count when returning from vault page
                       if (context.mounted) {
@@ -1063,7 +1065,9 @@ class _TimerCardState extends State<_TimerCard> {
 
         remaining.inSeconds.clamp(0, totalSeconds.toInt());
 
-    final progress = totalSeconds == 0
+    final progress = vaultEmpty
+        ? 1.0
+        : totalSeconds == 0
 
         ? 0.0
 

@@ -726,15 +726,17 @@ def process_expired_entries(
 
     hmac_key_encrypted = profile.get("hmac_key_encrypted")
 
-    hmac_key_bytes = (
+    hmac_key_bytes = None
 
-        decrypt_with_server_secret(hmac_key_encrypted, server_secret)
+    if hmac_key_encrypted:
 
-        if hmac_key_encrypted
+        try:
 
-        else None
+            hmac_key_bytes = decrypt_with_server_secret(hmac_key_encrypted, server_secret)
 
-    )
+        except Exception as exc:  # noqa: BLE001
+
+            print(f"Failed to decrypt HMAC key for user {profile.get('id', '?')}: {exc}")
 
 
 
@@ -1187,11 +1189,14 @@ def main() -> int:
 
         .eq("status", "active")
 
+        .limit(10000)
+
         .execute()
 
     )
 
     profiles = profiles_response.data or []
+    print(f"Active profiles: {len(profiles)}")
 
 
 
@@ -1207,11 +1212,14 @@ def main() -> int:
 
         .eq("status", "active")
 
+        .limit(50000)
+
         .execute()
 
     )
 
     entries = entries_response.data or []
+    print(f"Active entries: {len(entries)}")
 
     entries_by_user: dict[str, list[dict]] = {}
 
@@ -1222,6 +1230,8 @@ def main() -> int:
 
 
     for profile in profiles:
+
+      try:
 
         user_id = profile["id"]
 
@@ -1404,11 +1414,20 @@ def main() -> int:
 
             if not already_warned:
 
-                send_warning_email(profile, deadline, resend_key, from_email)
+                try:
 
-                mark_warning_sent(client, user_id, now)
+                    send_warning_email(profile, deadline, resend_key, from_email)
+
+                    mark_warning_sent(client, user_id, now)
+
+                except Exception as exc:  # noqa: BLE001
+
+                    print(f"Warning email failed for user {user_id}: {exc}")
 
 
+
+      except Exception as exc:  # noqa: BLE001
+          print(f"Processing failed for user {profile.get('id', '?')}: {exc}")
 
     cleanup_sent_entries(client)
 
