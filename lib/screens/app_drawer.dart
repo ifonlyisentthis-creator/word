@@ -14,7 +14,6 @@ import 'my_vault_page.dart';
 import 'privacy_policy_screen.dart';
 import 'subscription_debug_screen.dart';
 import 'terms_screen.dart';
-import '../utils/page_routes.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({
@@ -149,7 +148,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        FadeRoute(page: MyVaultPage(userId: userId)),
+                        MaterialPageRoute(builder: (_) => MyVaultPage(userId: userId)),
                       );
                     },
                   ),
@@ -160,7 +159,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        FadeRoute(page: HistoryScreen(userId: userId)),
+                        MaterialPageRoute(builder: (_) => HistoryScreen(userId: userId)),
                       );
                     },
                   ),
@@ -171,7 +170,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        FadeRoute(page: const HowItWorksScreen()),
+                        MaterialPageRoute(builder: (_) => const HowItWorksScreen()),
                       );
                     },
                   ),
@@ -182,7 +181,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        FadeRoute(page: const CustomizationScreen()),
+                        MaterialPageRoute(builder: (_) => const CustomizationScreen()),
                       );
                     },
                   ),
@@ -194,7 +193,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        FadeRoute(page: const SubscriptionDebugScreen()),
+                        MaterialPageRoute(builder: (_) => const SubscriptionDebugScreen()),
                       );
                     },
                   ),
@@ -206,7 +205,7 @@ class AppDrawer extends StatelessWidget {
                         Navigator.pop(context);
                         Navigator.push(
                           context,
-                          FadeRoute(page: const SubscriptionDebugScreen()),
+                          MaterialPageRoute(builder: (_) => const SubscriptionDebugScreen()),
                         );
                       },
                     ),
@@ -222,7 +221,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        FadeRoute(page: AccountSettingsScreen(
+                        MaterialPageRoute(builder: (_) => AccountSettingsScreen(
                             homeController: homeController,
                             authController: authController,
                             revenueCatController: rcController,
@@ -237,7 +236,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        FadeRoute(page: const PrivacyPolicyScreen()),
+                        MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
                       );
                     },
                   ),
@@ -248,7 +247,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        FadeRoute(page: const TermsScreen()),
+                        MaterialPageRoute(builder: (_) => const TermsScreen()),
                       );
                     },
                   ),

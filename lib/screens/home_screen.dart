@@ -44,8 +44,6 @@ import 'my_vault_page.dart';
 
 import 'vault_section.dart';
 
-import '../utils/page_routes.dart';
-
 class HomeScreen extends StatelessWidget {
 
   const HomeScreen({super.key});
@@ -400,6 +398,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
 
       key: _scaffoldKey,
 
@@ -556,7 +555,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                   onViewAll: () {
                     Navigator.push(
                       context,
-                      FadeRoute(page: MyVaultPage(userId: widget.userId)),
+                      MaterialPageRoute(builder: (_) => MyVaultPage(userId: widget.userId)),
                     ).then((_) {
                       // Refresh vault count when returning from vault page
                       if (context.mounted) {

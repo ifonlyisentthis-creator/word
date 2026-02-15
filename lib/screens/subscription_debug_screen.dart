@@ -39,6 +39,7 @@ class SubscriptionDebugScreen extends StatelessWidget {
         final activeProductId = controller.activeProductId;
 
         return Scaffold(
+          backgroundColor: Colors.transparent,
 
           appBar: AppBar(
 

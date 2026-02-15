@@ -4,6 +4,8 @@ import hashlib
 
 import hmac
 
+import html as html_mod
+
 import json
 
 import os
@@ -33,6 +35,34 @@ PAID_STATUSES = {"pro", "lifetime", "premium"}
 WARNING_WINDOW = timedelta(days=1)
 
 FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
+
+PAGE_SIZE = 1000
+
+
+def fetch_all_rows(query_builder) -> list[dict]:
+    """Paginate through a Supabase query to fetch all matching rows.
+
+    Supabase PostgREST caps responses at ~1000 rows by default.
+    This helper fetches in PAGE_SIZE batches using .range() until
+    a batch returns fewer rows than the page size.
+
+    Usage:
+        rows = fetch_all_rows(
+            client.table("profiles")
+            .select("id,email,...")
+            .eq("status", "active")
+        )
+    """
+    all_rows: list[dict] = []
+    offset = 0
+    while True:
+        response = query_builder.range(offset, offset + PAGE_SIZE - 1).execute()
+        batch = response.data or []
+        all_rows.extend(batch)
+        if len(batch) < PAGE_SIZE:
+            break
+        offset += PAGE_SIZE
+    return all_rows
 
 
 
@@ -230,9 +260,11 @@ def send_warning_email(profile: dict, deadline: datetime, resend_key: str, from_
 
     )
 
+    safe_name = html_mod.escape(sender_name)
+
     html = (
 
-        f"<p>Hi {sender_name},</p>"
+        f"<p>Hi {safe_name},</p>"
 
         f"<p>Your Afterword timer expires on <strong>{deadline_text}</strong>. "
 
@@ -330,225 +362,104 @@ def send_push_v1(
 
 
 
-def send_warning_push(
-
-    client,
-
-    user_id: str,
-
-    sender_name: str,
-
-    deadline: datetime,
-
-    firebase_sa_json: str,
-
-) -> None:
-
+def build_fcm_context(firebase_sa_json: str) -> dict | None:
+    """Parse Firebase SA JSON and mint an access token once per heartbeat run."""
     if not firebase_sa_json:
-
-        return
-
-
-
+        return None
     try:
-
         sa_info = json.loads(firebase_sa_json)
-
     except Exception as exc:  # noqa: BLE001
-
-        raise RuntimeError(f"Invalid FIREBASE_SERVICE_ACCOUNT_JSON: {exc}")
-
-
-
+        print(f"Invalid FIREBASE_SERVICE_ACCOUNT_JSON: {exc}")
+        return None
     project_id = sa_info.get("project_id")
-
     if not project_id:
+        print("FIREBASE_SERVICE_ACCOUNT_JSON missing project_id")
+        return None
+    try:
+        access_token = get_fcm_access_token(sa_info)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Failed to mint FCM access token: {exc}")
+        return None
+    return {"project_id": project_id, "access_token": access_token}
 
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON missing project_id")
 
-
-
+def _send_push_to_user(
+    client,
+    user_id: str,
+    fcm_ctx: dict,
+    title: str,
+    body: str,
+    data: dict[str, str] | None = None,
+) -> None:
+    """Send a push notification to all devices for a user."""
     tokens_response = (
-
         client.table("push_devices")
-
         .select("fcm_token")
-
         .eq("user_id", user_id)
-
         .execute()
-
     )
-
     rows = tokens_response.data or []
-
     tokens = [row.get("fcm_token") for row in rows if row.get("fcm_token")]
-
     if not tokens:
-
         return
-
-
-
-    access_token = get_fcm_access_token(sa_info)
-
-    deadline_text = deadline.strftime("%b %d, %Y")
-
-    title = "Afterword warning"
-
-    body = (
-
-        f"Hi {sender_name}, your timer expires on {deadline_text}. Open Afterword to check in."
-
-    )
-
-
 
     for token in tokens:
-
         response = send_push_v1(
-
-            project_id=project_id,
-
-            access_token=access_token,
-
+            project_id=fcm_ctx["project_id"],
+            access_token=fcm_ctx["access_token"],
             fcm_token=str(token),
-
             title=title,
-
             body=body,
-
-            data={"type": "warning"},
-
+            data=data,
         )
-
         if response.status_code == 404:
-
             client.table("push_devices").delete().eq("fcm_token", token).execute()
-
             continue
-
         if response.status_code >= 400:
-
             text = response.text or ""
-
             if "UNREGISTERED" in text or "registration-token-not-registered" in text:
-
                 client.table("push_devices").delete().eq("fcm_token", token).execute()
-
                 continue
+            print(f"Push failed for user {user_id}: {response.status_code} {text}")
 
-            print(f"Push send failed for user {user_id}: {response.status_code} {text}")
+
+def send_warning_push(
+    client,
+    user_id: str,
+    sender_name: str,
+    deadline: datetime,
+    fcm_ctx: dict | None,
+) -> None:
+    if fcm_ctx is None:
+        return
+    deadline_text = deadline.strftime("%b %d, %Y")
+    _send_push_to_user(
+        client, user_id, fcm_ctx,
+        title="Afterword warning",
+        body=f"Hi {sender_name}, your timer expires on {deadline_text}. Open Afterword to check in.",
+        data={"type": "warning"},
+    )
 
 
 
 
 
 def send_executed_push(
-
     client,
-
     user_id: str,
-
     entry_id: str,
-
     entry_title: str,
-
-    firebase_sa_json: str,
-
+    fcm_ctx: dict | None,
 ) -> None:
-
-    if not firebase_sa_json:
-
+    if fcm_ctx is None:
         return
-
-
-
-    try:
-
-        sa_info = json.loads(firebase_sa_json)
-
-    except Exception as exc:  # noqa: BLE001
-
-        raise RuntimeError(f"Invalid FIREBASE_SERVICE_ACCOUNT_JSON: {exc}")
-
-
-
-    project_id = sa_info.get("project_id")
-
-    if not project_id:
-
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON missing project_id")
-
-
-
-    tokens_response = (
-
-        client.table("push_devices")
-
-        .select("fcm_token")
-
-        .eq("user_id", user_id)
-
-        .execute()
-
-    )
-
-    rows = tokens_response.data or []
-
-    tokens = [row.get("fcm_token") for row in rows if row.get("fcm_token")]
-
-    if not tokens:
-
-        return
-
-
-
-    access_token = get_fcm_access_token(sa_info)
-
     safe_title = entry_title or "Untitled"
-
-
-
-    for token in tokens:
-
-        response = send_push_v1(
-
-            project_id=project_id,
-
-            access_token=access_token,
-
-            fcm_token=str(token),
-
-            title="Afterword executed",
-
-            body=f"Your entry '{safe_title}' was sent.",
-
-            data={"type": "executed", "entry_id": entry_id},
-
-        )
-
-        if response.status_code == 404:
-
-            client.table("push_devices").delete().eq("fcm_token", token).execute()
-
-            continue
-
-        if response.status_code >= 400:
-
-            text = response.text or ""
-
-            if "UNREGISTERED" in text or "registration-token-not-registered" in text:
-
-                client.table("push_devices").delete().eq("fcm_token", token).execute()
-
-                continue
-
-            print(
-
-                f"Push executed failed for user {user_id}: {response.status_code} {text}"
-
-            )
+    _send_push_to_user(
+        client, user_id, fcm_ctx,
+        title="Afterword executed",
+        body=f"Your entry '{safe_title}' was sent.",
+        data={"type": "executed", "entry_id": entry_id},
+    )
 
 
 
@@ -598,15 +509,21 @@ def send_unlock_email(
 
     )
 
+    safe_sender = html_mod.escape(sender_name)
+
+    safe_title = html_mod.escape(entry_title)
+
+    safe_link = html_mod.escape(viewer_link)
+
     html = (
 
-        f"<p><strong>{sender_name}</strong> left you a secure message using "
+        f"<p><strong>{safe_sender}</strong> left you a secure message using "
 
         "Afterword — a time-locked digital vault.</p>"
 
-        f"<p><strong>Title:</strong> {entry_title}</p>"
+        f"<p><strong>Title:</strong> {safe_title}</p>"
 
-        f"<p><a href=\"{viewer_link}\" style=\"font-size:16px\">Open the secure message</a></p>"
+        f"<p><a href=\"{safe_link}\" style=\"font-size:16px\">Open the secure message</a></p>"
 
         f"<p><strong>Security Key:</strong><br>"
 
@@ -716,7 +633,7 @@ def process_expired_entries(
 
     viewer_base_url: str,
 
-    firebase_sa_json: str,
+    fcm_ctx: dict | None,
 
     now: datetime,
 
@@ -860,7 +777,7 @@ def process_expired_entries(
 
                     entry_title,
 
-                    firebase_sa_json,
+                    fcm_ctx,
 
                 )
 
@@ -887,13 +804,12 @@ def cleanup_sent_entries(client) -> None:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    sent_entries = (
+    sent_entries = fetch_all_rows(
         client.table("vault_entries")
         .select("id,user_id,audio_file_path,sent_at")
         .eq("status", "sent")
         .lt("sent_at", cutoff)
-        .execute()
-    ).data or []
+    )
 
     if not sent_entries:
         return
@@ -965,15 +881,15 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
     cutoff = (now - timedelta(days=90)).isoformat()
 
     # Find candidate profiles: created > 90 days ago, never checked in after creation
-    candidates = (
+    candidates = fetch_all_rows(
         client.table("profiles")
         .select("id,email,created_at,last_check_in")
         .eq("status", "active")
         .lt("created_at", cutoff)
-        .execute()
-    ).data or []
+    )
 
     for profile in candidates:
+      try:
         uid = profile["id"]
         created_at = parse_iso(profile.get("created_at"))
         last_check_in = parse_iso(profile.get("last_check_in"))
@@ -1012,6 +928,8 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
             print(f"Deleted inactive bot account: {uid}")
         except Exception as exc:  # noqa: BLE001
             print(f"Failed to delete bot account {uid}: {exc}")
+      except Exception as exc:  # noqa: BLE001
+          print(f"Bot cleanup failed for {profile.get('id', '?')}: {exc}")
 
 
 def handle_subscription_downgrade(
@@ -1048,23 +966,26 @@ def handle_subscription_downgrade(
     has_custom_theme = selected_theme is not None and selected_theme != "oledVoid"
     has_custom_soul_fire = selected_soul_fire is not None and selected_soul_fire != "etherealOrb"
 
-    # Check for audio vault entries (only lifetime can create those)
+    # Only query for audio if there are other pro/lifetime indicators.
+    # This avoids a DB query for every always-free user at scale.
+    has_pro_indicators = has_custom_timer or has_custom_theme or has_custom_soul_fire
     audio_entries: list[dict] = []
     has_audio = False
-    try:
-        audio_check = (
-            client.table("vault_entries")
-            .select("id", count="exact")
-            .eq("user_id", uid)
-            .eq("data_type", "audio")
-            .eq("status", "active")
-            .execute()
-        )
-        has_audio = (audio_check.count or 0) > 0
-    except Exception:  # noqa: BLE001
-        pass
+    if has_pro_indicators or (selected_soul_fire in ("toxicCore", "crystalAscend")):
+        try:
+            audio_check = (
+                client.table("vault_entries")
+                .select("id", count="exact")
+                .eq("user_id", uid)
+                .eq("data_type", "audio")
+                .eq("status", "active")
+                .execute()
+            )
+            has_audio = (audio_check.count or 0) > 0
+        except Exception:  # noqa: BLE001
+            pass
 
-    needs_revert = has_custom_timer or has_custom_theme or has_custom_soul_fire or has_audio
+    needs_revert = has_pro_indicators or has_audio
 
     if not needs_revert:
         return False
@@ -1125,8 +1046,9 @@ def handle_subscription_downgrade(
             "resubscribe at any time to restore premium features.\n\n"
             "— The Afterword Team"
         )
+        safe_name = html_mod.escape(sender_name)
         html = (
-            f"<p>Hi {sender_name},</p>"
+            f"<p>Hi {safe_name},</p>"
             f"<p>Your Afterword subscription has been updated due to a {reason}. "
             "Your account has been reverted to the free tier.</p>"
             "<p><strong>What this means:</strong></p>"
@@ -1171,9 +1093,11 @@ def main() -> int:
 
     now = datetime.now(timezone.utc)
 
+    fcm_ctx = build_fcm_context(firebase_sa_json)
 
 
-    profiles_response = (
+
+    profiles = fetch_all_rows(
 
         client.table("profiles")
 
@@ -1189,18 +1113,12 @@ def main() -> int:
 
         .eq("status", "active")
 
-        .limit(10000)
-
-        .execute()
-
     )
-
-    profiles = profiles_response.data or []
     print(f"Active profiles: {len(profiles)}")
 
 
 
-    entries_response = (
+    entries = fetch_all_rows(
 
         client.table("vault_entries")
 
@@ -1212,13 +1130,7 @@ def main() -> int:
 
         .eq("status", "active")
 
-        .limit(50000)
-
-        .execute()
-
     )
-
-    entries = entries_response.data or []
     print(f"Active entries: {len(entries)}")
 
     entries_by_user: dict[str, list[dict]] = {}
@@ -1301,7 +1213,7 @@ def main() -> int:
 
                 viewer_base_url,
 
-                firebase_sa_json,
+                fcm_ctx,
 
                 now,
 
@@ -1350,7 +1262,7 @@ def main() -> int:
 
                     send_warning_push(
 
-                        client, user_id, sender_name, deadline, firebase_sa_json,
+                        client, user_id, sender_name, deadline, fcm_ctx,
 
                     )
 
@@ -1384,7 +1296,7 @@ def main() -> int:
 
                     send_warning_push(
 
-                        client, user_id, sender_name, deadline, firebase_sa_json,
+                        client, user_id, sender_name, deadline, fcm_ctx,
 
                     )
 

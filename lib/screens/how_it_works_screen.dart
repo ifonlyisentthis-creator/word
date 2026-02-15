@@ -9,6 +9,7 @@ class HowItWorksScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           const RepaintBoundary(child: AmbientBackground()),
