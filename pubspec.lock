@@ -298,10 +298,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_local_notifications
-      sha256: "76cd20bcfa72fabe50ea27eeaf165527f446f55d3033021462084b87805b4cac"
+      sha256: "2b50e938a275e1ad77352d6a25e25770f4130baa61eaf02de7a9a884680954ad"
       url: "https://pub.dev"
     source: hosted
-    version: "20.0.0"
+    version: "20.1.0"
   flutter_local_notifications_linux:
     dependency: transitive
     description:
@@ -812,10 +812,10 @@ packages:
     dependency: transitive
     description:
       name: petitparser
-      sha256: "1a97266a94f7350d30ae522c0af07890c70b8e62c71e8e3920d1db4d23c057d1"
+      sha256: "91bd59303e9f769f108f8df05e371341b15d59e995e6806aefab827b58336675"
       url: "https://pub.dev"
     source: hosted
-    version: "7.0.1"
+    version: "7.0.2"
   platform:
     dependency: transitive
     description:
@@ -876,18 +876,18 @@ packages:
     dependency: "direct main"
     description:
       name: purchases_flutter
-      sha256: f6d65b3c7943e0b6375a82c89f8914f18d19859bf2c589f74769b63c925119d1
+      sha256: b619973958e9173dad76a28707d4254fb29a087e324b303560e7f6f0af27fba5
       url: "https://pub.dev"
     source: hosted
-    version: "9.11.0"
+    version: "9.12.0"
   purchases_ui_flutter:
     dependency: "direct main"
     description:
       name: purchases_ui_flutter
-      sha256: f9dfe33c668684ba805e1875ea525f3de872a083f475ba45d02a9a368f105521
+      sha256: "02d013ff8ec578450ff822050822ddf02b6ce5edd779561dbcad72b2d58ab2ae"
       url: "https://pub.dev"
     source: hosted
-    version: "9.11.0"
+    version: "9.12.0"
   realtime_client:
     dependency: transitive
     description:
@@ -908,10 +908,10 @@ packages:
     dependency: transitive
     description:
       name: record_android
-      sha256: "3bb3c6abbcb5fc1e86719fc6f0acdee89dfe8078543b92caad11854c487e435a"
+      sha256: "94783f08403aed33ffb68797bf0715b0812eb852f3c7985644c945faea462ba1"
       url: "https://pub.dev"
     source: hosted
-    version: "1.5.0"
+    version: "1.5.1"
   record_ios:
     dependency: transitive
     description:
@@ -932,10 +932,10 @@ packages:
     dependency: transitive
     description:
       name: record_macos
-      sha256: f04d1547ff61ae54b4154e9726f656a17ad993f1a90f8f44bc40de94bafa072f
+      sha256: "084902e63fc9c0c224c29203d6c75f0bdf9b6a40536c9d916393c8f4c4256488"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.0"
+    version: "1.2.1"
   record_platform_interface:
     dependency: transitive
     description:
@@ -1113,10 +1113,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "19a78f63e83d3a61f00826d09bc2f60e191bf3504183c001262be6ac75589fb8"
+      sha256: "93167629bfc610f71560ab9312acdda4959de4df6fac7492c89ff0d3886f6636"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.8"
+    version: "0.7.9"
   timezone:
     dependency: "direct main"
     description:
@@ -1161,10 +1161,10 @@ packages:
     dependency: transitive
     description:
       name: url_launcher_ios
-      sha256: b1aca26728b7cc7a3af971bb6f601554a8ae9df2e0a006de8450ba06a17ad36a
+      sha256: "580fe5dfb51671ae38191d316e027f6b76272b026370708c2d898799750a02b0"
       url: "https://pub.dev"
     source: hosted
-    version: "6.4.0"
+    version: "6.4.1"
   url_launcher_linux:
     dependency: transitive
     description:

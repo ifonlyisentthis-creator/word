@@ -29,6 +29,8 @@ class PushService {
 
   bool _initialized = false;
   String? _currentUserId;
+  DateTime? _lastTokenAttempt;
+  static const Duration _tokenCooldown = Duration(seconds: 60);
 
   Future<void> initialize() async {
     if (!_isSupportedPlatform()) return;
@@ -87,6 +89,15 @@ class PushService {
     if (!_isSupportedPlatform()) return;
     _currentUserId = userId;
     await initialize();
+
+    // Debounce: skip if we already tried within the cooldown window.
+    // Prevents retry spam when FIS_AUTH_ERROR keeps failing.
+    final now = DateTime.now();
+    if (_lastTokenAttempt != null &&
+        now.difference(_lastTokenAttempt!) < _tokenCooldown) {
+      return;
+    }
+    _lastTokenAttempt = now;
 
     try {
       final token = await _messaging.getToken();
