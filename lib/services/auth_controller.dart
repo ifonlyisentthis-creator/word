@@ -140,13 +140,14 @@ class AuthController extends ChangeNotifier {
       _signingOut = false;
       await _pushService.onSignIn(_user!.id);
       await _revenueCatController.logIn(_user!.id);
-    } else if (hadUser) {
-      // Only log out if we previously had a signed-in user.
-      // Avoids "Called logOut but the current user is anonymous" on startup.
+    } else if (hadUser && !_signingOut) {
+      // Only log out if we previously had a signed-in user AND signOut()
+      // hasn't already handled cleanup. signOut() sets _signingOut = true
+      // before calling auth.signOut(), which triggers this listener.
       await _pushService.onSignOut();
       await _revenueCatController.logOut();
-      _signingOut = false;
     }
+    if (_user == null) _signingOut = false;
     notifyListeners();
   }
 

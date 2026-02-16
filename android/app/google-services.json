@@ -1,27 +1,36 @@
 {
   "project_info": {
-    "project_number": "443596629909",
-    "firebase_url": "https://clubmiths-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "project_id": "clubmiths",
-    "storage_bucket": "clubmiths.appspot.com"
+    "project_number": "394982150671",
+    "project_id": "neural-myth-430012-h3",
+    "storage_bucket": "neural-myth-430012-h3.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:443596629909:android:3dc6a6db92c9884315789c",
+        "mobilesdk_app_id": "1:394982150671:android:530da0ea96d3bab3dec97a",
         "android_client_info": {
           "package_name": "com.afterword.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "394982150671-qcapj1t19e19p4bunm448t5cf51lp8m9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyAzKZpsNuP3iE3sgVSHShPdiyezz0KBcQg"
+          "current_key": "AIzaSyDAqme05RQI-huSV6f-Oi2AH42Z9RTpDRA"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "394982150671-qcapj1t19e19p4bunm448t5cf51lp8m9.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

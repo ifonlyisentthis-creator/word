@@ -28,6 +28,7 @@ class PushService {
   StreamSubscription<String>? _tokenRefreshSubscription;
 
   bool _initialized = false;
+  bool _initializing = false;
   String? _currentUserId;
   DateTime? _lastTokenAttempt;
   static const Duration _tokenCooldown = Duration(seconds: 60);
@@ -35,54 +36,65 @@ class PushService {
   Future<void> initialize() async {
     if (!_isSupportedPlatform()) return;
     if (_initialized) return;
+    if (_initializing) return;
+    _initializing = true;
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const settings = InitializationSettings(android: androidSettings);
-    await _localNotifications.initialize(settings: settings);
+    try {
+      debugPrint('[PUSH] Initializing PushService...');
 
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const settings = InitializationSettings(android: androidSettings);
+      await _localNotifications.initialize(settings: settings);
 
-    await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
 
-    _onMessageSubscription = FirebaseMessaging.onMessage.listen(
-      (message) async {
-        final notification = message.notification;
-        if (notification == null) return;
+      final authStatus = await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      debugPrint('[PUSH] FCM permission: ${authStatus.authorizationStatus}');
 
-        const androidDetails = AndroidNotificationDetails(
-          'afterword_push',
-          'Afterword alerts',
-          channelDescription: 'Remote notifications from Afterword.',
-          importance: Importance.high,
-          priority: Priority.high,
-        );
+      _onMessageSubscription = FirebaseMessaging.onMessage.listen(
+        (message) async {
+          final notification = message.notification;
+          if (notification == null) return;
 
-        await _localNotifications.show(
-          id: notification.hashCode,
-          title: notification.title,
-          body: notification.body,
-          notificationDetails: const NotificationDetails(android: androidDetails),
-        );
-      },
-    );
+          const androidDetails = AndroidNotificationDetails(
+            'afterword_push',
+            'Afterword alerts',
+            channelDescription: 'Remote notifications from Afterword.',
+            importance: Importance.high,
+            priority: Priority.high,
+          );
 
-    _tokenRefreshSubscription = _messaging.onTokenRefresh.listen(
-      (token) async {
-        await _storage.write(key: _tokenStorageKey, value: token);
-        if (_currentUserId != null) {
-          await _upsertToken(userId: _currentUserId!, token: token);
-        }
-      },
-    );
+          await _localNotifications.show(
+            id: notification.hashCode,
+            title: notification.title,
+            body: notification.body,
+            notificationDetails: const NotificationDetails(android: androidDetails),
+          );
+        },
+      );
 
-    _initialized = true;
+      _tokenRefreshSubscription = _messaging.onTokenRefresh.listen(
+        (token) async {
+          debugPrint('[PUSH] Token refreshed');
+          await _storage.write(key: _tokenStorageKey, value: token);
+          if (_currentUserId != null) {
+            await _upsertToken(userId: _currentUserId!, token: token);
+          }
+        },
+      );
+
+      _initialized = true;
+      debugPrint('[PUSH] Initialized successfully');
+    } finally {
+      _initializing = false;
+    }
   }
 
   Future<void> onSignIn(String userId) async {
@@ -100,13 +112,19 @@ class PushService {
     _lastTokenAttempt = now;
 
     try {
+      debugPrint('[PUSH] Fetching FCM token for $userId...');
       final token = await _messaging.getToken();
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        debugPrint('[PUSH] FCM token was null/empty');
+        return;
+      }
 
+      debugPrint('[PUSH] FCM token obtained (${token.substring(0, 12)}...)');
       await _storage.write(key: _tokenStorageKey, value: token);
       await _upsertToken(userId: userId, token: token);
+      debugPrint('[PUSH] Token registered in push_devices');
     } catch (e) {
-      debugPrint('PushService.onSignIn: FCM token fetch failed: $e');
+      debugPrint('[PUSH] FCM token fetch failed: $e');
     }
   }
 
