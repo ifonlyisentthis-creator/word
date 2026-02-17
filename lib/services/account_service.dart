@@ -23,5 +23,6 @@ class AccountService {
     await _client.from('profiles').delete().eq('id', userId);
     await _deviceSecretService.clearHmacKey(userId: userId);
     await _deviceSecretService.clearDeviceWrappingKey(userId: userId);
+    await _deviceSecretService.clearMnemonic(userId: userId);
   }
 }

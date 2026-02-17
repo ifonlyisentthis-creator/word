@@ -86,6 +86,8 @@ dependencies:
 
   crypto: ^3.0.3
 
+  bip39: ^1.0.6
+
   cryptography: ^2.7.0
 
   purchases_flutter: ^9.10.7

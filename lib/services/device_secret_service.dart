@@ -39,6 +39,10 @@ class DeviceSecretService {
     return key;
   }
 
+  Future<void> storeHmacKey({required String userId, required List<int> bytes}) async {
+    await _storage.write(key: _hmacKeyFor(userId), value: base64.encode(bytes));
+  }
+
   Future<void> clearHmacKey({required String userId}) async {
     await _storage.delete(key: _hmacKeyFor(userId));
   }
@@ -63,7 +67,26 @@ class DeviceSecretService {
     return key;
   }
 
+  Future<void> storeDeviceWrappingKey({required String userId, required List<int> bytes}) async {
+    await _storage.write(key: _deviceKeyFor(userId), value: base64.encode(bytes));
+  }
+
   Future<void> clearDeviceWrappingKey({required String userId}) async {
     await _storage.delete(key: _deviceKeyFor(userId));
+  }
+
+  static const String _mnemonicPrefix = 'afterword_recovery_phrase';
+  String _mnemonicKeyFor(String userId) => '${_mnemonicPrefix}_$userId';
+
+  Future<String?> readMnemonic({required String userId}) async {
+    return _storage.read(key: _mnemonicKeyFor(userId));
+  }
+
+  Future<void> storeMnemonic({required String userId, required String mnemonic}) async {
+    await _storage.write(key: _mnemonicKeyFor(userId), value: mnemonic);
+  }
+
+  Future<void> clearMnemonic({required String userId}) async {
+    await _storage.delete(key: _mnemonicKeyFor(userId));
   }
 }
