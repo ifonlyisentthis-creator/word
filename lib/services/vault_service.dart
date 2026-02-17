@@ -70,9 +70,9 @@ class VaultService {
   }
 
   Future<VaultEntryPayload> decryptEntry(VaultEntry entry) async {
-    final hmacKey = await _deviceSecretService.loadOrCreateHmacKey();
+    final hmacKey = await _deviceSecretService.loadOrCreateHmacKey(userId: entry.userId);
     final deviceWrappingKey =
-        await _deviceSecretService.loadOrCreateDeviceWrappingKey();
+        await _deviceSecretService.loadOrCreateDeviceWrappingKey(userId: entry.userId);
 
     final dataKey = await _decryptMetadataKey(
       entry.dataKeyEncrypted,
@@ -119,9 +119,9 @@ class VaultService {
     final dataKey = await _cryptoService.generateDataKey();
     final payloadEncrypted =
         await _cryptoService.encryptText(draft.plaintext.trim(), dataKey);
-    final hmacKey = await _deviceSecretService.loadOrCreateHmacKey();
+    final hmacKey = await _deviceSecretService.loadOrCreateHmacKey(userId: userId);
     final deviceWrappingKey =
-        await _deviceSecretService.loadOrCreateDeviceWrappingKey();
+        await _deviceSecretService.loadOrCreateDeviceWrappingKey(userId: userId);
 
     final recipientEncrypted = recipient == null
         ? null
@@ -177,9 +177,9 @@ class VaultService {
     String? audioFilePath = entry.audioFilePath;
     int? audioDurationSeconds = entry.audioDurationSeconds;
 
-    final hmacKey = await _deviceSecretService.loadOrCreateHmacKey();
+    final hmacKey = await _deviceSecretService.loadOrCreateHmacKey(userId: entry.userId);
     final deviceWrappingKey =
-        await _deviceSecretService.loadOrCreateDeviceWrappingKey();
+        await _deviceSecretService.loadOrCreateDeviceWrappingKey(userId: entry.userId);
 
     final SecretKey dataKey;
     final String dataKeyEncrypted;
@@ -283,9 +283,9 @@ class VaultService {
     final encryptedBytes =
         await _client.storage.from(_audioBucket).download(audioPath);
     final encryptedPayload = utf8.decode(encryptedBytes);
-    final hmacKey = await _deviceSecretService.loadOrCreateHmacKey();
+    final hmacKey = await _deviceSecretService.loadOrCreateHmacKey(userId: entry.userId);
     final deviceWrappingKey =
-        await _deviceSecretService.loadOrCreateDeviceWrappingKey();
+        await _deviceSecretService.loadOrCreateDeviceWrappingKey(userId: entry.userId);
     final dataKey = await _decryptMetadataKey(
       entry.dataKeyEncrypted,
       hmacKey: hmacKey,

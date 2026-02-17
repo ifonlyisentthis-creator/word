@@ -21,7 +21,7 @@ class AccountService {
     await _client.from('vault_entry_tombstones').delete().eq('user_id', userId);
     await _client.from('push_devices').delete().eq('user_id', userId);
     await _client.from('profiles').delete().eq('id', userId);
-    await _deviceSecretService.clearHmacKey();
-    await _deviceSecretService.clearDeviceWrappingKey();
+    await _deviceSecretService.clearHmacKey(userId: userId);
+    await _deviceSecretService.clearDeviceWrappingKey(userId: userId);
   }
 }
