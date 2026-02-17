@@ -886,6 +886,7 @@ def cleanup_sent_entries(client) -> None:
                     "warning_sent_at": None,
                     "push_66_sent_at": None,
                     "push_33_sent_at": None,
+                    "last_entry_at": None,
                 }).eq("id", uid).execute()
                 print(f"User {uid}: grace period ended, account reset to fresh state")
         except Exception:  # noqa: BLE001
@@ -1267,6 +1268,7 @@ def main() -> int:
                     "warning_sent_at": None,
                     "push_66_sent_at": None,
                     "push_33_sent_at": None,
+                    "last_entry_at": None,
                 }).eq("id", user_id).execute()
                 print(f"User {user_id}: protocol executed, grace period started")
 
