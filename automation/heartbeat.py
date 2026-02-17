@@ -12,6 +12,8 @@ import os
 
 import sys
 
+import time
+
 from datetime import datetime, timedelta, timezone
 
 
@@ -390,8 +392,11 @@ def _send_push_to_user(
     title: str,
     body: str,
     data: dict[str, str] | None = None,
-) -> None:
-    """Send a push notification to all devices for a user."""
+) -> bool:
+    """Send a push notification to all devices for a user.
+
+    Returns True if at least one push was successfully delivered.
+    """
     tokens_response = (
         client.table("push_devices")
         .select("fcm_token")
@@ -401,8 +406,10 @@ def _send_push_to_user(
     rows = tokens_response.data or []
     tokens = [row.get("fcm_token") for row in rows if row.get("fcm_token")]
     if not tokens:
-        return
+        print(f"No FCM tokens for user {user_id}, push skipped")
+        return False
 
+    sent = False
     for token in tokens:
         response = send_push_v1(
             project_id=fcm_ctx["project_id"],
@@ -421,6 +428,9 @@ def _send_push_to_user(
                 client.table("push_devices").delete().eq("fcm_token", token).execute()
                 continue
             print(f"Push failed for user {user_id}: {response.status_code} {text}")
+            continue
+        sent = True
+    return sent
 
 
 def send_warning_push(
@@ -429,11 +439,12 @@ def send_warning_push(
     sender_name: str,
     deadline: datetime,
     fcm_ctx: dict | None,
-) -> None:
+) -> bool:
+    """Returns True if push was actually delivered to at least one device."""
     if fcm_ctx is None:
-        return
+        return False
     deadline_text = deadline.strftime("%b %d, %Y")
-    _send_push_to_user(
+    return _send_push_to_user(
         client, user_id, fcm_ctx,
         title="Afterword warning",
         body=f"Hi {sender_name}, your timer expires on {deadline_text}. Open Afterword to check in.",
@@ -450,11 +461,12 @@ def send_executed_push(
     entry_id: str,
     entry_title: str,
     fcm_ctx: dict | None,
-) -> None:
+) -> bool:
+    """Returns True if push was actually delivered to at least one device."""
     if fcm_ctx is None:
-        return
+        return False
     safe_title = entry_title or "Untitled"
-    _send_push_to_user(
+    return _send_push_to_user(
         client, user_id, fcm_ctx,
         title="Afterword executed",
         body=f"Your entry '{safe_title}' was sent.",
@@ -1264,9 +1276,11 @@ def main() -> int:
 
             if not already_sent_66:
 
+                push_sent = False
+
                 try:
 
-                    send_warning_push(
+                    push_sent = send_warning_push(
 
                         client, user_id, sender_name, deadline, fcm_ctx,
 
@@ -1276,11 +1290,13 @@ def main() -> int:
 
                     print(f"Push 66% warning failed for user {user_id}: {exc}")
 
-                client.table("profiles").update(
+                if push_sent:
 
-                    {"push_66_sent_at": now.isoformat()}
+                    client.table("profiles").update(
 
-                ).eq("id", user_id).execute()
+                        {"push_66_sent_at": now.isoformat()}
+
+                    ).eq("id", user_id).execute()
 
 
 
@@ -1298,9 +1314,11 @@ def main() -> int:
 
             if not already_sent_33:
 
+                push_sent = False
+
                 try:
 
-                    send_warning_push(
+                    push_sent = send_warning_push(
 
                         client, user_id, sender_name, deadline, fcm_ctx,
 
@@ -1310,11 +1328,13 @@ def main() -> int:
 
                     print(f"Push 33% warning failed for user {user_id}: {exc}")
 
-                client.table("profiles").update(
+                if push_sent:
 
-                    {"push_33_sent_at": now.isoformat()}
+                    client.table("profiles").update(
 
-                ).eq("id", user_id).execute()
+                        {"push_33_sent_at": now.isoformat()}
+
+                    ).eq("id", user_id).execute()
 
 
 
@@ -1365,13 +1385,31 @@ def main() -> int:
 
 if __name__ == "__main__":
 
-    try:
+    _RETRY_DELAYS = [15, 45]
 
-        sys.exit(main())
+    for _attempt in range(3):
 
-    except Exception as exc:  # noqa: BLE001
+        try:
 
-        print(f"Heartbeat failed: {exc}")
+            sys.exit(main())
 
-        sys.exit(1)
+        except Exception as exc:  # noqa: BLE001
+
+            _err = str(exc)
+
+            _transient = any(
+                c in _err for c in ("500", "502", "503", "504", "ConnectionError", "Timeout")
+            )
+
+            if _transient and _attempt < 2:
+
+                print(f"Transient error (attempt {_attempt + 1}/3), retrying in {_RETRY_DELAYS[_attempt]}s: {exc}")
+
+                time.sleep(_RETRY_DELAYS[_attempt])
+
+            else:
+
+                print(f"Heartbeat failed: {exc}")
+
+                sys.exit(1)
 
