@@ -156,13 +156,13 @@ class HomeController extends ChangeNotifier {
 
       _errorMessage = null;
 
+      await _fetchVaultEntryStatus();
+
       if (ensured.status.toLowerCase() == 'active') {
 
         await _scheduleReminders();
 
       }
-
-      await _fetchVaultEntryStatus();
 
     } catch (error) {
 
@@ -438,10 +438,14 @@ class HomeController extends ChangeNotifier {
 
     final profile = _profile;
 
-    if (profile == null || profile.status.toLowerCase() != 'active') return;
+    if (profile == null || profile.status.toLowerCase() != 'active') {
+      if (kDebugMode) debugPrint('[NOTIF] Skipped: profile null or not active');
+      return;
+    }
 
     // No notifications if vault is empty — timer has no effect
     if (!_hasVaultEntries) {
+      if (kDebugMode) debugPrint('[NOTIF] Vault empty, cancelling notifications');
       if (_notificationsReady) {
         try { await _notificationService.cancelAll(); } catch (_) {}
       }
@@ -458,6 +462,12 @@ class HomeController extends ChangeNotifier {
 
     try {
 
+      if (kDebugMode) {
+        debugPrint('[NOTIF] Scheduling: lastCheckIn=${profile.lastCheckIn}, '
+            'timerDays=${profile.timerDays}, '
+            'push66=${profile.push66SentAt}, push33=${profile.push33SentAt}');
+      }
+
       await _notificationService.scheduleCheckInReminders(
 
         profile.lastCheckIn,
@@ -470,7 +480,11 @@ class HomeController extends ChangeNotifier {
 
       );
 
-    } catch (_) {
+      if (kDebugMode) debugPrint('[NOTIF] Reminders scheduled successfully');
+
+    } catch (e) {
+
+      if (kDebugMode) debugPrint('[NOTIF] Schedule failed: $e');
 
       _notificationsReady = false;
 
@@ -491,6 +505,7 @@ class HomeController extends ChangeNotifier {
       final list = rows as List;
       _hasVaultEntries = list.isNotEmpty;
       _vaultEntryCount = list.length;
+      if (kDebugMode) debugPrint('[NOTIF] Vault entries: $_vaultEntryCount, hasEntries=$_hasVaultEntries');
     } catch (_) {
       // Best-effort; leave current value.
     }
