@@ -9,9 +9,11 @@ class MyVaultPage extends StatelessWidget {
   const MyVaultPage({
     super.key,
     required this.userId,
+    this.readOnly = false,
   });
 
   final String userId;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +39,7 @@ class MyVaultPage extends StatelessWidget {
                   userId: userId,
                   isPro: isPro,
                   isLifetime: isLifetime,
-                  readOnly: false,
+                  readOnly: readOnly,
                 ),
               ],
             ),

@@ -116,16 +116,25 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                         TextField(
                           controller: _senderController,
                           textInputAction: TextInputAction.done,
+                          enabled: !controller.isInGracePeriod,
                           decoration: const InputDecoration(
                             hintText: 'Sender name',
                             filled: true,
                           ),
                         ),
                         const SizedBox(height: 12),
+                        if (controller.isInGracePeriod) ...[
+                          Text(
+                            'Editing disabled during grace period.',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: Colors.white38, fontSize: 11),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
-                            onPressed: _isLoading || !_senderDirty
+                            onPressed: _isLoading || !_senderDirty || controller.isInGracePeriod
                                 ? null
                                 : () async {
                                     setState(() {

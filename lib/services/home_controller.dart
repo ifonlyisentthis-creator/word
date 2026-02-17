@@ -533,14 +533,17 @@ class HomeController extends ChangeNotifier {
   void _setProtocolState(Profile profile) {
 
     final status = profile.status.toLowerCase();
+    final executed = profile.protocolExecutedAt;
 
-    if (status == 'inactive' || status == 'archived') {
+    // Grace period requires BOTH: protocol_executed_at timestamp set
+    // AND status inactive/archived (entries were sent to beneficiaries).
+    if (executed != null && (status == 'inactive' || status == 'archived')) {
 
-      _protocolExecutedAt = profile.protocolExecutedAt ?? profile.deadline;
+      _protocolExecutedAt = executed;
 
       _isInGracePeriod = true;
 
-      _graceEndDate = _protocolExecutedAt!.add(const Duration(days: 30));
+      _graceEndDate = executed.add(const Duration(days: 30));
 
     } else {
 

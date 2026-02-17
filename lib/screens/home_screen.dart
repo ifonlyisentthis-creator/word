@@ -161,6 +161,7 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final errorColor = theme.colorScheme.error;
+    final onSurface = theme.colorScheme.onSurface;
 
     final executedLabel = widget.executedAt != null
         ? widget.dateFormat.format(widget.executedAt!.toLocal())
@@ -177,12 +178,23 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
     final minutes = remaining.inMinutes.remainder(60);
 
     final countdownText = remaining == Duration.zero
-        ? 'Cleanup in progress...'
+        ? 'Cleanup in progress\u2026'
         : days > 0
             ? '${days}d ${hours}h remaining'
             : hours > 0
                 ? '${hours}h ${minutes}m remaining'
                 : '${minutes}m remaining';
+
+    // Progress: 0 = just executed, 1 = grace fully elapsed
+    double progressValue = 1.0;
+    if (widget.graceEndDate != null && widget.executedAt != null) {
+      final totalSec =
+          widget.graceEndDate!.difference(widget.executedAt!).inSeconds;
+      if (totalSec > 0) {
+        progressValue =
+            (1.0 - remaining.inSeconds / totalSec).clamp(0.0, 1.0);
+      }
+    }
 
     return _SurfaceCard(
       child: Container(
@@ -191,7 +203,7 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              errorColor.withValues(alpha: 0.12),
+              errorColor.withValues(alpha: 0.10),
               Colors.transparent,
             ],
           ),
@@ -215,12 +227,15 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
                   children: [
                     Icon(Icons.warning_amber_rounded, size: 14, color: errorColor),
                     const SizedBox(width: 6),
-                    Text(
-                      'GRACE PERIOD',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: errorColor,
-                        letterSpacing: 1.6,
-                        fontWeight: FontWeight.w700,
+                    Flexible(
+                      child: Text(
+                        'GRACE PERIOD',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: errorColor,
+                          letterSpacing: 1.6,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -235,18 +250,15 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
                   fontWeight: FontWeight.w600,
                   color: errorColor,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(
-                  value: widget.graceEndDate != null && widget.executedAt != null
-                      ? (1.0 - remaining.inSeconds /
-                          (widget.graceEndDate!.difference(widget.executedAt!).inSeconds.clamp(1, double.maxFinite.toInt())))
-                          .clamp(0.0, 1.0)
-                      : 1.0,
+                  value: progressValue,
                   minHeight: 6,
-                  backgroundColor: Colors.white12,
+                  backgroundColor: onSurface.withValues(alpha: 0.08),
                   valueColor: AlwaysStoppedAnimation<Color>(errorColor),
                 ),
               ),
@@ -257,7 +269,7 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
               Text(
                 'Protocol executed on $executedLabel',
                 style: theme.textTheme.titleSmall?.copyWith(
-                  color: Colors.white,
+                  color: onSurface,
                 ),
               ),
               const SizedBox(height: 8),
@@ -265,27 +277,28 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
                 'All vault entries have been delivered to your beneficiaries. '
                 'Your sent data will be permanently erased after 30 days.',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.white70,
+                  color: onSurface.withValues(alpha: 0.60),
                   height: 1.5,
                 ),
               ),
               const SizedBox(height: 16),
 
               // Divider
-              Divider(color: Colors.white12, height: 1),
+              Divider(color: onSurface.withValues(alpha: 0.08), height: 1),
               const SizedBox(height: 16),
 
               // Blocked features notice
               Row(
                 children: [
-                  Icon(Icons.lock_outline, size: 16, color: Colors.white38),
+                  Icon(Icons.lock_outline, size: 16,
+                      color: onSurface.withValues(alpha: 0.30)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'All features are disabled during the grace period. '
                       'Your account will automatically reset once cleanup completes.',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white38,
+                        color: onSurface.withValues(alpha: 0.30),
                         fontSize: 11,
                         height: 1.4,
                       ),
@@ -454,6 +467,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                 const SizedBox(height: 16),
 
+                // Grace period card (only when active)
                 if (isInGracePeriod) ...[
                   _GracePeriodCard(
                     executedAt: controller.protocolExecutedAt,
@@ -461,70 +475,86 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                     graceExpired: controller.graceExpired,
                     dateFormat: _dateFormat,
                   ),
-                ] else ...[
-                  RepaintBoundary(child: _TimerCard(
-                    profile: profile,
-                    dateFormat: _dateFormat,
-                    isLoading: controller.isLoading,
-                    errorMessage: controller.errorMessage,
-                    isPro: isPro,
-                    isLifetime: isLifetime,
-                    hasVaultEntries: controller.hasVaultEntries,
-                    onTimerChanged: (days) => controller.updateTimerDays(days),
-                  )),
-                  const SizedBox(height: 24),
-                  Center(
-                    child: RepaintBoundary(child: SoulFireButton(
-                      styleId: context.watch<ThemeProvider>().soulFireId,
-                      enabled: !controller.isLoading && profile != null,
-                      onConfirmed: () async {
-                        final success = await controller.manualCheckIn();
-                        if (!context.mounted) return;
-                        if (success) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Signal verified.')),
-                          );
-                        }
-                      },
-                    )),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      'Hold to verify your signal',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Colors.white60, letterSpacing: 1.1),
+                  const SizedBox(height: 20),
+                ],
+
+                // Timer, Soul Fire, Vault — greyed out & non-interactive during grace
+                IgnorePointer(
+                  ignoring: isInGracePeriod,
+                  child: AnimatedOpacity(
+                    opacity: isInGracePeriod ? 0.28 : 1.0,
+                    duration: const Duration(milliseconds: 350),
+                    child: Column(
+                      children: [
+                        RepaintBoundary(child: _TimerCard(
+                          profile: profile,
+                          dateFormat: _dateFormat,
+                          isLoading: controller.isLoading,
+                          errorMessage: controller.errorMessage,
+                          isPro: isPro,
+                          isLifetime: isLifetime,
+                          hasVaultEntries: controller.hasVaultEntries,
+                          onTimerChanged: (days) => controller.updateTimerDays(days),
+                        )),
+                        const SizedBox(height: 24),
+                        Center(
+                          child: RepaintBoundary(child: SoulFireButton(
+                            styleId: context.watch<ThemeProvider>().soulFireId,
+                            enabled: !isInGracePeriod && !controller.isLoading && profile != null,
+                            onConfirmed: () async {
+                              final success = await controller.manualCheckIn();
+                              if (!context.mounted) return;
+                              if (success) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Signal verified.')),
+                                );
+                              }
+                            },
+                          )),
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Text(
+                            'Hold to verify your signal',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.white60, letterSpacing: 1.1),
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        RepaintBoundary(child: _VaultSummaryCard(
+                          entryCount: controller.vaultEntryCount,
+                          isLoading: controller.isLoading,
+                          onViewAll: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => MyVaultPage(
+                                userId: widget.userId,
+                                readOnly: isInGracePeriod,
+                              )),
+                            ).then((_) {
+                              if (context.mounted) {
+                                context.read<HomeController>().refreshVaultStatus();
+                              }
+                            });
+                          },
+                          onAdd: () async {
+                            final created = await openVaultEntryEditor(
+                              context,
+                              userId: widget.userId,
+                              isPro: isPro,
+                              isLifetime: isLifetime,
+                            );
+                            if (created && context.mounted) {
+                              context.read<HomeController>().refreshVaultStatus();
+                            }
+                          },
+                        )),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  RepaintBoundary(child: _VaultSummaryCard(
-                    entryCount: controller.vaultEntryCount,
-                    isLoading: controller.isLoading,
-                    onViewAll: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => MyVaultPage(userId: widget.userId)),
-                      ).then((_) {
-                        if (context.mounted) {
-                          context.read<HomeController>().refreshVaultStatus();
-                        }
-                      });
-                    },
-                    onAdd: () async {
-                      final created = await openVaultEntryEditor(
-                        context,
-                        userId: widget.userId,
-                        isPro: isPro,
-                        isLifetime: isLifetime,
-                      );
-                      if (created && context.mounted) {
-                        context.read<HomeController>().refreshVaultStatus();
-                      }
-                    },
-                  )),
-                ],
+                ),
 
               ],
 

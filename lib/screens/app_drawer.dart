@@ -145,10 +145,14 @@ class AppDrawer extends StatelessWidget {
                     icon: Icons.note_outlined,
                     label: 'My Vault',
                     onTap: () {
+                      final grace = homeController.isInGracePeriod;
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => MyVaultPage(userId: userId)),
+                        MaterialPageRoute(builder: (_) => MyVaultPage(
+                          userId: userId,
+                          readOnly: grace,
+                        )),
                       );
                     },
                   ),
