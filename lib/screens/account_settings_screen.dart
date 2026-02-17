@@ -453,10 +453,30 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       // Check if mnemonic already exists locally
       var mnemonic = await _keyBackupService.getStoredMnemonic(userId);
 
-      if (mnemonic == null || mnemonic.isEmpty) {
-        // No local mnemonic — create a new backup
-        mnemonic = await _keyBackupService.createBackup(userId);
+      if (mnemonic != null && mnemonic.isNotEmpty) {
+        // Mnemonic exists locally — just show it
+        if (!context.mounted) return;
+        _showRecoveryPhrase(context, mnemonic);
+        return;
       }
+
+      // No local mnemonic — check if a backup already exists on the server
+      // (e.g. app was reinstalled). If so, warn before overwriting.
+      final hasExisting = await _keyBackupService.hasServerBackup(userId);
+      if (hasExisting && context.mounted) {
+        final action = await _showBackupExistsDialog(context);
+        if (!context.mounted) return;
+        if (action == _BackupAction.restore) {
+          _handleRestore(context);
+          return;
+        }
+        if (action != _BackupAction.createNew) {
+          return; // cancelled
+        }
+      }
+
+      // Create a new backup
+      mnemonic = await _keyBackupService.createBackup(userId);
 
       if (!context.mounted) return;
       _showRecoveryPhrase(context, mnemonic);
@@ -468,6 +488,34 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     } finally {
       if (mounted) setState(() => _backupBusy = false);
     }
+  }
+
+  Future<_BackupAction?> _showBackupExistsDialog(BuildContext context) {
+    return showDialog<_BackupAction>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Backup already exists'),
+        content: const Text(
+          'A recovery phrase backup already exists for this account. '
+          'If you lost your 12 words, use "Restore" to recover your old keys first.\n\n'
+          'Creating a new backup will permanently invalidate your previous recovery phrase.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context, _BackupAction.restore),
+            child: const Text('Restore Instead'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, _BackupAction.createNew),
+            child: const Text('Create New'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showRecoveryPhrase(BuildContext context, String mnemonic) {
@@ -611,8 +659,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                       Expanded(
                         child: Text(
                           'This will replace your current encryption keys. '
-                          'Any vault entries created on this device will become '
-                          'permanently unreadable.',
+                          'Any vault entries created on this device before restoring '
+                          'will become permanently unreadable and will not be sent '
+                          'to your beneficiaries.',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
@@ -680,6 +729,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     }
   }
 }
+
+enum _BackupAction { restore, createNew }
 
 class _Card extends StatelessWidget {
   const _Card({required this.child});
