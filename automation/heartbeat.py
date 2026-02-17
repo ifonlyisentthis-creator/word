@@ -461,15 +461,18 @@ def send_executed_push(
     entry_id: str,
     entry_title: str,
     fcm_ctx: dict | None,
+    *,
+    action: str = "send",
 ) -> bool:
     """Returns True if push was actually delivered to at least one device."""
     if fcm_ctx is None:
         return False
     safe_title = entry_title or "Untitled"
+    verb = "destroyed" if action == "destroy" else "sent"
     return _send_push_to_user(
         client, user_id, fcm_ctx,
         title="Afterword executed",
-        body=f"Your entry '{safe_title}' was sent.",
+        body=f"Your entry '{safe_title}' was {verb}.",
         data={"type": "executed", "entry_id": entry_id},
     )
 
@@ -649,7 +652,11 @@ def process_expired_entries(
 
     now: datetime,
 
-) -> None:
+) -> bool:
+    """Process expired vault entries. Returns True if any 'send' entries were
+    processed (grace period needed), False if all entries were destroy-only."""
+
+    had_send = False
 
     sender_name = profile.get("sender_name") or "Afterword"
 
@@ -678,6 +685,20 @@ def process_expired_entries(
             action = (entry.get("action_type") or "send").lower()
 
             if action == "destroy":
+
+                entry_title = entry.get("title") or "Untitled"
+
+                try:
+                    send_executed_push(
+                        client,
+                        profile["id"],
+                        entry_id,
+                        entry_title,
+                        fcm_ctx,
+                        action="destroy",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
 
                 delete_entry(client, entry)
 
@@ -769,6 +790,8 @@ def process_expired_entries(
 
 
 
+            had_send = True
+
             client.table("vault_entries").update(
 
                 {"status": "sent", "sent_at": now.isoformat()}
@@ -807,6 +830,7 @@ def process_expired_entries(
 
             print(f"Failed to process entry {entry_id}: {exc}")
 
+    return had_send
 
 
 
@@ -899,19 +923,21 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
     An account is considered a bot / abandoned if ALL of the following are true:
       - created_at is older than 90 days
       - last_check_in == created_at (never used Soul Fire — timer never reset)
+      - had_vault_activity is false (never had entries processed)
       - no vault_entries exist (never created a vault)
       - no vault_entry_tombstones exist (never had executed entries)
       - status is 'active' (not already archived from a prior protocol execution)
 
-    Real users who interacted (Soul Fire, vaults) are never touched.
-    Users whose timer expired and data was deleted have tombstones → safe.
+    Real users who interacted (Soul Fire, vaults, themes) are never touched.
+    Users whose timer expired with 'send' entries have tombstones → safe.
+    Users whose timer expired with 'destroy' entries have had_vault_activity → safe.
     """
     cutoff = (now - timedelta(days=90)).isoformat()
 
     # Find candidate profiles: created > 90 days ago, never checked in after creation
     candidates = fetch_all_rows(
         client.table("profiles")
-        .select("id,email,created_at,last_check_in")
+        .select("id,email,created_at,last_check_in,had_vault_activity")
         .eq("status", "active")
         .lt("created_at", cutoff)
     )
@@ -928,6 +954,10 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
         # If user ever checked in after account creation, they're real
         # Allow 60 second tolerance for the initial check-in set at creation
         if abs((last_check_in - created_at).total_seconds()) > 60:
+            continue
+
+        # If user ever had vault entries processed (destroy or send), they're real
+        if profile.get("had_vault_activity"):
             continue
 
         # Check if they ever had any vault entries
@@ -1225,7 +1255,7 @@ def main() -> int:
                 # User stays active; timer just sits expired until they add entries.
                 continue
 
-            process_expired_entries(
+            had_send = process_expired_entries(
 
                 client,
 
@@ -1247,6 +1277,14 @@ def main() -> int:
 
             )
 
+            # Mark user as having had vault activity (prevents bot auto-deletion)
+            try:
+                client.table("profiles").update({
+                    "had_vault_activity": True,
+                }).eq("id", user_id).execute()
+            except Exception:  # noqa: BLE001
+                pass
+
             # Check if any entries still need processing (failed during this run)
             pending = (
                 client.table("vault_entries")
@@ -1259,8 +1297,8 @@ def main() -> int:
 
             if has_pending:
                 print(f"User {user_id}: {pending.count} entries still pending, keeping active for retry")
-            else:
-                # All entries processed — enter grace period
+            elif had_send:
+                # Send entries exist → enter grace period (beneficiary can download)
                 client.table("profiles").update({
                     "status": "inactive",
                     "timer_days": 30,
@@ -1271,6 +1309,19 @@ def main() -> int:
                     "last_entry_at": None,
                 }).eq("id", user_id).execute()
                 print(f"User {user_id}: protocol executed, grace period started")
+            else:
+                # Destroy-only → no grace needed, reset to fresh immediately
+                client.table("profiles").update({
+                    "status": "active",
+                    "timer_days": 30,
+                    "last_check_in": now.isoformat(),
+                    "protocol_executed_at": None,
+                    "warning_sent_at": None,
+                    "push_66_sent_at": None,
+                    "push_33_sent_at": None,
+                    "last_entry_at": None,
+                }).eq("id", user_id).execute()
+                print(f"User {user_id}: destroy-only vault cleared, account reset to fresh")
 
             continue
 
