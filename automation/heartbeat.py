@@ -1237,18 +1237,29 @@ def main() -> int:
 
             )
 
-            # After vault release, reset timer to default 30 days
-            # Custom timer only persists while user is actively checking in
-            client.table("profiles").update({
-                "timer_days": 30,
-                "warning_sent_at": None,
-                "push_66_sent_at": None,
-                "push_33_sent_at": None,
-            }).eq("id", user_id).execute()
+            # Check if any entries still need processing (failed during this run)
+            pending = (
+                client.table("vault_entries")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .in_("status", ["active", "sending"])
+                .execute()
+            )
+            has_pending = (pending.count or 0) > 0
 
-            if (profile.get("status") or "").lower() != "archived":
+            if has_pending:
+                print(f"User {user_id}: {pending.count} entries still pending, keeping active for retry")
+            else:
+                # All entries processed — reset timer to default 30 days
+                client.table("profiles").update({
+                    "timer_days": 30,
+                    "warning_sent_at": None,
+                    "push_66_sent_at": None,
+                    "push_33_sent_at": None,
+                }).eq("id", user_id).execute()
 
-                mark_profile_status(client, user_id, "inactive")
+                if (profile.get("status") or "").lower() != "archived":
+                    mark_profile_status(client, user_id, "inactive")
 
             continue
 
