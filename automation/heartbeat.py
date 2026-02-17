@@ -868,7 +868,7 @@ def cleanup_sent_entries(client) -> None:
         except Exception:  # noqa: BLE001
             print(f"Failed to delete sent entry {entry.get('id', '?')}")
 
-    # Archive users with zero remaining entries
+    # Reset users with zero remaining entries to fresh active state
     for uid in user_ids:
         try:
             remaining = (
@@ -878,9 +878,18 @@ def cleanup_sent_entries(client) -> None:
                 .execute()
             )
             if (remaining.count or 0) == 0:
-                mark_profile_status(client, uid, "archived")
+                client.table("profiles").update({
+                    "status": "active",
+                    "timer_days": 30,
+                    "last_check_in": now_iso,
+                    "protocol_executed_at": None,
+                    "warning_sent_at": None,
+                    "push_66_sent_at": None,
+                    "push_33_sent_at": None,
+                }).eq("id", uid).execute()
+                print(f"User {uid}: grace period ended, account reset to fresh state")
         except Exception:  # noqa: BLE001
-            print(f"Failed to check/archive user {uid}")
+            print(f"Failed to check/reset user {uid}")
 
 
 def cleanup_bot_accounts(client, now: datetime) -> None:
@@ -1250,16 +1259,16 @@ def main() -> int:
             if has_pending:
                 print(f"User {user_id}: {pending.count} entries still pending, keeping active for retry")
             else:
-                # All entries processed — reset timer to default 30 days
+                # All entries processed — enter grace period
                 client.table("profiles").update({
+                    "status": "inactive",
                     "timer_days": 30,
+                    "protocol_executed_at": now.isoformat(),
                     "warning_sent_at": None,
                     "push_66_sent_at": None,
                     "push_33_sent_at": None,
                 }).eq("id", user_id).execute()
-
-                if (profile.get("status") or "").lower() != "archived":
-                    mark_profile_status(client, user_id, "inactive")
+                print(f"User {user_id}: protocol executed, grace period started")
 
             continue
 

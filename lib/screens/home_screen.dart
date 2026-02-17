@@ -123,178 +123,182 @@ class HomeScreen extends StatelessWidget {
 
 
 
-class _ProtocolBanner extends StatelessWidget {
-
-  const _ProtocolBanner({
-
-    required this.dateLabel,
-
-    required this.isArchived,
-
-    required this.isNoEntries,
-
+class _GracePeriodCard extends StatefulWidget {
+  const _GracePeriodCard({
+    required this.executedAt,
+    required this.graceEndDate,
+    required this.graceExpired,
+    required this.dateFormat,
   });
 
-
-
-  final String dateLabel;
-
-  final bool isArchived;
-
-  final bool isNoEntries;
-
-
+  final DateTime? executedAt;
+  final DateTime? graceEndDate;
+  final bool graceExpired;
+  final DateFormat dateFormat;
 
   @override
-
-  Widget build(BuildContext context) {
-
-    final theme = Theme.of(context);
-
-    final accentColor = isArchived
-
-        ? theme.colorScheme.error
-
-        : isNoEntries
-
-            ? theme.colorScheme.secondary
-
-            : theme.colorScheme.primary;
-
-    final title = isNoEntries
-
-        ? 'Protocol Executed · Vault Empty'
-
-        : isArchived
-
-            ? 'Protocol Executed'
-
-            : 'Protocol Executed · Messages Sent';
-
-    final message = isNoEntries
-
-        ? 'Protocol executed on $dateLabel. Your vault was empty, so nothing was sent.'
-
-        : isArchived
-
-            ? 'Protocol executed on $dateLabel. Data was permanently erased.'
-
-            : 'Protocol executed on $dateLabel. Sent items are read-only for 30 days.';
-
-    return Container(
-
-      decoration: BoxDecoration(
-
-        gradient: LinearGradient(
-
-          colors: [
-
-            accentColor.withValues(alpha: 0.16),
-
-            Colors.transparent,
-
-          ],
-
-        ),
-
-        borderRadius: BorderRadius.circular(20),
-
-        border: Border.all(color: accentColor.withValues(alpha: 0.35)),
-
-      ),
-
-      child: Padding(
-
-        padding: const EdgeInsets.all(16),
-
-        child: Row(
-
-          crossAxisAlignment: CrossAxisAlignment.start,
-
-          children: [
-
-            Container(
-
-              padding: const EdgeInsets.all(8),
-
-              decoration: BoxDecoration(
-
-                color: accentColor.withValues(alpha: 0.18),
-
-                shape: BoxShape.circle,
-
-              ),
-
-              child: Icon(Icons.shield_outlined, color: accentColor),
-
-            ),
-
-            const SizedBox(width: 12),
-
-            Expanded(
-
-              child: Column(
-
-                crossAxisAlignment: CrossAxisAlignment.start,
-
-                children: [
-
-                  Text(
-
-                    title,
-
-                    style: theme.textTheme.titleSmall?.copyWith(
-
-                      color: Colors.white,
-
-                    ),
-
-                  ),
-
-                  const SizedBox(height: 6),
-
-                  Text(
-
-                    message,
-
-                    style: theme.textTheme.bodySmall?.copyWith(
-
-                      color: Colors.white70,
-
-                    ),
-
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Text(
-
-                    'Hold the Pulse to reset your timer and continue.',
-
-                    style: theme.textTheme.labelSmall?.copyWith(
-
-                      color: Colors.white54,
-
-                    ),
-
-                  ),
-
-                ],
-
-              ),
-
-            ),
-
-          ],
-
-        ),
-
-      ),
-
-    );
-
+  State<_GracePeriodCard> createState() => _GracePeriodCardState();
+}
+
+class _GracePeriodCardState extends State<_GracePeriodCard> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final errorColor = theme.colorScheme.error;
+
+    final executedLabel = widget.executedAt != null
+        ? widget.dateFormat.format(widget.executedAt!.toLocal())
+        : 'recently';
+
+    Duration remaining = Duration.zero;
+    if (widget.graceEndDate != null) {
+      final r = widget.graceEndDate!.difference(DateTime.now());
+      if (!r.isNegative) remaining = r;
+    }
+
+    final days = remaining.inDays;
+    final hours = remaining.inHours.remainder(24);
+    final minutes = remaining.inMinutes.remainder(60);
+
+    final countdownText = remaining == Duration.zero
+        ? 'Cleanup in progress...'
+        : days > 0
+            ? '${days}d ${hours}h remaining'
+            : hours > 0
+                ? '${hours}h ${minutes}m remaining'
+                : '${minutes}m remaining';
+
+    return _SurfaceCard(
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              errorColor.withValues(alpha: 0.12),
+              Colors.transparent,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Status badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: errorColor.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: errorColor.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, size: 14, color: errorColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      'GRACE PERIOD',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: errorColor,
+                        letterSpacing: 1.6,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Countdown
+              Text(
+                countdownText,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: errorColor,
+                ),
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: widget.graceEndDate != null && widget.executedAt != null
+                      ? (1.0 - remaining.inSeconds /
+                          (widget.graceEndDate!.difference(widget.executedAt!).inSeconds.clamp(1, double.maxFinite.toInt())))
+                          .clamp(0.0, 1.0)
+                      : 1.0,
+                  minHeight: 6,
+                  backgroundColor: Colors.white12,
+                  valueColor: AlwaysStoppedAnimation<Color>(errorColor),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Explanation
+              Text(
+                'Protocol executed on $executedLabel',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'All vault entries have been delivered to your beneficiaries. '
+                'Your sent data will be permanently erased after 30 days.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.white70,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Divider
+              Divider(color: Colors.white12, height: 1),
+              const SizedBox(height: 16),
+
+              // Blocked features notice
+              Row(
+                children: [
+                  Icon(Icons.lock_outline, size: 16, color: Colors.white38),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'All features are disabled during the grace period. '
+                      'Your account will automatically reset once cleanup completes.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white38,
+                        fontSize: 11,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 
@@ -385,11 +389,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
     // Theme sync is now handled in HomeController.initialize() — not here.
     // Syncing in build() was overriding user selections with stale data.
 
-    final protocolExecutedAt = controller.protocolExecutedAt;
-
-    final protocolWasArchived = controller.protocolWasArchived;
-
-    final protocolNoEntries = controller.protocolNoEntries;
+    final isInGracePeriod = controller.isInGracePeriod;
 
     final isLifetime = revenueCat.isLifetime;
 
@@ -452,128 +452,79 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                 ),
 
-                if (protocolExecutedAt != null) ...[
-
-                  const SizedBox(height: 16),
-
-                  _ProtocolBanner(
-
-                    dateLabel: _dateFormat.format(
-
-                      protocolExecutedAt.toLocal(),
-
-                    ),
-
-                    isArchived: protocolWasArchived,
-
-                    isNoEntries: protocolNoEntries,
-
-                  ),
-
-                ],
-
                 const SizedBox(height: 16),
 
-                RepaintBoundary(child: _TimerCard(
-
-                  profile: profile,
-
-                  dateFormat: _dateFormat,
-
-                  isLoading: controller.isLoading,
-
-                  errorMessage: controller.errorMessage,
-
-                  isPro: isPro,
-
-                  isLifetime: isLifetime,
-
-                  hasVaultEntries: controller.hasVaultEntries,
-
-                  onTimerChanged: (days) => controller.updateTimerDays(days),
-
-                )),
-
-                const SizedBox(height: 24),
-
-                Center(
-
-                  child: RepaintBoundary(child: SoulFireButton(
-
-                    styleId: context.watch<ThemeProvider>().soulFireId,
-
-                    enabled: !controller.isLoading && profile != null,
-
-                    onConfirmed: () async {
-
-                      final success = await controller.manualCheckIn();
-
-                      if (!context.mounted) return;
-
-                      if (success) {
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-
-                          const SnackBar(content: Text('Signal verified.')),
-
-                        );
-
-                      }
-
-                    },
-
-                  )),
-
-                ),
-
-                const SizedBox(height: 8),
-
-                Center(
-
-                  child: Text(
-
-                    'Hold to verify your signal',
-
-                    style: Theme.of(context)
-
-                        .textTheme
-
-                        .bodySmall
-
-                        ?.copyWith(color: Colors.white60, letterSpacing: 1.1),
-
+                if (isInGracePeriod) ...[
+                  _GracePeriodCard(
+                    executedAt: controller.protocolExecutedAt,
+                    graceEndDate: controller.graceEndDate,
+                    graceExpired: controller.graceExpired,
+                    dateFormat: _dateFormat,
                   ),
-
-                ),
-
-                const SizedBox(height: 28),
-
-                RepaintBoundary(child: _VaultSummaryCard(
-                  entryCount: controller.vaultEntryCount,
-                  isLoading: controller.isLoading,
-                  onViewAll: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => MyVaultPage(userId: widget.userId)),
-                    ).then((_) {
-                      // Refresh vault count when returning from vault page
-                      if (context.mounted) {
+                ] else ...[
+                  RepaintBoundary(child: _TimerCard(
+                    profile: profile,
+                    dateFormat: _dateFormat,
+                    isLoading: controller.isLoading,
+                    errorMessage: controller.errorMessage,
+                    isPro: isPro,
+                    isLifetime: isLifetime,
+                    hasVaultEntries: controller.hasVaultEntries,
+                    onTimerChanged: (days) => controller.updateTimerDays(days),
+                  )),
+                  const SizedBox(height: 24),
+                  Center(
+                    child: RepaintBoundary(child: SoulFireButton(
+                      styleId: context.watch<ThemeProvider>().soulFireId,
+                      enabled: !controller.isLoading && profile != null,
+                      onConfirmed: () async {
+                        final success = await controller.manualCheckIn();
+                        if (!context.mounted) return;
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Signal verified.')),
+                          );
+                        }
+                      },
+                    )),
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      'Hold to verify your signal',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.white60, letterSpacing: 1.1),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  RepaintBoundary(child: _VaultSummaryCard(
+                    entryCount: controller.vaultEntryCount,
+                    isLoading: controller.isLoading,
+                    onViewAll: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => MyVaultPage(userId: widget.userId)),
+                      ).then((_) {
+                        if (context.mounted) {
+                          context.read<HomeController>().refreshVaultStatus();
+                        }
+                      });
+                    },
+                    onAdd: () async {
+                      final created = await openVaultEntryEditor(
+                        context,
+                        userId: widget.userId,
+                        isPro: isPro,
+                        isLifetime: isLifetime,
+                      );
+                      if (created && context.mounted) {
                         context.read<HomeController>().refreshVaultStatus();
                       }
-                    });
-                  },
-                  onAdd: () async {
-                    final created = await openVaultEntryEditor(
-                      context,
-                      userId: widget.userId,
-                      isPro: isPro,
-                      isLifetime: isLifetime,
-                    );
-                    if (created && context.mounted) {
-                      context.read<HomeController>().refreshVaultStatus();
-                    }
-                  },
-                )),
+                    },
+                  )),
+                ],
 
               ],
 

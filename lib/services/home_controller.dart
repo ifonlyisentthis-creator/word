@@ -62,9 +62,9 @@ class HomeController extends ChangeNotifier {
 
   DateTime? _protocolExecutedAt;
 
-  bool _protocolWasArchived = false;
+  bool _isInGracePeriod = false;
 
-  bool _protocolNoEntries = false;
+  DateTime? _graceEndDate;
 
   bool _notificationsReady = false;
 
@@ -86,9 +86,18 @@ class HomeController extends ChangeNotifier {
 
   DateTime? get protocolExecutedAt => _protocolExecutedAt;
 
-  bool get protocolWasArchived => _protocolWasArchived;
+  bool get isInGracePeriod => _isInGracePeriod;
 
-  bool get protocolNoEntries => _protocolNoEntries;
+  DateTime? get graceEndDate => _graceEndDate;
+
+  Duration get graceTimeRemaining {
+    if (_graceEndDate == null) return Duration.zero;
+    final remaining = _graceEndDate!.difference(DateTime.now());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
+  bool get graceExpired =>
+      _isInGracePeriod && _graceEndDate != null && DateTime.now().isAfter(_graceEndDate!);
 
   bool get hasVaultEntries => _hasVaultEntries;
   int get vaultEntryCount => _vaultEntryCount;
@@ -268,7 +277,7 @@ class HomeController extends ChangeNotifier {
 
   Future<void> updateSenderName(String senderName) async {
 
-    if (_user == null) return;
+    if (_user == null || _isInGracePeriod) return;
 
     final currentUser = Supabase.instance.client.auth.currentUser;
 
@@ -304,7 +313,7 @@ class HomeController extends ChangeNotifier {
 
   Future<void> updateTimerDays(int timerDays) async {
 
-    if (_user == null) return;
+    if (_user == null || _isInGracePeriod) return;
 
     final currentUser = Supabase.instance.client.auth.currentUser;
 
@@ -370,7 +379,7 @@ class HomeController extends ChangeNotifier {
 
   Future<bool> manualCheckIn() async {
 
-    if (_user == null) return false;
+    if (_user == null || _isInGracePeriod) return false;
 
     final currentUser = Supabase.instance.client.auth.currentUser;
 
@@ -386,9 +395,9 @@ class HomeController extends ChangeNotifier {
 
       _protocolExecutedAt = null;
 
-      _protocolWasArchived = false;
+      _isInGracePeriod = false;
 
-      _protocolNoEntries = false;
+      _graceEndDate = null;
 
       notifyListeners();
 
@@ -525,21 +534,21 @@ class HomeController extends ChangeNotifier {
 
     final status = profile.status.toLowerCase();
 
-    if (status != 'active') {
+    if (status == 'inactive' || status == 'archived') {
 
-      _protocolExecutedAt = profile.deadline;
+      _protocolExecutedAt = profile.protocolExecutedAt ?? profile.deadline;
 
-      _protocolWasArchived = status == 'archived';
+      _isInGracePeriod = true;
 
-      _protocolNoEntries = status == 'inactive';
+      _graceEndDate = _protocolExecutedAt!.add(const Duration(days: 30));
 
     } else {
 
       _protocolExecutedAt = null;
 
-      _protocolWasArchived = false;
+      _isInGracePeriod = false;
 
-      _protocolNoEntries = false;
+      _graceEndDate = null;
 
     }
 

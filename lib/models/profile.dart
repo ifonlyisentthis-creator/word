@@ -15,6 +15,7 @@ class Profile {
     this.selectedSoulFire,
     this.push66SentAt,
     this.push33SentAt,
+    this.protocolExecutedAt,
   });
 
   final String id;
@@ -32,6 +33,7 @@ class Profile {
   final String? selectedSoulFire;
   final DateTime? push66SentAt;
   final DateTime? push33SentAt;
+  final DateTime? protocolExecutedAt;
 
   factory Profile.fromMap(Map<String, dynamic> map) {
     return Profile(
@@ -62,6 +64,9 @@ class Profile {
       push33SentAt: map['push_33_sent_at'] != null
           ? DateTime.parse(map['push_33_sent_at'] as String)
           : null,
+      protocolExecutedAt: map['protocol_executed_at'] != null
+          ? DateTime.parse(map['protocol_executed_at'] as String)
+          : null,
     );
   }
 
@@ -78,6 +83,7 @@ class Profile {
     String? selectedSoulFire,
     DateTime? push66SentAt,
     DateTime? push33SentAt,
+    DateTime? protocolExecutedAt,
   }) {
     return Profile(
       id: id,
@@ -95,6 +101,7 @@ class Profile {
       selectedSoulFire: selectedSoulFire ?? this.selectedSoulFire,
       push66SentAt: push66SentAt ?? this.push66SentAt,
       push33SentAt: push33SentAt ?? this.push33SentAt,
+      protocolExecutedAt: protocolExecutedAt ?? this.protocolExecutedAt,
     );
   }
 
