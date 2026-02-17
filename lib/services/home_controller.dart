@@ -255,7 +255,8 @@ class HomeController extends ChangeNotifier {
           profile.lastCheckIn != _profile!.lastCheckIn ||
           profile.timerDays != _profile!.timerDays ||
           profile.status != _profile!.status ||
-          profile.subscriptionStatus != _profile!.subscriptionStatus;
+          profile.subscriptionStatus != _profile!.subscriptionStatus ||
+          profile.protocolExecutedAt != _profile!.protocolExecutedAt;
 
       _setProtocolState(profile);
 

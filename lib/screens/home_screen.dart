@@ -467,18 +467,29 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                 const SizedBox(height: 16),
 
-                // Grace period card (only when active)
-                if (isInGracePeriod) ...[
+                // Timer OR Grace period card (grace replaces timer)
+                if (isInGracePeriod)
                   _GracePeriodCard(
                     executedAt: controller.protocolExecutedAt,
                     graceEndDate: controller.graceEndDate,
                     graceExpired: controller.graceExpired,
                     dateFormat: _dateFormat,
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                  )
+                else
+                  RepaintBoundary(child: _TimerCard(
+                    profile: profile,
+                    dateFormat: _dateFormat,
+                    isLoading: controller.isLoading,
+                    errorMessage: controller.errorMessage,
+                    isPro: isPro,
+                    isLifetime: isLifetime,
+                    hasVaultEntries: controller.hasVaultEntries,
+                    onTimerChanged: (days) => controller.updateTimerDays(days),
+                  )),
 
-                // Timer, Soul Fire, Vault — greyed out & non-interactive during grace
+                const SizedBox(height: 24),
+
+                // Soul Fire — greyed out & non-interactive during grace
                 IgnorePointer(
                   ignoring: isInGracePeriod,
                   child: AnimatedOpacity(
@@ -486,17 +497,6 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                     duration: const Duration(milliseconds: 350),
                     child: Column(
                       children: [
-                        RepaintBoundary(child: _TimerCard(
-                          profile: profile,
-                          dateFormat: _dateFormat,
-                          isLoading: controller.isLoading,
-                          errorMessage: controller.errorMessage,
-                          isPro: isPro,
-                          isLifetime: isLifetime,
-                          hasVaultEntries: controller.hasVaultEntries,
-                          onTimerChanged: (days) => controller.updateTimerDays(days),
-                        )),
-                        const SizedBox(height: 24),
                         Center(
                           child: RepaintBoundary(child: SoulFireButton(
                             styleId: context.watch<ThemeProvider>().soulFireId,
@@ -522,39 +522,42 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                                 ?.copyWith(color: Colors.white60, letterSpacing: 1.1),
                           ),
                         ),
-                        const SizedBox(height: 28),
-                        RepaintBoundary(child: _VaultSummaryCard(
-                          entryCount: controller.vaultEntryCount,
-                          isLoading: controller.isLoading,
-                          onViewAll: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => MyVaultPage(
-                                userId: widget.userId,
-                                readOnly: isInGracePeriod,
-                              )),
-                            ).then((_) {
-                              if (context.mounted) {
-                                context.read<HomeController>().refreshVaultStatus();
-                              }
-                            });
-                          },
-                          onAdd: () async {
-                            final created = await openVaultEntryEditor(
-                              context,
-                              userId: widget.userId,
-                              isPro: isPro,
-                              isLifetime: isLifetime,
-                            );
-                            if (created && context.mounted) {
-                              context.read<HomeController>().refreshVaultStatus();
-                            }
-                          },
-                        )),
                       ],
                     ),
                   ),
                 ),
+
+                const SizedBox(height: 28),
+
+                // Vault — View All always works, Add Entry disabled during grace
+                RepaintBoundary(child: _VaultSummaryCard(
+                  entryCount: controller.vaultEntryCount,
+                  isLoading: controller.isLoading,
+                  onViewAll: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => MyVaultPage(
+                        userId: widget.userId,
+                        readOnly: isInGracePeriod,
+                      )),
+                    ).then((_) {
+                      if (context.mounted) {
+                        context.read<HomeController>().refreshVaultStatus();
+                      }
+                    });
+                  },
+                  onAdd: isInGracePeriod ? null : () async {
+                    final created = await openVaultEntryEditor(
+                      context,
+                      userId: widget.userId,
+                      isPro: isPro,
+                      isLifetime: isLifetime,
+                    );
+                    if (created && context.mounted) {
+                      context.read<HomeController>().refreshVaultStatus();
+                    }
+                  },
+                )),
 
               ],
 
@@ -1577,13 +1580,13 @@ class _VaultSummaryCard extends StatelessWidget {
     required this.entryCount,
     required this.isLoading,
     required this.onViewAll,
-    required this.onAdd,
+    this.onAdd,
   });
 
   final int entryCount;
   final bool isLoading;
   final VoidCallback onViewAll;
-  final VoidCallback onAdd;
+  final VoidCallback? onAdd;
 
   @override
   Widget build(BuildContext context) {

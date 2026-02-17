@@ -82,193 +82,219 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Sender Name
-                _Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                if (controller.isInGracePeriod) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.colorScheme.error.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white10,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                  Icons.mark_email_read_outlined,
-                                  size: 18),
+                        Icon(Icons.lock_outline, size: 18,
+                            color: theme.colorScheme.error),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Account settings are disabled during the grace period.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.error,
+                              height: 1.4,
                             ),
-                            const SizedBox(width: 12),
-                            Text('Sender Name',
-                                style: theme.textTheme.titleMedium),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'This name appears in email subjects sent to your beneficiaries.',
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: Colors.white60),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _senderController,
-                          textInputAction: TextInputAction.done,
-                          enabled: !controller.isInGracePeriod,
-                          decoration: const InputDecoration(
-                            hintText: 'Sender name',
-                            filled: true,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        if (controller.isInGracePeriod) ...[
-                          Text(
-                            'Editing disabled during grace period.',
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: Colors.white38, fontSize: 11),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: _isLoading || !_senderDirty || controller.isInGracePeriod
-                                ? null
-                                : () async {
-                                    setState(() {
-                                      _isLoading = true;
-                                      _localError = null;
-                                    });
-                                    await controller.updateSenderName(
-                                      _senderController.text,
-                                    );
-                                    if (!context.mounted) return;
-                                    final message = controller.errorMessage;
-                                    if (message == null) {
-                                      setState(() => _senderDirty = false);
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(const SnackBar(
-                                              content: Text(
-                                                  'Sender name updated.')));
-                                    } else {
-                                      _localError = message;
-                                    }
-                                    setState(() => _isLoading = false);
-                                  },
-                            icon: const Icon(Icons.save_outlined),
-                            label: const Text('Save Sender Name'),
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                ],
 
-                const SizedBox(height: 24),
-
-                // Danger Zone
-                _Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                // Sender Name + Danger Zone — all disabled during grace
+                IgnorePointer(
+                ignoring: controller.isInGracePeriod,
+                child: AnimatedOpacity(
+                opacity: controller.isInGracePeriod ? 0.32 : 1.0,
+                duration: const Duration(milliseconds: 300),
+                child: Column(
+                  children: [
+                    // Sender Name
+                    _Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: errorColor.withValues(alpha: 0.12),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(Icons.delete_forever,
-                                  color: errorColor),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white10,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                      Icons.mark_email_read_outlined,
+                                      size: 18),
+                                ),
+                                const SizedBox(width: 12),
+                                Text('Sender Name',
+                                    style: theme.textTheme.titleMedium),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Danger Zone',
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(color: errorColor),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Permanently delete your account and every vault entry.',
-                                    style: theme.textTheme.bodySmall
-                                        ?.copyWith(color: Colors.white60),
-                                  ),
-                                ],
+                            const SizedBox(height: 8),
+                            Text(
+                              'This name appears in email subjects sent to your beneficiaries.',
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: Colors.white60),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _senderController,
+                              textInputAction: TextInputAction.done,
+                              decoration: const InputDecoration(
+                                hintText: 'Sender name',
+                                filled: true,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: _isLoading || !_senderDirty
+                                    ? null
+                                    : () async {
+                                        setState(() {
+                                          _isLoading = true;
+                                          _localError = null;
+                                        });
+                                        await controller.updateSenderName(
+                                          _senderController.text,
+                                        );
+                                        if (!context.mounted) return;
+                                        final message = controller.errorMessage;
+                                        if (message == null) {
+                                          setState(() => _senderDirty = false);
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(const SnackBar(
+                                                  content: Text(
+                                                      'Sender name updated.')));
+                                        } else {
+                                          _localError = message;
+                                        }
+                                        setState(() => _isLoading = false);
+                                      },
+                                icon: const Icon(Icons.save_outlined),
+                                label: const Text('Save Sender Name'),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: errorColor,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: _isLoading
-                                ? null
-                                : () async {
-                                    final confirmed =
-                                        await _confirmDeleteAccount(context);
-                                    if (!confirmed) return;
-                                    setState(() {
-                                      _isLoading = true;
-                                      _localError = null;
-                                    });
-                                    final success =
-                                        await controller.deleteAccount();
-                                    if (!context.mounted) return;
-                                    if (success) {
-                                      final auth = authController;
-                                      final rc = widget.revenueCatController;
-                                      // Pop this screen first.
-                                      if (context.mounted) {
-                                        Navigator.of(context).pop();
-                                      }
-                                      // Reset theme to free defaults before signing out
-                                      if (context.mounted) {
-                                        context.read<ThemeProvider>().reset();
-                                      }
-                                      // Phase 1: Remove HomeScreen from tree
-                                      // BEFORE any listener fires.
-                                      auth.prepareSignOut();
-                                      // Phase 2: Log out of RevenueCat and
-                                      // Supabase on the next frame, after
-                                      // providers have been unmounted.
-                                      WidgetsBinding.instance
-                                          .addPostFrameCallback((_) async {
-                                        await rc.logOut();
-                                        await auth.signOut();
-                                      });
-                                      return;
-                                    }
-                                    final msg = controller.errorMessage ??
-                                        'Unable to delete your account.';
-                                    if (!context.mounted) return;
-                                    setState(() {
-                                      _localError = msg;
-                                      _isLoading = false;
-                                    });
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(msg)));
-                                  },
-                            child: const Text('Delete Account'),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+
+                    const SizedBox(height: 24),
+
+                    // Danger Zone
+                    _Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: errorColor.withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(Icons.delete_forever,
+                                      color: errorColor),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Danger Zone',
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(color: errorColor),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Permanently delete your account and every vault entry.',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(color: Colors.white60),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: errorColor,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: _isLoading
+                                    ? null
+                                    : () async {
+                                        final confirmed =
+                                            await _confirmDeleteAccount(context);
+                                        if (!confirmed) return;
+                                        setState(() {
+                                          _isLoading = true;
+                                          _localError = null;
+                                        });
+                                        final success =
+                                            await controller.deleteAccount();
+                                        if (!context.mounted) return;
+                                        if (success) {
+                                          final auth = authController;
+                                          final rc = widget.revenueCatController;
+                                          if (context.mounted) {
+                                            Navigator.of(context).pop();
+                                          }
+                                          if (context.mounted) {
+                                            context.read<ThemeProvider>().reset();
+                                          }
+                                          auth.prepareSignOut();
+                                          WidgetsBinding.instance
+                                              .addPostFrameCallback((_) async {
+                                            await rc.logOut();
+                                            await auth.signOut();
+                                          });
+                                          return;
+                                        }
+                                        final msg = controller.errorMessage ??
+                                            'Unable to delete your account.';
+                                        if (!context.mounted) return;
+                                        setState(() {
+                                          _localError = msg;
+                                          _isLoading = false;
+                                        });
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(msg)));
+                                      },
+                                child: const Text('Delete Account'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                ),
                 ),
 
                 if (_localError != null) ...[

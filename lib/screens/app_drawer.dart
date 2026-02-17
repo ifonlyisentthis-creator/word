@@ -201,19 +201,6 @@ class AppDrawer extends StatelessWidget {
                       );
                     },
                   ),
-                  if (isPro) ...[
-                    _DrawerItem(
-                      icon: Icons.support_agent_outlined,
-                      label: 'Manage Subscription',
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const SubscriptionDebugScreen()),
-                        );
-                      },
-                    ),
-                  ],
                   const Divider(color: Colors.white12, indent: 20, endIndent: 20),
                   _DrawerItem(
                     icon: Icons.settings_outlined,
