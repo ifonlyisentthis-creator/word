@@ -1,9 +1,9 @@
 """Generate a premium splash icon for Afterword — v2.
 
-Design: "The Sentinel" — a luminous crystalline light form emerging from void.
-Cool white/silver core, ethereal aura, cinematic 6-pointed lens-star.
-Pixel-perfect smooth gradients via numpy (no banding).
-Pure black + ghostly white/silver. No gold, no ring.
+Design: Elevated golden ring — inspired by the app icon's warm circle.
+A single prominent ring with soft ambient glow, subtle inner ring for depth.
+Properly sized to fill the splash area. Smooth gradients via numpy.
+No rays, no flashlight, no cold tones. Pure black + warm gold.
 
 Renders at 2304x2304 then LANCZOS downscales to 1152x1152.
 
@@ -12,11 +12,10 @@ Usage:
     -> overwrites assets/splash_icon.png
 """
 
-import math
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image
 
-RENDER = 2304      # 2x supersample (numpy is pixel-perfect, less need for 4x)
+RENDER = 2304
 FINAL = 1152
 
 
@@ -24,100 +23,68 @@ def main():
     S = RENDER
     cx, cy = S / 2, S / 2
 
-    # Build coordinate grids
     y, x = np.mgrid[0:S, 0:S].astype(np.float32)
-    dx = x - cx
-    dy = y - cy
-    dist = np.sqrt(dx ** 2 + dy ** 2)
-    angle = np.arctan2(dy, dx)
+    dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
 
-    # Start with pure black
+    # Palette — warm gold matching the app icon
+    bright_gold = np.array([0.92, 0.72, 0.22])   # E6B838
+    warm_gold   = np.array([0.84, 0.66, 0.30])   # D6A84D
+    deep_gold   = np.array([0.55, 0.40, 0.12])   # 8C661F
+    amber_glow  = np.array([0.50, 0.35, 0.08])   # 805914
+
     img = np.zeros((S, S, 3), dtype=np.float32)
 
-    # ── 1. Wide atmospheric aura (deep blue-gray) ──
-    r_atmo = S * 0.42
-    atmo = np.exp(-(dist / r_atmo) ** 1.8) * 0.08
-    img += atmo[..., None] * np.array([0.35, 0.42, 0.55])
+    # ── Ring geometry ──
+    ring_r = S * 0.34          # radius — fills ~68% of the canvas width
+    ring_half_w = S * 0.008    # half-width of the ring stroke
 
-    # ── 2. Mid-range ethereal glow (ice silver) ──
-    r_mid = S * 0.24
-    mid_glow = np.exp(-(dist / r_mid) ** 2.0) * 0.18
-    img += mid_glow[..., None] * np.array([0.70, 0.78, 0.88])
+    ring_dist = np.abs(dist - ring_r)  # distance from ring center-line
 
-    # ── 3. Inner luminous bloom (bright silver-white) ──
-    r_inner = S * 0.11
-    inner = np.exp(-(dist / r_inner) ** 1.6) * 0.55
-    img += inner[..., None] * np.array([0.85, 0.90, 0.95])
+    # ── 1. Wide ambient warmth behind the ring ──
+    ambient_r = S * 0.42
+    ambient = np.exp(-(dist / ambient_r) ** 2.5) * 0.04
+    img += ambient[..., None] * amber_glow
 
-    # ── 4. Cinematic 6-pointed lens star ──
-    # Each ray is a narrow Gaussian along its direction, tapering with distance
-    num_rays = 6
-    ray_length = S * 0.36
-    ray_width_sigma = S * 0.008  # thinness of rays
+    # ── 2. Soft glow along the ring path (warm haze) ──
+    glow_sigma = S * 0.04
+    ring_glow = np.exp(-0.5 * (ring_dist / glow_sigma) ** 2) * 0.14
+    img += ring_glow[..., None] * warm_gold
 
-    rays = np.zeros((S, S), dtype=np.float32)
-    for i in range(num_rays):
-        a = (i / num_rays) * math.pi + math.pi / 12  # offset from axes
-        cos_a, sin_a = math.cos(a), math.sin(a)
-        # Project each pixel onto the ray axis
-        proj = dx * cos_a + dy * sin_a     # distance along ray
-        perp = -dx * sin_a + dy * cos_a    # perpendicular distance
+    # ── 3. Tighter bloom on the ring ──
+    bloom_sigma = S * 0.016
+    ring_bloom = np.exp(-0.5 * (ring_dist / bloom_sigma) ** 2) * 0.35
+    img += ring_bloom[..., None] * warm_gold
 
-        # Taper width: thinner at tips
-        taper = np.clip(1.0 - np.abs(proj) / ray_length, 0, 1) ** 0.5
-        width = ray_width_sigma * (1.0 + 2.0 * taper)
-        # Gaussian cross-section
-        cross = np.exp(-0.5 * (perp / np.maximum(width, 1e-6)) ** 2)
-        # Fade with distance from center
-        fade = np.exp(-(np.abs(proj) / ray_length) ** 1.3) * taper
-        rays += cross * fade
+    # ── 4. The main ring stroke — sharp, bright gold ──
+    stroke = np.exp(-0.5 * (ring_dist / ring_half_w) ** 2.5)
+    img += stroke[..., None] * bright_gold
 
-    rays = np.clip(rays, 0, 1)
-    # Rays are silver-white
-    img += rays[..., None] * 0.30 * np.array([0.82, 0.86, 0.92])
+    # ── 5. Brighter inner edge (specular highlight on the ring) ──
+    inner_edge_r = ring_r - ring_half_w * 0.3
+    inner_edge_dist = np.abs(dist - inner_edge_r)
+    inner_edge_sigma = ring_half_w * 0.4
+    inner_highlight = np.exp(-0.5 * (inner_edge_dist / inner_edge_sigma) ** 2) * 0.45
+    img += inner_highlight[..., None] * np.array([0.96, 0.82, 0.38])
 
-    # ── 5. Secondary 12-point micro-rays (fainter, interleaved) ──
-    micro_rays = np.zeros((S, S), dtype=np.float32)
-    micro_length = S * 0.20
-    micro_sigma = S * 0.004
+    # ── 6. Subtle inner secondary ring (depth, like the icon) ──
+    inner_ring_r = ring_r * 0.88
+    inner_ring_half_w = S * 0.002
+    inner_ring_dist = np.abs(dist - inner_ring_r)
+    inner_ring = np.exp(-0.5 * (inner_ring_dist / inner_ring_half_w) ** 2.5) * 0.12
+    img += inner_ring[..., None] * deep_gold
 
-    for i in range(12):
-        a = (i / 12) * math.pi + math.pi / 24
-        cos_a, sin_a = math.cos(a), math.sin(a)
-        proj = dx * cos_a + dy * sin_a
-        perp = -dx * sin_a + dy * cos_a
-        taper = np.clip(1.0 - np.abs(proj) / micro_length, 0, 1) ** 0.6
-        width = micro_sigma * (1.0 + 1.5 * taper)
-        cross = np.exp(-0.5 * (perp / np.maximum(width, 1e-6)) ** 2)
-        fade = np.exp(-(np.abs(proj) / micro_length) ** 1.5) * taper
-        micro_rays += cross * fade
-
-    micro_rays = np.clip(micro_rays, 0, 1)
-    img += micro_rays[..., None] * 0.12 * np.array([0.70, 0.78, 0.88])
-
-    # ── 6. Bright core — the sentinel's heart ──
-    r_core = S * 0.045
-    core = np.exp(-(dist / r_core) ** 1.4) * 0.95
-    img += core[..., None] * np.array([1.0, 1.0, 1.0])
-
-    # White-hot center point
-    r_hot = S * 0.012
-    hot = np.exp(-(dist / r_hot) ** 1.0)
-    img += hot[..., None] * np.array([1.0, 1.0, 1.0])
-
-    # ── 7. Subtle outer halo ring ──
-    halo_r = S * 0.32
-    halo_sigma = S * 0.008
-    ring_dist = np.abs(dist - halo_r)
-    halo_ring = np.exp(-(ring_dist / halo_sigma) ** 2) * 0.06
-    img += halo_ring[..., None] * np.array([0.60, 0.68, 0.78])
+    # ── 7. Very faint outer haze ring (barely visible) ──
+    outer_haze_r = ring_r * 1.06
+    outer_haze_sigma = S * 0.003
+    outer_haze_dist = np.abs(dist - outer_haze_r)
+    outer_haze = np.exp(-0.5 * (outer_haze_dist / outer_haze_sigma) ** 2) * 0.06
+    img += outer_haze[..., None] * deep_gold
 
     # ── Clamp and convert ──
     img = np.clip(img, 0, 1)
     img_uint8 = (img * 255).astype(np.uint8)
     pil_img = Image.fromarray(img_uint8, "RGB")
 
-    # Downscale with LANCZOS
     final = pil_img.resize((FINAL, FINAL), Image.LANCZOS)
 
     out = "assets/splash_icon.png"

@@ -60,7 +60,8 @@ class _SoulFireButtonState extends State<SoulFireButton>
     );
 
     _holdController.addStatusListener((status) {
-      if (status == AnimationStatus.completed && !_completed) {
+      // Guard: animateTo(0) also fires .completed — only confirm at upper bound
+      if (status == AnimationStatus.completed && !_completed && _holdController.value == 1.0) {
         _completed = true;
         HapticFeedback.heavyImpact();
         _flashController.forward(from: 0);

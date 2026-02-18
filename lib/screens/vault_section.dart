@@ -1094,27 +1094,13 @@ class _VaultEntryTile extends StatelessWidget {
 
           end: Alignment.bottomRight,
 
-          colors: [context.watch<ThemeProvider>().themeData.cardGradientStart, context.watch<ThemeProvider>().themeData.cardGradientEnd],
+          colors: [context.read<ThemeProvider>().themeData.cardGradientStart, context.read<ThemeProvider>().themeData.cardGradientEnd],
 
         ),
 
         borderRadius: BorderRadius.circular(18),
 
-        border: Border.all(color: context.watch<ThemeProvider>().themeData.dividerColor),
-
-        boxShadow: [
-
-          BoxShadow(
-
-            color: Colors.black.withValues(alpha: 0.35),
-
-            blurRadius: 16,
-
-            offset: const Offset(0, 10),
-
-          ),
-
-        ],
+        border: Border.all(color: context.read<ThemeProvider>().themeData.dividerColor),
 
       ),
 
@@ -2867,7 +2853,8 @@ class _SheetContainer extends StatelessWidget {
   Widget build(BuildContext context) {
 
     final topPad = MediaQuery.paddingOf(context).top;
-    final td = context.watch<ThemeProvider>().themeData;
+    // read, not watch — theme won't change while sheet is open
+    final td = context.read<ThemeProvider>().themeData;
 
     return Padding(
 
@@ -2893,18 +2880,8 @@ class _SheetContainer extends StatelessWidget {
 
           border: Border.all(color: td.dividerColor),
 
-          boxShadow: [
-            BoxShadow(
-              color: td.accentGlow.withValues(alpha: 0.06),
-              blurRadius: 24,
-              spreadRadius: -4,
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 18,
-              offset: const Offset(0, 12),
-            ),
-          ],
+          // No BoxShadow — blurred shadows are extremely expensive to
+          // re-rasterize on every keyboard animation frame.
 
         ),
 
@@ -2912,7 +2889,7 @@ class _SheetContainer extends StatelessWidget {
 
           borderRadius: BorderRadius.circular(28),
 
-          child: child,
+          child: RepaintBoundary(child: child),
 
         ),
 
@@ -3006,30 +2983,6 @@ class _VaultCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
 
         border: Border.all(color: td.dividerColor),
-
-        boxShadow: [
-
-          BoxShadow(
-
-            color: td.accentGlow.withValues(alpha: 0.08),
-
-            blurRadius: 24,
-
-            spreadRadius: -4,
-
-          ),
-
-          BoxShadow(
-
-            color: Colors.black.withValues(alpha: 0.35),
-
-            blurRadius: 18,
-
-            offset: const Offset(0, 12),
-
-          ),
-
-        ],
 
       ),
 
