@@ -12,6 +12,7 @@ import 'history_screen.dart';
 import 'how_it_works_screen.dart';
 import 'my_vault_page.dart';
 import 'privacy_policy_screen.dart';
+import 'recovery_phrase_screen.dart';
 import 'subscription_debug_screen.dart';
 import 'terms_screen.dart';
 
@@ -216,6 +217,20 @@ class AppDrawer extends StatelessWidget {
                             homeController: homeController,
                             authController: authController,
                             revenueCatController: rcController,
+                        )),
+                      );
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.key_outlined,
+                    label: 'Recovery Phrase',
+                    onTap: () {
+                      final hc = context.read<HomeController>();
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => RecoveryPhraseScreen(
+                          homeController: hc,
                         )),
                       );
                     },
