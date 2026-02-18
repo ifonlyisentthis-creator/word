@@ -439,15 +439,24 @@ def send_warning_push(
     sender_name: str,
     deadline: datetime,
     fcm_ctx: dict | None,
+    *,
+    remaining_fraction: float = 1.0,
 ) -> bool:
     """Returns True if push was actually delivered to at least one device."""
     if fcm_ctx is None:
         return False
-    deadline_text = deadline.strftime("%b %d, %Y")
+    # Use relative language — the server only knows UTC so a specific date
+    # can appear one day off from what the user sees in their local timezone.
+    if remaining_fraction <= 0.10:
+        urgency = "Your timer is about to expire."
+    elif remaining_fraction <= 0.33:
+        urgency = "Your timer is running low."
+    else:
+        urgency = "Your timer is running down."
     return _send_push_to_user(
         client, user_id, fcm_ctx,
-        title="Afterword warning",
-        body=f"Hi {sender_name}, your timer expires on {deadline_text}. Open Afterword to check in.",
+        title="Afterword reminder",
+        body=f"Hi {sender_name}, {urgency} Open Afterword to check in.",
         data={"type": "warning"},
     )
 
@@ -1021,8 +1030,10 @@ def handle_subscription_downgrade(
     selected_theme = profile.get("selected_theme")
     selected_soul_fire = profile.get("selected_soul_fire")
     has_custom_timer = timer_days > 30
-    has_custom_theme = selected_theme is not None and selected_theme != "oledVoid"
-    has_custom_soul_fire = selected_soul_fire is not None and selected_soul_fire != "etherealOrb"
+    FREE_THEMES = {"oledVoid", "midnightFrost", "shadowRose"}
+    FREE_SOUL_FIRES = {"etherealOrb", "goldenPulse", "nebulaHeart"}
+    has_custom_theme = selected_theme is not None and selected_theme not in FREE_THEMES
+    has_custom_soul_fire = selected_soul_fire is not None and selected_soul_fire not in FREE_SOUL_FIRES
 
     # Only query for audio if there are other pro/lifetime indicators.
     # This avoids a DB query for every always-free user at scale.
@@ -1356,6 +1367,7 @@ def main() -> int:
                     push_sent = send_warning_push(
 
                         client, user_id, sender_name, deadline, fcm_ctx,
+                        remaining_fraction=remaining_fraction,
 
                     )
 
@@ -1394,6 +1406,7 @@ def main() -> int:
                     push_sent = send_warning_push(
 
                         client, user_id, sender_name, deadline, fcm_ctx,
+                        remaining_fraction=remaining_fraction,
 
                     )
 

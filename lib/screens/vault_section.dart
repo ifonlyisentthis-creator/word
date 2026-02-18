@@ -1308,7 +1308,8 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
   late VaultDataType _dataType;
 
-  late final AudioRecorder _recorder;
+  AudioRecorder? _recorder;
+  AudioRecorder get _rec => _recorder ??= AudioRecorder();
 
   Timer? _recordTimer;
 
@@ -1353,8 +1354,6 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     _dataType = widget.entry?.dataType ?? VaultDataType.text;
 
-    _recorder = AudioRecorder();
-
   }
 
 
@@ -1365,13 +1364,13 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     _recordTimer?.cancel();
 
-    if (_isRecording) {
+    if (_isRecording && _recorder != null) {
 
-      unawaited(_recorder.stop());
+      unawaited(_recorder!.stop());
 
     }
 
-    _recorder.dispose();
+    _recorder?.dispose();
 
     _titleController.dispose();
 
@@ -2327,7 +2326,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     });
 
-    final hasPermission = await _recorder.hasPermission();
+    final hasPermission = await _rec.hasPermission();
 
     if (!hasPermission) {
 
@@ -2355,7 +2354,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     try {
 
-      await _recorder.start(
+      await _rec.start(
 
         const RecordConfig(
 
@@ -2439,7 +2438,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     try {
 
-      path = await _recorder.stop();
+      path = await _rec.stop();
 
     } catch (_) {}
 
@@ -2485,7 +2484,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
       try {
 
-        await _recorder.stop();
+        await _rec.stop();
 
       } catch (_) {}
 

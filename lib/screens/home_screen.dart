@@ -381,7 +381,11 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
     if (state == AppLifecycleState.resumed) {
 
-      context.read<HomeController>().autoCheckIn();
+      // Delay so the lock screen appears first — prevents visible data refresh
+      // behind the authentication gate.
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) context.read<HomeController>().autoCheckIn();
+      });
 
     }
 

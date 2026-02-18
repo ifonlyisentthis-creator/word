@@ -43,6 +43,8 @@
   
   
   
+  
+  
   <style id="splash-screen-style">
     html {
       height: 100%
@@ -110,6 +112,11 @@
   </script>
 </head>
   <body>
+  <picture id="splash">
+      <source srcset="splash/img/light-1x.png 1x, splash/img/light-2x.png 2x, splash/img/light-3x.png 3x, splash/img/light-4x.png 4x" media="(prefers-color-scheme: light)">
+      <source srcset="splash/img/dark-1x.png 1x, splash/img/dark-2x.png 2x, splash/img/dark-3x.png 3x, splash/img/dark-4x.png 4x" media="(prefers-color-scheme: dark)">
+      <img class="center" aria-hidden="true" src="splash/img/light-1x.png" alt="">
+  </picture>
   
   
   
@@ -342,10 +349,11 @@
               <h3>Free</h3>
               <p class="plan__price">$0</p>
               <ul>
-                <li>3 text items</li>
-                <li>Send mode only</li>
+                <li>3 text entries</li>
                 <li>30-day timer</li>
-                <li>Local notifications</li>
+                <li>3 themes &amp; 3 soul fire styles</li>
+                <li>Push notifications</li>
+                <li>Recovery phrase backup</li>
               </ul>
             </article>
             <article class="card plan plan--featured reveal">
@@ -353,21 +361,21 @@
               <h3>Pro</h3>
               <p class="plan__price">$1.99 / mo · $19.99 / yr</p>
               <ul>
-                <li>Unlimited text items</li>
-                <li>Protocol Zero (Erase)</li>
-                <li>7-365 day timers</li>
-                <li>Email fail-safe warning</li>
+                <li>Unlimited text entries</li>
+                <li>Protocol Zero (erase mode)</li>
+                <li>Custom timer (7–365 days)</li>
+                <li>Email expiry warning</li>
+                <li>All 8 themes &amp; 8 soul fires</li>
               </ul>
             </article>
             <article class="card plan reveal">
               <h3>Lifetime</h3>
               <p class="plan__price">$99.99 once</p>
               <ul>
-                <li>Everything in Pro</li>
-                <li>Audio vault</li>
-                <li>10 minute lifetime audio bank</li>
-                <li>7-3650 day timers (10 yrs)</li>
-                <li>6 themes + 6 Soul Fire styles</li>
+                <li>Everything in Pro, forever</li>
+                <li>Encrypted audio vault (10 min)</li>
+                <li>Extended timer (up to 10 years)</li>
+                <li>All themes &amp; soul fire styles</li>
               </ul>
             </article>
           </div>
@@ -410,15 +418,21 @@
             </div>
             <div class="comparison__row">
               <span data-label="Feature">Themes</span>
-              <span data-label="Free">1</span>
-              <span data-label="Pro">4</span>
-              <span data-label="Lifetime">6</span>
+              <span data-label="Free">3</span>
+              <span data-label="Pro">6</span>
+              <span data-label="Lifetime">8</span>
             </div>
             <div class="comparison__row">
               <span data-label="Feature">Soul Fire styles</span>
-              <span data-label="Free">1</span>
-              <span data-label="Pro">4</span>
-              <span data-label="Lifetime">6</span>
+              <span data-label="Free">3</span>
+              <span data-label="Pro">6</span>
+              <span data-label="Lifetime">8</span>
+            </div>
+            <div class="comparison__row">
+              <span data-label="Feature">Recovery phrase</span>
+              <span data-label="Free">Yes</span>
+              <span data-label="Pro">Yes</span>
+              <span data-label="Lifetime">Yes</span>
             </div>
           </div>
         </section>
@@ -474,6 +488,10 @@
       </main>
 
       <footer class="site-footer">
+        <p style="color:#555;font-size:0.75rem;margin-bottom:1rem;max-width:36rem">
+          Subscriptions auto-renew unless cancelled at least 24 hours before the end of the billing period.
+          You can cancel anytime in your device's app store settings. Payment is charged to your app store account at confirmation of purchase.
+        </p>
         <div>
           <div class="logo">Afterword</div>
           <p>A secure vault for messages released only on your terms.</p>

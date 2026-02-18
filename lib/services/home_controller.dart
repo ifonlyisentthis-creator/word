@@ -140,7 +140,7 @@ class HomeController extends ChangeNotifier {
 
       if (_isDisposed) return;
 
-      final ensured = await _profileService.ensureProfile(user);
+      var ensured = await _profileService.ensureProfile(user);
 
       if (_isDisposed) return;
 
@@ -151,6 +151,11 @@ class HomeController extends ChangeNotifier {
         try {
           await Supabase.instance.client.functions.invoke('verify-subscription');
           if (kDebugMode) debugPrint('[HC-SYNC] Server-verified subscription');
+          // Re-fetch profile so we have the updated subscription_status
+          if (!_isDisposed) {
+            ensured = await _profileService.fetchProfile(user.id);
+            if (kDebugMode) debugPrint('[HC-SYNC] Re-fetched profile: sub=${ensured.subscriptionStatus}');
+          }
         } catch (e) {
           if (kDebugMode) debugPrint('[HC-SYNC] Error: $e');
         }

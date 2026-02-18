@@ -83,22 +83,22 @@ class TermsScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Afterword offers tiered access:\n\n'
-                        '• Free — Up to 3 text entries, 30-day fixed timer, push notifications\n'
-                        '• Pro Monthly — Unlimited text entries, custom timer (7–365 days), '
-                        'Protocol Zero (erase mode), email warning before expiry\n'
-                        '• Pro Annual — Same as Pro Monthly, billed annually at a discount\n'
-                        '• Lifetime — All Pro features plus encrypted audio vault, '
-                        'extended timer duration, all themes and styles\n\n'
-                        'Subscriptions are processed through your device\'s app store. '
-                        'Monthly and annual plans auto-renew unless cancelled at least 24 hours '
-                        'before the end of the current billing period. '
-                        'Manage or cancel subscriptions in your app store settings.\n\n'
-                        'If a subscription is refunded, all premium features are revoked immediately '
-                        'and the account reverts to the free tier. Existing vault entries are preserved '
-                        'but premium features (custom timer, erase mode, themes) are removed. '
-                        'Audio vault entries from Lifetime plans are deleted upon refund.\n\n'
-                        'If a subscription expires or is not renewed, the same reversion applies '
-                        'at the end of the billing period.',
+                        '• Free — Up to 3 text entries, 30-day fixed timer, 3 themes, '
+                        '3 soul fire styles, push notifications, recovery phrase backup\n'
+                        '• Pro (Monthly / Annual) — Unlimited text entries, custom timer '
+                        '(7–365 days), Protocol Zero (erase mode), email warning before expiry, '
+                        'all themes and soul fire styles\n'
+                        '• Lifetime — All Pro features plus encrypted audio vault (10 min), '
+                        'extended timer (up to 10 years), permanent access\n\n'
+                        'Payment is charged to your app store account at confirmation of purchase. '
+                        'Monthly and annual subscriptions auto-renew unless cancelled at least '
+                        '24 hours before the end of the current billing period. '
+                        'You can cancel anytime in your device\'s app store subscription settings. '
+                        'No refund is provided for unused portions of a billing cycle.\n\n'
+                        'If a subscription is cancelled, expires, or is refunded, the account '
+                        'reverts to the free tier. Existing text vault entries are preserved. '
+                        'Premium features (custom timer, erase mode, premium themes) are reset '
+                        'to free defaults. Audio vault entries from Lifetime plans are deleted upon reversion.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),

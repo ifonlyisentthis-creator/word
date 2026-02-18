@@ -155,100 +155,76 @@ class SubscriptionDebugScreen extends StatelessWidget {
                   ],
                   ],
 
+                  // ── Feature comparison ──
+                  const SizedBox(height: 24),
+                  _FeatureComparisonCard(),
+
                   const SizedBox(height: 20),
 
-                  Text(
-
-                    'Actions',
-
-                    style: Theme.of(context).textTheme.titleMedium,
-
+                  // ── Actions ──
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: controller.isLoading
+                              ? null
+                              : () async => controller.restore(),
+                          icon: const Icon(Icons.restore, size: 18),
+                          label: const Text('Restore Purchases'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: controller.isLoading
+                              ? null
+                              : () async => controller.presentCustomerCenter(),
+                          icon: const Icon(Icons.support_agent, size: 18),
+                          label: const Text('Manage Subscription'),
+                        ),
+                      ),
+                    ],
                   ),
 
-                  const SizedBox(height: 12),
-
-                  Wrap(
-
-                    spacing: 12,
-
-                    runSpacing: 12,
-
-                    children: [
-
-                      _ActionButton(
-
-                        label: 'Show Paywall',
-
-                        icon: Icons.auto_awesome,
-
-                        onPressed: controller.isLoading
-
-                            ? null
-
-                            : () async {
-
-                                await controller.presentPaywall();
-
-                              },
-
-                      ),
-
-                      _ActionButton(
-
-                        label: 'Paywall if Needed',
-
-                        icon: Icons.lock_clock,
-
-                        onPressed: controller.isLoading
-
-                            ? null
-
-                            : () async {
-
-                                await controller.presentPaywallIfNeeded();
-
-                              },
-
-                      ),
-
-                      _ActionButton(
-
-                        label: 'Restore Purchases',
-
-                        icon: Icons.restore,
-
-                        onPressed: controller.isLoading
-
-                            ? null
-
-                            : () async {
-
-                                await controller.restore();
-
-                              },
-
-                      ),
-
-                      _ActionButton(
-
-                        label: 'Customer Center',
-
-                        icon: Icons.support_agent,
-
-                        onPressed: controller.isLoading
-
-                            ? null
-
-                            : () async {
-
-                                await controller.presentCustomerCenter();
-
-                              },
-
-                      ),
-
-                    ],
-
+                  // ── Cancellation / store policy ──
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Subscription Info',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.white54,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Subscriptions auto-renew unless cancelled at least '
+                          '24 hours before the end of the current billing period. '
+                          'You can cancel anytime from your device\'s app store settings. '
+                          'No refund is provided for unused portions of a billing cycle. '
+                          'Payment is charged to your app store account at confirmation of purchase.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.white38,
+                            height: 1.5,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
 
                 ],
@@ -706,54 +682,74 @@ class _PackageTile extends StatelessWidget {
 
 
 
-class _ActionButton extends StatelessWidget {
-
-  const _ActionButton({
-
-    required this.label,
-
-    required this.icon,
-
-    required this.onPressed,
-
-  });
-
-
-
-  final String label;
-
-  final IconData icon;
-
-  final Future<void> Function()? onPressed;
-
-
+class _FeatureComparisonCard extends StatelessWidget {
+  const _FeatureComparisonCard();
 
   @override
-
   Widget build(BuildContext context) {
-
-    return OutlinedButton.icon(
-
-      onPressed: onPressed == null
-
-          ? null
-
-          : () async {
-
-              await onPressed!();
-
-            },
-
-      icon: Icon(icon, size: 18),
-
-      label: Text(label),
-
+    final theme = Theme.of(context);
+    const check = Icon(Icons.check_circle, size: 16, color: Color(0xFF5BC0B4));
+    const dash = Icon(Icons.remove_circle_outline, size: 16, color: Colors.white24);
+    final labelStyle = theme.textTheme.bodySmall?.copyWith(color: Colors.white70, fontSize: 12);
+    final headerStyle = theme.textTheme.labelSmall?.copyWith(
+      color: Colors.white54, fontWeight: FontWeight.w700, letterSpacing: 1,
     );
 
+    Widget row(String label, bool free, bool pro, bool lifetime) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(flex: 5, child: Text(label, style: labelStyle)),
+            Expanded(flex: 2, child: Center(child: free ? check : dash)),
+            Expanded(flex: 2, child: Center(child: pro ? check : dash)),
+            Expanded(flex: 2, child: Center(child: lifetime ? check : dash)),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1A1A1A), Color(0xFF0F0F0F)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Feature Comparison', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(flex: 5, child: Text('', style: headerStyle)),
+              Expanded(flex: 2, child: Center(child: Text('FREE', style: headerStyle))),
+              Expanded(flex: 2, child: Center(child: Text('PRO', style: headerStyle))),
+              Expanded(flex: 2, child: Center(child: Text('MAX', style: headerStyle))),
+            ],
+          ),
+          const Divider(color: Colors.white12, height: 16),
+          row('Text entries', true, true, true),
+          row('3 themes & 3 soul fires', true, true, true),
+          row('Push notifications', true, true, true),
+          row('Recovery phrase backup', true, true, true),
+          row('Unlimited entries', false, true, true),
+          row('Custom timer (7–365 days)', false, true, true),
+          row('Protocol Zero (erase mode)', false, true, true),
+          row('Email expiry warning', false, true, true),
+          row('All themes & soul fires', false, true, true),
+          row('Audio vault (10 min)', false, false, true),
+          row('Extended timer (up to 10 yrs)', false, false, true),
+        ],
+      ),
+    );
   }
-
 }
-
 
 
 String _formatPackageType(PackageType type) {

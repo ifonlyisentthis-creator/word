@@ -231,6 +231,10 @@ class _OrbPainter extends CustomPainter {
     switch (styleId) {
       case SoulFireStyleId.etherealOrb:
         _paintEtherealOrb(canvas, center, orbRadius, breathScale);
+      case SoulFireStyleId.goldenPulse:
+        _paintGoldenPulse(canvas, center, orbRadius, breathScale);
+      case SoulFireStyleId.nebulaHeart:
+        _paintNebulaHeart(canvas, center, orbRadius, breathScale);
       case SoulFireStyleId.voidPortal:
         _paintVoidPortal(canvas, center, orbRadius, breathScale);
       case SoulFireStyleId.plasmaBurst:
@@ -429,6 +433,250 @@ class _OrbPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5 + hold * 2.0 + breath * 0.5
         ..color = _lerpHold(magenta, _gold).withValues(alpha: 0.12 + hold * 0.25 + breath * 0.05),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 1b. GOLDEN PULSE (Free) — Warm ember energy sphere
+  //     Concentric rings of gold/amber light pulse outward.
+  //     Radiating heat waves. Molten core. Regal presence.
+  //     Colors: deep gold, warm amber, champagne core.
+  // ═══════════════════════════════════════════════════════
+  void _paintGoldenPulse(
+      Canvas canvas, Offset center, double r, double bs) {
+    const deepGold = Color(0xFF8B6914);
+    const amber = Color(0xFFD4A84B);
+    const champagne = Color(0xFFFFF0C8);
+    const darkCore = Color(0xFF1A0E00);
+
+    // Warm halo
+    canvas.drawCircle(
+      center, r * 1.7 * bs,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          amber.withValues(alpha: 0.06 + hold * 0.10),
+          deepGold.withValues(alpha: 0.03),
+          Colors.transparent,
+        ], stops: const [0.0, 0.5, 1.0])
+            .createShader(Rect.fromCircle(center: center, radius: r * 1.7)),
+    );
+
+    // Main body — molten gold sphere
+    canvas.drawCircle(
+      center, r * bs,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          darkCore,
+          const Color(0xFF2A1800),
+          amber,
+        ], stops: const [0.0, 0.55, 1.0])
+            .createShader(Rect.fromCircle(center: center, radius: r)),
+    );
+
+    // PULSING CONCENTRIC RINGS — expand outward with breath
+    for (int i = 0; i < 5; i++) {
+      final ringPhase = (breath + i * 0.2 + orbit * 0.3) % 1.0;
+      final ringR = r * (0.3 + ringPhase * 0.8) * bs;
+      final ringAlpha = (0.08 + hold * 0.12) * (1.0 - ringPhase);
+      canvas.drawCircle(
+        center, ringR,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0 + hold * 1.5
+          ..color = (i.isEven ? amber : champagne).withValues(alpha: ringAlpha.clamp(0.0, 1.0)),
+      );
+    }
+
+    // HEAT SHIMMER RAYS — radiating outward
+    final gRng = Random(77);
+    for (int i = 0; i < 12; i++) {
+      final rayAngle = (i / 12) * 2 * pi + orbit * 2 * pi * 0.08;
+      final rayLen = r * (0.6 + gRng.nextDouble() * 0.5 + hold * 0.4) * bs;
+      final rayStart = center + Offset(cos(rayAngle) * r * 0.3, sin(rayAngle) * r * 0.3);
+      final rayEnd = center + Offset(cos(rayAngle) * rayLen, sin(rayAngle) * rayLen);
+      final alpha = (0.04 + gRng.nextDouble() * 0.06 + hold * 0.10).clamp(0.0, 1.0);
+      canvas.drawLine(
+        rayStart, rayEnd,
+        Paint()
+          ..color = (i.isEven ? amber : champagne).withValues(alpha: alpha)
+          ..strokeWidth = 1.5 + gRng.nextDouble() * 2.0 + hold * 1.5
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+    }
+
+    // Champagne core
+    final coreR = r * (0.20 + breath * 0.06 + hold * 0.22);
+    canvas.drawCircle(
+      center, coreR,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          champagne.withValues(alpha: 0.90),
+          amber.withValues(alpha: 0.35),
+          Colors.transparent,
+        ], stops: const [0.0, 0.4, 1.0])
+            .createShader(Rect.fromCircle(center: center, radius: coreR)),
+    );
+
+    // Specular highlight
+    final specR = r * 0.28;
+    final specC = center + Offset(-r * 0.16, -r * 0.20);
+    canvas.drawCircle(
+      specC, specR,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.10 + hold * 0.06),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: specC, radius: specR)),
+    );
+
+    // Flash on completion
+    if (flash > 0) {
+      final flashR = r * (1.0 + flash * 1.5) * bs;
+      canvas.drawCircle(center, flashR, Paint()
+        ..shader = RadialGradient(colors: [
+          champagne.withValues(alpha: (1 - flash) * 0.50),
+          amber.withValues(alpha: (1 - flash) * 0.20),
+          Colors.transparent,
+        ], stops: const [0.0, 0.5, 1.0])
+            .createShader(Rect.fromCircle(center: center, radius: flashR)));
+    }
+
+    // Gold rim
+    canvas.drawCircle(
+      center, r * bs,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5 + hold * 2.0 + breath * 0.5
+        ..color = amber.withValues(alpha: 0.14 + hold * 0.22 + breath * 0.05),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 1c. NEBULA HEART (Free) — Soft cosmic cloud orb
+  //     Layered nebula clouds swirl gently. Dreamy, artistic.
+  //     Floating stardust particles. Ethereal glow.
+  //     Colors: orchid pink, medium purple, soft lavender.
+  // ═══════════════════════════════════════════════════════
+  void _paintNebulaHeart(
+      Canvas canvas, Offset center, double r, double bs) {
+    const orchid = Color(0xFFDA70D6);
+    const medPurple = Color(0xFF9370DB);
+    const lavender = Color(0xFFE8D0F8);
+    const deepSpace = Color(0xFF0A0010);
+
+    // Wide nebula haze
+    canvas.drawCircle(
+      center, r * 1.8 * bs,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          _lerpHold(orchid, _amber).withValues(alpha: 0.05 + hold * 0.08),
+          _lerpHold(medPurple, _gold).withValues(alpha: 0.02),
+          Colors.transparent,
+        ], stops: const [0.0, 0.5, 1.0])
+            .createShader(Rect.fromCircle(center: center, radius: r * 1.8)),
+    );
+
+    // Main body — deep space sphere
+    canvas.drawCircle(
+      center, r * bs,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          deepSpace,
+          _lerpHold(const Color(0xFF1A0028), const Color(0xFF0A0500)),
+          _lerpHold(medPurple, _amber),
+        ], stops: const [0.0, 0.55, 1.0])
+            .createShader(Rect.fromCircle(center: center, radius: r)),
+    );
+
+    // NEBULA CLOUD LAYERS — soft overlapping ellipses that rotate
+    final nRng = Random(88);
+    for (int i = 0; i < 6; i++) {
+      final cloudAngle = (i / 6) * 2 * pi + orbit * 2 * pi * 0.15;
+      final cloudColor = i.isEven
+          ? _lerpHold(orchid, _gold)
+          : _lerpHold(medPurple, _amber);
+      final alpha = (0.06 + nRng.nextDouble() * 0.08 + hold * 0.14).clamp(0.0, 1.0);
+      final cloudDist = r * (0.25 + nRng.nextDouble() * 0.35) * bs;
+      final cloudR = r * (0.30 + nRng.nextDouble() * 0.25 + hold * 0.08);
+      final cloudCenter = center + Offset(cos(cloudAngle) * cloudDist, sin(cloudAngle) * cloudDist);
+
+      canvas.save();
+      canvas.translate(cloudCenter.dx, cloudCenter.dy);
+      canvas.rotate(cloudAngle + orbit * pi * 0.2);
+      canvas.scale(1.0, 0.6 + nRng.nextDouble() * 0.3);
+      canvas.drawCircle(
+        Offset.zero, cloudR,
+        Paint()
+          ..shader = RadialGradient(colors: [
+            cloudColor.withValues(alpha: alpha),
+            cloudColor.withValues(alpha: alpha * 0.3),
+            Colors.transparent,
+          ]).createShader(Rect.fromCircle(center: Offset.zero, radius: cloudR))
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+      canvas.restore();
+    }
+
+    // STARDUST PARTICLES — floating bright dots
+    for (int i = 0; i < 18; i++) {
+      final starAngle = (i / 18) * 2 * pi + orbit * 2 * pi * 0.25 + nRng.nextDouble() * 0.5;
+      final starDist = r * (0.15 + nRng.nextDouble() * 0.85) * bs;
+      final starPos = center + Offset(cos(starAngle) * starDist, sin(starAngle) * starDist);
+      final starSize = 1.0 + nRng.nextDouble() * 2.0 + hold * 1.0;
+      final twinkle = (sin(orbit * 2 * pi * 3 + i * 1.7) * 0.5 + 0.5).clamp(0.0, 1.0);
+      final starAlpha = (0.15 + twinkle * 0.35 + hold * 0.25).clamp(0.0, 1.0);
+
+      canvas.drawCircle(
+        starPos, starSize,
+        Paint()..color = _lerpHold(lavender, _warmWhite).withValues(alpha: starAlpha),
+      );
+    }
+
+    // Lavender core glow
+    final coreR = r * (0.20 + breath * 0.06 + hold * 0.24);
+    canvas.drawCircle(
+      center, coreR,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          _lerpHold(lavender, _warmWhite).withValues(alpha: 0.80),
+          _lerpHold(orchid, _amber).withValues(alpha: 0.30),
+          Colors.transparent,
+        ], stops: const [0.0, 0.4, 1.0])
+            .createShader(Rect.fromCircle(center: center, radius: coreR)),
+    );
+
+    // Specular
+    final specR = r * 0.28;
+    final specC = center + Offset(-r * 0.16, -r * 0.20);
+    canvas.drawCircle(
+      specC, specR,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.08 + hold * 0.05),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: specC, radius: specR)),
+    );
+
+    // COSMIC MIST on completion
+    if (flash > 0) {
+      final mistR = r * (1.0 + flash * 1.5) * bs;
+      canvas.drawCircle(center, mistR, Paint()
+        ..shader = RadialGradient(colors: [
+          _lerpHold(lavender, _warmWhite).withValues(alpha: (1 - flash) * 0.40),
+          _lerpHold(orchid, _amber).withValues(alpha: (1 - flash) * 0.18),
+          Colors.transparent,
+        ], stops: const [0.0, 0.5, 1.0])
+            .createShader(Rect.fromCircle(center: center, radius: mistR)));
+    }
+
+    // Orchid rim
+    canvas.drawCircle(
+      center, r * bs,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5 + hold * 2.0 + breath * 0.5
+        ..color = _lerpHold(orchid, _gold).withValues(alpha: 0.10 + hold * 0.22 + breath * 0.05),
     );
   }
 

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 /// Lifetime users additionally unlock [auroraNight], [cosmicDusk].
 enum AppThemeId {
   oledVoid,       // Free: pure OLED black + warm amber/gold accents
+  midnightFrost,  // Free: near-black + icy blue/white frosty accents
+  shadowRose,     // Free: deep black + muted rose/blush pink accents
   obsidianSteel,  // Pro: dark charcoal + cool silver/steel blue accents
   midnightEmber,  // Pro: deep navy + ember orange/red accents
   deepOcean,      // Pro: dark teal/ocean + aqua highlights
@@ -15,6 +17,8 @@ enum AppThemeId {
 /// All available Soul Fire button styles.
 enum SoulFireStyleId {
   etherealOrb,    // Free: purple/cyan energy sphere (current)
+  goldenPulse,    // Free: warm gold/amber pulsing energy sphere
+  nebulaHeart,    // Free: soft pink-purple nebula cloud orb
   voidPortal,     // Pro: dark void portal with cyan/purple swirling smoke
   plasmaBurst,    // Pro: intense cyan electric plasma burst
   plasmaCell,     // Pro: solid blue plasma ball with cell texture
@@ -29,6 +33,10 @@ extension AppThemeIdX on AppThemeId {
     switch (this) {
       case AppThemeId.oledVoid:
         return 'Void Black';
+      case AppThemeId.midnightFrost:
+        return 'Midnight Frost';
+      case AppThemeId.shadowRose:
+        return 'Shadow Rose';
       case AppThemeId.obsidianSteel:
         return 'Obsidian Steel';
       case AppThemeId.midnightEmber:
@@ -47,6 +55,8 @@ extension AppThemeIdX on AppThemeId {
   String get requiredTier {
     switch (this) {
       case AppThemeId.oledVoid:
+      case AppThemeId.midnightFrost:
+      case AppThemeId.shadowRose:
         return 'free';
       case AppThemeId.obsidianSteel:
       case AppThemeId.midnightEmber:
@@ -79,6 +89,10 @@ extension SoulFireStyleIdX on SoulFireStyleId {
     switch (this) {
       case SoulFireStyleId.etherealOrb:
         return 'Ethereal Orb';
+      case SoulFireStyleId.goldenPulse:
+        return 'Golden Pulse';
+      case SoulFireStyleId.nebulaHeart:
+        return 'Nebula Heart';
       case SoulFireStyleId.voidPortal:
         return 'Void Portal';
       case SoulFireStyleId.plasmaBurst:
@@ -95,6 +109,8 @@ extension SoulFireStyleIdX on SoulFireStyleId {
   String get requiredTier {
     switch (this) {
       case SoulFireStyleId.etherealOrb:
+      case SoulFireStyleId.goldenPulse:
+      case SoulFireStyleId.nebulaHeart:
         return 'free';
       case SoulFireStyleId.voidPortal:
       case SoulFireStyleId.plasmaBurst:
@@ -124,6 +140,10 @@ extension SoulFireStyleIdX on SoulFireStyleId {
     switch (this) {
       case SoulFireStyleId.etherealOrb:
         return const Color(0xFF7B2FBE); // Violet
+      case SoulFireStyleId.goldenPulse:
+        return const Color(0xFFD4A84B); // Warm gold
+      case SoulFireStyleId.nebulaHeart:
+        return const Color(0xFFDA70D6); // Orchid pink
       case SoulFireStyleId.voidPortal:
         return const Color(0xFF7B68EE); // Purple-blue
       case SoulFireStyleId.plasmaBurst:
@@ -142,6 +162,10 @@ extension SoulFireStyleIdX on SoulFireStyleId {
     switch (this) {
       case SoulFireStyleId.etherealOrb:
         return const Color(0xFFFF44CC); // Magenta
+      case SoulFireStyleId.goldenPulse:
+        return const Color(0xFFFF8C00); // Deep amber-orange
+      case SoulFireStyleId.nebulaHeart:
+        return const Color(0xFF9370DB); // Medium purple
       case SoulFireStyleId.voidPortal:
         return const Color(0xFF00E5FF); // Cyan
       case SoulFireStyleId.plasmaBurst:
@@ -199,6 +223,34 @@ class AppThemeData {
           dividerColor: Color(0x1FFFFFFF),
           cardGradientStart: Color(0xFF1A1A1A),
           cardGradientEnd: Color(0xFF0E0E0E),
+        );
+      case AppThemeId.midnightFrost:
+        return const AppThemeData(
+          id: AppThemeId.midnightFrost,
+          scaffoldColor: Color(0xFF020407),
+          surfaceColor: Color(0xFF0A0E14),
+          primaryColor: Color(0xFF9EC5E8),
+          secondaryColor: Color(0xFFD4E9F7),
+          accentGlow: Color(0x339EC5E8),
+          textPrimary: Color(0xFFECF2F8),
+          textSecondary: Color(0xB3C4D4E2),
+          dividerColor: Color(0x1FC4D4E2),
+          cardGradientStart: Color(0xFF10161E),
+          cardGradientEnd: Color(0xFF060A10),
+        );
+      case AppThemeId.shadowRose:
+        return const AppThemeData(
+          id: AppThemeId.shadowRose,
+          scaffoldColor: Color(0xFF050204),
+          surfaceColor: Color(0xFF100A0E),
+          primaryColor: Color(0xFFD4849B),
+          secondaryColor: Color(0xFFF0B8C8),
+          accentGlow: Color(0x33D4849B),
+          textPrimary: Color(0xFFF5ECF0),
+          textSecondary: Color(0xB3D8C8D0),
+          dividerColor: Color(0x1FD8C8D0),
+          cardGradientStart: Color(0xFF1A1218),
+          cardGradientEnd: Color(0xFF0C080A),
         );
       case AppThemeId.obsidianSteel:
         return const AppThemeData(

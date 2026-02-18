@@ -50,12 +50,14 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Afterword collects only the minimum data necessary to operate:\n\n'
-                        '• Google account email (authentication only)\n'
-                        '• Vault entries (stored as encrypted ciphertext — never plaintext)\n'
-                        '• Recipient email addresses (encrypted and sealed on your device)\n'
-                        '• Subscription status\n'
-                        '• Push notification token (for timer reminders)\n\n'
-                        'We do not collect analytics, location data, contacts, browsing history, or any telemetry.',
+                        '• Google account email (for authentication)\n'
+                        '• Vault entries (stored as encrypted ciphertext — never in plaintext)\n'
+                        '• Recipient email addresses (encrypted on your device before upload)\n'
+                        '• Subscription status (managed by your device\'s app store)\n'
+                        '• Push notification token (for timer reminders only)\n'
+                        '• Encrypted key backup (optional — only if you enable recovery phrase)\n\n'
+                        'We do not collect analytics, advertising identifiers, location data, '
+                        'contacts, browsing history, or any telemetry.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
@@ -97,18 +99,32 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
-                      Text('5. Data Retention & Deletion', style: headingStyle),
+                      Text('5. Recovery Phrase & Key Backup', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
-                        'Active data is retained as long as your account exists. '
-                        'Sent vault entries are automatically purged 30 days after delivery.\n\n'
-                        'You can permanently delete your account and all associated data '
-                        'at any time from Account Settings. This action is immediate and irreversible — '
-                        'all vault entries, encryption keys, and profile data are destroyed.',
+                        'You may optionally generate a 12-word recovery phrase to back up '
+                        'your encryption keys. This phrase is used to derive an encryption key '
+                        'locally on your device; the resulting encrypted key bundle is stored '
+                        'on our servers. The recovery phrase itself is never transmitted.\n\n'
+                        'If you lose your recovery phrase, we cannot recover your keys. '
+                        'Afterword has no ability to decrypt your key backup without the phrase.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
-                      Text('6. Children\'s Privacy', style: headingStyle),
+                      Text('6. Data Retention & Deletion', style: headingStyle),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Active data is retained as long as your account exists. '
+                        'Sent vault entries are automatically purged 30 days after delivery. '
+                        'After the 30-day grace period, your account resets to a fresh state '
+                        'and all previously sent data is permanently erased.\n\n'
+                        'You can permanently delete your account and all associated data '
+                        'at any time from Account Settings. This action is immediate and irreversible — '
+                        'all vault entries, encryption keys, key backups, and profile data are destroyed.',
+                        style: bodyStyle,
+                      ),
+                      const SizedBox(height: 20),
+                      Text('7. Children\'s Privacy', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
                         'Afterword is not intended for use by anyone under 13 years of age. '
@@ -116,7 +132,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
-                      Text('7. Changes to This Policy', style: headingStyle),
+                      Text('8. Changes to This Policy', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
                         'We may update this Privacy Policy from time to time. '
@@ -125,7 +141,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),
-                      Text('8. Contact', style: headingStyle),
+                      Text('9. Contact', style: headingStyle),
                       const SizedBox(height: 8),
                       Text(
                         'Questions about this Privacy Policy? Contact us:\n\n'
