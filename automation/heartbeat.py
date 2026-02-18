@@ -445,18 +445,33 @@ def send_warning_push(
     """Returns True if push was actually delivered to at least one device."""
     if fcm_ctx is None:
         return False
-    # Use relative language — the server only knows UTC so a specific date
-    # can appear one day off from what the user sees in their local timezone.
-    if remaining_fraction <= 0.10:
-        urgency = "Your timer is about to expire."
-    elif remaining_fraction <= 0.33:
-        urgency = "Your timer is running low."
+    # Compute human-friendly remaining time (timezone-safe because it's relative)
+    now = datetime.now(timezone.utc)
+    remaining = deadline - now
+    total_hours = max(0, remaining.total_seconds() / 3600)
+    total_days = remaining.days
+
+    if total_hours < 1:
+        time_left = "less than 1 hour"
+    elif total_hours < 24:
+        h = int(total_hours)
+        time_left = f"~{h} hour{'s' if h != 1 else ''}"
+    elif total_days < 2:
+        time_left = "~1 day"
     else:
-        urgency = "Your timer is running down."
+        time_left = f"~{total_days} days"
+
+    if remaining_fraction <= 0.10:
+        urgency = f"Only {time_left} left — your vault is about to execute."
+    elif remaining_fraction <= 0.33:
+        urgency = f"{time_left} remaining. Your timer is running low."
+    else:
+        urgency = f"{time_left} remaining on your timer."
+
     return _send_push_to_user(
         client, user_id, fcm_ctx,
         title="Afterword reminder",
-        body=f"Hi {sender_name}, {urgency} Open Afterword to check in.",
+        body=f"Hi {sender_name}, {urgency} Open the app to check in.",
         data={"type": "warning"},
     )
 

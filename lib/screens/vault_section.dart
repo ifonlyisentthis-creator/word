@@ -16,6 +16,8 @@ import 'package:record/record.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/theme_provider.dart';
+
 
 
 import '../models/vault_entry.dart';
@@ -1390,7 +1392,11 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     final isEditing = widget.entry != null;
 
-    final controller = context.watch<VaultController>();
+    // Only subscribe to audioSecondsUsed (and only when audio mode is active)
+    // to avoid full rebuilds from VaultController during keyboard animation.
+    final audioSecondsUsed = _dataType == VaultDataType.audio
+        ? context.select<VaultController, int>((c) => c.audioSecondsUsed)
+        : 0;
 
     final existingAudioSeconds =
 
@@ -1404,7 +1410,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     final remainingSecondsRaw = VaultController.audioTimeBankSeconds -
 
-        controller.audioSecondsUsed +
+        audioSecondsUsed +
 
         existingAudioSeconds;
 
@@ -2876,21 +2882,34 @@ class _SheetContainer extends StatelessWidget {
 
         decoration: BoxDecoration(
 
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
 
             begin: Alignment.topLeft,
 
             end: Alignment.bottomRight,
 
-            colors: [Color(0xFF1A1A1A), Color(0xFF0E0E0E)],
+            colors: [
+              context.watch<ThemeProvider>().themeData.cardGradientStart,
+              context.watch<ThemeProvider>().themeData.cardGradientEnd,
+            ],
 
           ),
 
           borderRadius: BorderRadius.circular(28),
 
-          border: Border.all(color: Colors.white12),
+          border: Border.all(color: context.watch<ThemeProvider>().themeData.dividerColor),
 
           boxShadow: [
+
+            BoxShadow(
+
+              color: context.watch<ThemeProvider>().themeData.accentGlow.withValues(alpha: 0.06),
+
+              blurRadius: 24,
+
+              spreadRadius: -4,
+
+            ),
 
             BoxShadow(
 
@@ -2985,25 +3004,37 @@ class _VaultCard extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
+    final td = context.watch<ThemeProvider>().themeData;
+
     return Container(
 
       decoration: BoxDecoration(
 
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
 
           begin: Alignment.topLeft,
 
           end: Alignment.bottomRight,
 
-          colors: [Color(0xFF181818), Color(0xFF0E0E0E)],
+          colors: [td.cardGradientStart, td.cardGradientEnd],
 
         ),
 
         borderRadius: BorderRadius.circular(22),
 
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: td.dividerColor),
 
         boxShadow: [
+
+          BoxShadow(
+
+            color: td.accentGlow.withValues(alpha: 0.08),
+
+            blurRadius: 24,
+
+            spreadRadius: -4,
+
+          ),
 
           BoxShadow(
 

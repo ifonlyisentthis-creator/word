@@ -326,25 +326,36 @@ class _StatusCard extends StatelessWidget {
 
 
 
+    final td = context.watch<ThemeProvider>().themeData;
     return Container(
 
       decoration: BoxDecoration(
 
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
 
           begin: Alignment.topLeft,
 
           end: Alignment.bottomRight,
 
-          colors: [Color(0xFF1A1A1A), Color(0xFF0F0F0F)],
+          colors: [td.cardGradientStart, td.cardGradientEnd],
 
         ),
 
         borderRadius: BorderRadius.circular(20),
 
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: td.dividerColor),
 
         boxShadow: [
+
+          BoxShadow(
+
+            color: td.accentGlow.withValues(alpha: 0.08),
+
+            blurRadius: 24,
+
+            spreadRadius: -4,
+
+          ),
 
           BoxShadow(
 
@@ -552,23 +563,24 @@ class _PackageTile extends StatelessWidget {
 
 
 
+    final td = context.watch<ThemeProvider>().themeData;
     return Container(
 
       decoration: BoxDecoration(
 
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
 
           begin: Alignment.topLeft,
 
           end: Alignment.bottomRight,
 
-          colors: [Color(0xFF1A1A1A), Color(0xFF0F0F0F)],
+          colors: [td.cardGradientStart, td.cardGradientEnd],
 
         ),
 
         borderRadius: BorderRadius.circular(20),
 
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: td.dividerColor),
 
       ),
 

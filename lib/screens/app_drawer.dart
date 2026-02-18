@@ -6,6 +6,7 @@ import '../services/auth_controller.dart';
 import '../services/home_controller.dart';
 import '../services/revenuecat_controller.dart';
 import '../services/theme_provider.dart';
+import '../widgets/premium_page_route.dart';
 import 'account_settings_screen.dart';
 import 'customization_screen.dart';
 import 'history_screen.dart';
@@ -150,7 +151,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => MyVaultPage(
+                        PremiumPageRoute(page: MyVaultPage(
                           userId: userId,
                           readOnly: grace,
                         )),
@@ -164,7 +165,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => HistoryScreen(userId: userId)),
+                        PremiumPageRoute(page: HistoryScreen(userId: userId)),
                       );
                     },
                   ),
@@ -175,7 +176,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const HowItWorksScreen()),
+                        PremiumPageRoute(page: const HowItWorksScreen()),
                       );
                     },
                   ),
@@ -186,7 +187,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const CustomizationScreen()),
+                        PremiumPageRoute(page: const CustomizationScreen()),
                       );
                     },
                   ),
@@ -198,7 +199,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const SubscriptionDebugScreen()),
+                        PremiumPageRoute(page: const SubscriptionDebugScreen()),
                       );
                     },
                   ),
@@ -213,7 +214,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => AccountSettingsScreen(
+                        PremiumPageRoute(page: AccountSettingsScreen(
                             homeController: homeController,
                             authController: authController,
                             revenueCatController: rcController,
@@ -229,7 +230,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => RecoveryPhraseScreen(
+                        PremiumPageRoute(page: RecoveryPhraseScreen(
                           homeController: hc,
                         )),
                       );
@@ -242,7 +243,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                        PremiumPageRoute(page: const PrivacyPolicyScreen()),
                       );
                     },
                   ),
@@ -253,7 +254,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const TermsScreen()),
+                        PremiumPageRoute(page: const TermsScreen()),
                       );
                     },
                   ),

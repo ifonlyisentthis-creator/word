@@ -36,6 +36,8 @@ import '../services/vault_service.dart';
 
 import '../widgets/ambient_background.dart';
 
+import '../widgets/premium_page_route.dart';
+
 import '../widgets/soul_fire_button.dart';
 
 import 'app_drawer.dart';
@@ -540,7 +542,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                   onViewAll: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => MyVaultPage(
+                      PremiumPageRoute(page: MyVaultPage(
                         userId: widget.userId,
                         readOnly: isInGracePeriod,
                       )),
@@ -1144,9 +1146,11 @@ class _TimerCardState extends State<_TimerCard> {
 
                   timerLabel,
 
-                  style: theme.textTheme.headlineSmall?.copyWith(
+                  style: theme.textTheme.headlineMedium?.copyWith(
 
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
+
+                    letterSpacing: -0.5,
 
                   ),
 
@@ -1170,7 +1174,7 @@ class _TimerCardState extends State<_TimerCard> {
 
             ),
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
 
             ClipRRect(
 
@@ -1180,9 +1184,9 @@ class _TimerCardState extends State<_TimerCard> {
 
                 value: progress.clamp(0, 1),
 
-                minHeight: 6,
+                minHeight: 5,
 
-                backgroundColor: Colors.white12,
+                backgroundColor: Colors.white.withValues(alpha: 0.06),
 
               ),
 
@@ -1529,25 +1533,37 @@ class _SurfaceCard extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
+    final td = context.watch<ThemeProvider>().themeData;
+
     return Container(
 
       decoration: BoxDecoration(
 
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
 
           begin: Alignment.topLeft,
 
           end: Alignment.bottomRight,
 
-          colors: [Color(0xFF181818), Color(0xFF0E0E0E)],
+          colors: [td.cardGradientStart, td.cardGradientEnd],
 
         ),
 
         borderRadius: BorderRadius.circular(22),
 
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: td.dividerColor),
 
         boxShadow: [
+
+          BoxShadow(
+
+            color: td.accentGlow.withValues(alpha: 0.08),
+
+            blurRadius: 24,
+
+            spreadRadius: -4,
+
+          ),
 
           BoxShadow(
 
