@@ -1,129 +1,128 @@
 """Generate a premium splash icon for Afterword — v2.
 
-Design: Inspired by the golden ring app icon — a luminous gold circle
-with subtle inner ring and ambient glow on pure black. Minimalist, premium.
-Renders at 4608x4608 (4x supersample) then LANCZOS downscales to 1152x1152
-for ultra-sharp, crispy results.
+Design: "The Sentinel" — a luminous crystalline light form emerging from void.
+Cool white/silver core, ethereal aura, cinematic 6-pointed lens-star.
+Pixel-perfect smooth gradients via numpy (no banding).
+Pure black + ghostly white/silver. No gold, no ring.
+
+Renders at 2304x2304 then LANCZOS downscales to 1152x1152.
 
 Usage:
     python automation/generate_splash_v2.py
     -> overwrites assets/splash_icon.png
 """
 
-from PIL import Image, ImageDraw, ImageFilter
+import math
+import numpy as np
+from PIL import Image, ImageFilter
 
-RENDER = 4608      # 4x supersample
+RENDER = 2304      # 2x supersample (numpy is pixel-perfect, less need for 4x)
 FINAL = 1152
-
-
-def ring(draw, cx, cy, radius, width, color):
-    """Draw an anti-aliased ring (circle outline)."""
-    r_out = radius + width / 2
-    r_in = radius - width / 2
-    draw.ellipse([cx - r_out, cy - r_out, cx + r_out, cy + r_out], fill=color)
-    draw.ellipse([cx - r_in, cy - r_in, cx + r_in, cy + r_in], fill=(0, 0, 0, 0))
-
-
-def soft_glow(size, cx, cy, radius, color, peak_alpha, blur_r):
-    """Create a blurred radial glow layer."""
-    layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
-    steps = 60
-    for i in range(steps):
-        t = i / steps
-        r = int(radius * (1 - t * 0.5))
-        a = int(peak_alpha * (1 - t) ** 2.2)
-        if a < 1:
-            continue
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*color, a))
-    return layer.filter(ImageFilter.GaussianBlur(radius=blur_r))
 
 
 def main():
     S = RENDER
-    cx, cy = S // 2, S // 2
+    cx, cy = S / 2, S / 2
 
-    # Colors — match the golden ring app icon palette
-    bright_gold = (230, 180, 50)     # E6B432 — the hot center of the ring stroke
-    warm_gold = (212, 168, 75)       # D4A84B — main ring color
-    amber = (200, 150, 40)           # dimmer outer
-    dark_gold = (120, 90, 20)        # subtle inner ring
+    # Build coordinate grids
+    y, x = np.mgrid[0:S, 0:S].astype(np.float32)
+    dx = x - cx
+    dy = y - cy
+    dist = np.sqrt(dx ** 2 + dy ** 2)
+    angle = np.arctan2(dy, dx)
 
-    # Main ring geometry
-    ring_radius = int(S * 0.30)      # ~30% of canvas = prominent but not huge
-    ring_width = int(S * 0.014)      # thick enough to read as a bold ring
+    # Start with pure black
+    img = np.zeros((S, S, 3), dtype=np.float32)
 
-    # ── Canvas ──
-    img = Image.new("RGBA", (S, S), (0, 0, 0, 255))
+    # ── 1. Wide atmospheric aura (deep blue-gray) ──
+    r_atmo = S * 0.42
+    atmo = np.exp(-(dist / r_atmo) ** 1.8) * 0.08
+    img += atmo[..., None] * np.array([0.35, 0.42, 0.55])
 
-    # ── 1. Wide ambient glow behind ring ──
-    glow1 = soft_glow(S, cx, cy, int(S * 0.40), warm_gold, peak_alpha=18, blur_r=int(S * 0.06))
-    img = Image.alpha_composite(img, glow1)
+    # ── 2. Mid-range ethereal glow (ice silver) ──
+    r_mid = S * 0.24
+    mid_glow = np.exp(-(dist / r_mid) ** 2.0) * 0.18
+    img += mid_glow[..., None] * np.array([0.70, 0.78, 0.88])
 
-    # ── 2. Tighter warm glow on the ring path ──
-    glow2 = soft_glow(S, cx, cy, ring_radius, bright_gold, peak_alpha=35, blur_r=int(S * 0.025))
-    img = Image.alpha_composite(img, glow2)
+    # ── 3. Inner luminous bloom (bright silver-white) ──
+    r_inner = S * 0.11
+    inner = np.exp(-(dist / r_inner) ** 1.6) * 0.55
+    img += inner[..., None] * np.array([0.85, 0.90, 0.95])
 
-    # ── 3. Main golden ring ──
-    ring_layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    rd = ImageDraw.Draw(ring_layer)
+    # ── 4. Cinematic 6-pointed lens star ──
+    # Each ray is a narrow Gaussian along its direction, tapering with distance
+    num_rays = 6
+    ray_length = S * 0.36
+    ray_width_sigma = S * 0.008  # thinness of rays
 
-    # Outer bright ring
-    ring(rd, cx, cy, ring_radius, ring_width, (*bright_gold, 255))
+    rays = np.zeros((S, S), dtype=np.float32)
+    for i in range(num_rays):
+        a = (i / num_rays) * math.pi + math.pi / 12  # offset from axes
+        cos_a, sin_a = math.cos(a), math.sin(a)
+        # Project each pixel onto the ray axis
+        proj = dx * cos_a + dy * sin_a     # distance along ray
+        perp = -dx * sin_a + dy * cos_a    # perpendicular distance
 
-    # Slight gradient feel: draw a thinner, brighter inner edge
-    ring(rd, cx, cy, ring_radius - ring_width * 0.15, int(ring_width * 0.35), (*((245, 210, 90)), 180))
+        # Taper width: thinner at tips
+        taper = np.clip(1.0 - np.abs(proj) / ray_length, 0, 1) ** 0.5
+        width = ray_width_sigma * (1.0 + 2.0 * taper)
+        # Gaussian cross-section
+        cross = np.exp(-0.5 * (perp / np.maximum(width, 1e-6)) ** 2)
+        # Fade with distance from center
+        fade = np.exp(-(np.abs(proj) / ray_length) ** 1.3) * taper
+        rays += cross * fade
 
-    img = Image.alpha_composite(img, ring_layer)
+    rays = np.clip(rays, 0, 1)
+    # Rays are silver-white
+    img += rays[..., None] * 0.30 * np.array([0.82, 0.86, 0.92])
 
-    # ── 4. Subtle inner secondary ring (like a vault echo) ──
-    inner_layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    id = ImageDraw.Draw(inner_layer)
-    inner_r = int(ring_radius * 0.78)
-    inner_w = max(2, int(ring_width * 0.18))
-    ring(id, cx, cy, inner_r, inner_w, (*dark_gold, 45))
-    img = Image.alpha_composite(img, inner_layer)
+    # ── 5. Secondary 12-point micro-rays (fainter, interleaved) ──
+    micro_rays = np.zeros((S, S), dtype=np.float32)
+    micro_length = S * 0.20
+    micro_sigma = S * 0.004
 
-    # ── 5. Hot specular highlights on the ring (top-left and bottom-right) ──
-    spec_layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    sd = ImageDraw.Draw(spec_layer)
+    for i in range(12):
+        a = (i / 12) * math.pi + math.pi / 24
+        cos_a, sin_a = math.cos(a), math.sin(a)
+        proj = dx * cos_a + dy * sin_a
+        perp = -dx * sin_a + dy * cos_a
+        taper = np.clip(1.0 - np.abs(proj) / micro_length, 0, 1) ** 0.6
+        width = micro_sigma * (1.0 + 1.5 * taper)
+        cross = np.exp(-0.5 * (perp / np.maximum(width, 1e-6)) ** 2)
+        fade = np.exp(-(np.abs(proj) / micro_length) ** 1.5) * taper
+        micro_rays += cross * fade
 
-    import math
-    # Top-left specular arc — brighter segment of the ring
-    for angle_deg in range(-60, 30):
-        a = math.radians(angle_deg)
-        px = cx + ring_radius * math.cos(a)
-        py = cy + ring_radius * math.sin(a)
-        dot_r = ring_width * 0.6
-        # Brightness falls off from center of highlight
-        center_deg = -15
-        dist = abs(angle_deg - center_deg) / 45
-        alpha = int(60 * max(0, 1 - dist ** 1.5))
-        if alpha > 0:
-            sd.ellipse([px - dot_r, py - dot_r, px + dot_r, py + dot_r],
-                       fill=(255, 240, 180, alpha))
+    micro_rays = np.clip(micro_rays, 0, 1)
+    img += micro_rays[..., None] * 0.12 * np.array([0.70, 0.78, 0.88])
 
-    spec_layer = spec_layer.filter(ImageFilter.GaussianBlur(radius=int(S * 0.006)))
-    img = Image.alpha_composite(img, spec_layer)
+    # ── 6. Bright core — the sentinel's heart ──
+    r_core = S * 0.045
+    core = np.exp(-(dist / r_core) ** 1.4) * 0.95
+    img += core[..., None] * np.array([1.0, 1.0, 1.0])
 
-    # ── 6. Very subtle outer haze ring (barely visible) ──
-    haze = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    hd = ImageDraw.Draw(haze)
-    outer_haze_r = int(ring_radius * 1.15)
-    ring(hd, cx, cy, outer_haze_r, max(2, int(ring_width * 0.12)), (*amber, 18))
-    haze = haze.filter(ImageFilter.GaussianBlur(radius=int(S * 0.004)))
-    img = Image.alpha_composite(img, haze)
+    # White-hot center point
+    r_hot = S * 0.012
+    hot = np.exp(-(dist / r_hot) ** 1.0)
+    img += hot[..., None] * np.array([1.0, 1.0, 1.0])
 
-    # ── 7. Downscale 4x with LANCZOS for crispy output ──
-    final = img.resize((FINAL, FINAL), Image.LANCZOS)
+    # ── 7. Subtle outer halo ring ──
+    halo_r = S * 0.32
+    halo_sigma = S * 0.008
+    ring_dist = np.abs(dist - halo_r)
+    halo_ring = np.exp(-(ring_dist / halo_sigma) ** 2) * 0.06
+    img += halo_ring[..., None] * np.array([0.60, 0.68, 0.78])
 
-    # Convert to opaque RGB
-    final_rgb = Image.new("RGB", (FINAL, FINAL), (0, 0, 0))
-    final_rgb.paste(final, mask=final.split()[3])
+    # ── Clamp and convert ──
+    img = np.clip(img, 0, 1)
+    img_uint8 = (img * 255).astype(np.uint8)
+    pil_img = Image.fromarray(img_uint8, "RGB")
+
+    # Downscale with LANCZOS
+    final = pil_img.resize((FINAL, FINAL), Image.LANCZOS)
 
     out = "assets/splash_icon.png"
-    final_rgb.save(out, "PNG", optimize=True)
-    print(f"✅ Saved {out} ({FINAL}x{FINAL}, supersampled from {RENDER}x{RENDER})")
+    final.save(out, "PNG", optimize=True)
+    print(f"✅ {out} ({FINAL}x{FINAL}, supersampled from {RENDER}x{RENDER})")
 
 
 if __name__ == "__main__":

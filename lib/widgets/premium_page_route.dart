@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// A premium fade+slide page transition that prevents the brief flash
-/// of the previous screen on slow devices. The destination page fades in
-/// with a subtle upward slide while the background stays dark.
+/// A premium page transition that prevents the brief flash of the previous
+/// screen on slow devices. An opaque black container covers the screen from
+/// frame 1, then the destination page fades + slides in on top.
 class PremiumPageRoute<T> extends PageRouteBuilder<T> {
   PremiumPageRoute({required this.page})
       : super(
@@ -12,21 +12,18 @@ class PremiumPageRoute<T> extends PageRouteBuilder<T> {
               parent: animation,
               curve: Curves.easeOutCubic,
             );
-            return FadeTransition(
-              opacity: curved,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 0.04),
-                  end: Offset.zero,
-                ).animate(curved),
+            // Opaque black fills the screen instantly — no flash of underlying route
+            return ColoredBox(
+              color: Colors.black,
+              child: FadeTransition(
+                opacity: curved,
                 child: child,
               ),
             );
           },
-          transitionDuration: const Duration(milliseconds: 300),
-          reverseTransitionDuration: const Duration(milliseconds: 250),
+          transitionDuration: const Duration(milliseconds: 280),
+          reverseTransitionDuration: const Duration(milliseconds: 220),
           opaque: true,
-          barrierColor: Colors.black,
         );
 
   final Widget page;

@@ -66,10 +66,29 @@ class _SoulFireButtonState extends State<SoulFireButton>
         _flashController.forward(from: 0);
         widget.onConfirmed();
         Future.delayed(const Duration(milliseconds: 1400), () {
-          if (mounted) setState(() => _completed = false);
+          if (mounted) {
+            _holdController.reset();
+            setState(() => _completed = false);
+          }
         });
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Pause expensive continuous animations when a modal covers this route
+    // (e.g. Add Entry sheet) — otherwise the painter ticks at 60fps behind
+    // the sheet causing severe lag on slower devices.
+    final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+    if (isCurrent && widget.enabled) {
+      if (!_breathController.isAnimating) _breathController.repeat(reverse: true);
+      if (!_orbitController.isAnimating) _orbitController.repeat();
+    } else {
+      _breathController.stop();
+      _orbitController.stop();
+    }
   }
 
   @override
@@ -111,8 +130,16 @@ class _SoulFireButtonState extends State<SoulFireButton>
     _holdDelayTimer = null;
     _pointerStart = null;
     if (_completed) return;
-    _holdController.stop();
-    _holdController.reset();
+    // Smooth reverse back to starting state instead of harsh snap
+    if (_holdController.value > 0) {
+      _holdController.animateTo(
+        0,
+        duration: Duration(milliseconds: (350 * _holdController.value).round().clamp(100, 350)),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      _holdController.stop();
+    }
   }
 
   @override

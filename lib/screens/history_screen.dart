@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/theme_provider.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key, required this.userId});
@@ -180,18 +183,16 @@ class _HistoryGroupCard extends StatelessWidget {
     final theme = Theme.of(context);
     final dateFmt = DateFormat('MMM d, yyyy');
 
+    final td = context.watch<ThemeProvider>().themeData;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF181818),
-            const Color(0xFF0E0E0E),
-          ],
+          colors: [td.cardGradientStart, td.cardGradientEnd],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: td.dividerColor),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),

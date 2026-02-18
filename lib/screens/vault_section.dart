@@ -1088,19 +1088,19 @@ class _VaultEntryTile extends StatelessWidget {
 
       decoration: BoxDecoration(
 
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
 
           begin: Alignment.topLeft,
 
           end: Alignment.bottomRight,
 
-          colors: [Color(0xFF1A1A1A), Color(0xFF0E0E0E)],
+          colors: [context.watch<ThemeProvider>().themeData.cardGradientStart, context.watch<ThemeProvider>().themeData.cardGradientEnd],
 
         ),
 
         borderRadius: BorderRadius.circular(18),
 
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: context.watch<ThemeProvider>().themeData.dividerColor),
 
         boxShadow: [
 
@@ -2867,6 +2867,7 @@ class _SheetContainer extends StatelessWidget {
   Widget build(BuildContext context) {
 
     final topPad = MediaQuery.paddingOf(context).top;
+    final td = context.watch<ThemeProvider>().themeData;
 
     return Padding(
 
@@ -2883,44 +2884,26 @@ class _SheetContainer extends StatelessWidget {
         decoration: BoxDecoration(
 
           gradient: LinearGradient(
-
             begin: Alignment.topLeft,
-
             end: Alignment.bottomRight,
-
-            colors: [
-              context.watch<ThemeProvider>().themeData.cardGradientStart,
-              context.watch<ThemeProvider>().themeData.cardGradientEnd,
-            ],
-
+            colors: [td.cardGradientStart, td.cardGradientEnd],
           ),
 
           borderRadius: BorderRadius.circular(28),
 
-          border: Border.all(color: context.watch<ThemeProvider>().themeData.dividerColor),
+          border: Border.all(color: td.dividerColor),
 
           boxShadow: [
-
             BoxShadow(
-
-              color: context.watch<ThemeProvider>().themeData.accentGlow.withValues(alpha: 0.06),
-
+              color: td.accentGlow.withValues(alpha: 0.06),
               blurRadius: 24,
-
               spreadRadius: -4,
-
             ),
-
             BoxShadow(
-
               color: Colors.black.withValues(alpha: 0.35),
-
               blurRadius: 18,
-
               offset: const Offset(0, 12),
-
             ),
-
           ],
 
         ),

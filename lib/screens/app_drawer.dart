@@ -43,8 +43,10 @@ class AppDrawer extends StatelessWidget {
 
     final isPro = revenueCat.isPro || revenueCat.isLifetime;
 
+    final td = context.watch<ThemeProvider>().themeData;
+
     return Drawer(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: td.scaffoldColor,
       child: SafeArea(
         child: Column(
           children: [

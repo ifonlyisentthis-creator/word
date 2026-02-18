@@ -446,7 +446,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                 ]);
               },
               color: Theme.of(context).colorScheme.primary,
-              backgroundColor: const Color(0xFF1A1A1A),
+              backgroundColor: context.watch<ThemeProvider>().themeData.cardGradientStart,
               child: ListView(
 
               controller: _scrollController,
@@ -1383,9 +1383,9 @@ class _TimerPickerSheetState extends State<_TimerPickerSheet> {
     return SafeArea(
       top: false,
       child: Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF141414),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: context.watch<ThemeProvider>().themeData.cardGradientStart,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
       child: Column(

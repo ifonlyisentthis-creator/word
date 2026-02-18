@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/device_secret_service.dart';
 import '../services/home_controller.dart';
 import '../services/key_backup_service.dart';
+import '../services/theme_provider.dart';
 import '../widgets/ambient_background.dart';
 
 class RecoveryPhraseScreen extends StatefulWidget {
@@ -221,7 +223,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF141414),
+      backgroundColor: context.watch<ThemeProvider>().themeData.cardGradientStart,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -442,16 +444,22 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final td = context.watch<ThemeProvider>().themeData;
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF181818), Color(0xFF0E0E0E)],
+          colors: [td.cardGradientStart, td.cardGradientEnd],
         ),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: td.dividerColor),
         boxShadow: [
+          BoxShadow(
+            color: td.accentGlow.withValues(alpha: 0.08),
+            blurRadius: 24,
+            spreadRadius: -4,
+          ),
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.35),
             blurRadius: 18,
