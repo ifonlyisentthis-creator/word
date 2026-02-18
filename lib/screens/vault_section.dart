@@ -2838,18 +2838,32 @@ String _formatSeconds(int seconds) {
 
 
 
-class _SheetContainer extends StatelessWidget {
+class _SheetContainer extends StatefulWidget {
 
   const _SheetContainer({required this.child});
 
-
-
   final Widget child;
 
+  @override
+  State<_SheetContainer> createState() => _SheetContainerState();
+}
 
+class _SheetContainerState extends State<_SheetContainer> {
+  // Defer building the heavy child until the next frame so the sheet
+  // entrance animation isn't competing with first-time widget tree
+  // creation + shader compilation. This eliminates the "heavy first
+  // open" jank — subsequent opens are fast because shaders are cached.
+  bool _childReady = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _childReady = true);
+    });
+  }
 
+  @override
   Widget build(BuildContext context) {
 
     final topPad = MediaQuery.paddingOf(context).top;
@@ -2889,7 +2903,11 @@ class _SheetContainer extends StatelessWidget {
 
           borderRadius: BorderRadius.circular(28),
 
-          child: RepaintBoundary(child: child),
+          child: RepaintBoundary(
+            child: _childReady
+                ? widget.child
+                : const SizedBox.shrink(),
+          ),
 
         ),
 

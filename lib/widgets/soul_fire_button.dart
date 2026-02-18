@@ -36,6 +36,14 @@ class _SoulFireButtonState extends State<SoulFireButton>
   Offset? _pointerStart;
   Timer? _holdDelayTimer;
 
+  // ── Multi-layer safety against false confirmation ──
+  // Layer A: real wall-clock elapsed time must be >= 80% of hold duration
+  DateTime? _holdStartedAt;
+  // Layer B: pointer must still be physically down
+  bool _pointerIsDown = false;
+  // Layer C: one-shot lock — once consumed, no second fire until full reset
+  bool _confirmationLocked = false;
+
   @override
   void initState() {
     super.initState();
@@ -60,16 +68,34 @@ class _SoulFireButtonState extends State<SoulFireButton>
     );
 
     _holdController.addStatusListener((status) {
-      // Guard: animateTo(0) also fires .completed — only confirm at upper bound
-      if (status == AnimationStatus.completed && !_completed && _holdController.value == 1.0) {
+      // ═══ MULTI-LAYER SAFETY GATE ═══
+      // All 5 conditions must be true simultaneously:
+      //   1. Animation status == completed
+      //   2. Controller value == 1.0 (guards animateTo(0) which also fires .completed)
+      //   3. _completed == false (not already confirmed this cycle)
+      //   4. _pointerIsDown == true (finger still on screen)
+      //   5. Real elapsed time >= 80% of hold duration (guards animation glitches)
+      //   6. _confirmationLocked == false (one-shot debounce)
+      if (status == AnimationStatus.completed &&
+          _holdController.value == 1.0 &&
+          !_completed &&
+          _pointerIsDown &&
+          !_confirmationLocked &&
+          _holdStartedAt != null &&
+          DateTime.now().difference(_holdStartedAt!).inMilliseconds >=
+              (_holdDuration.inMilliseconds * 0.80).round()) {
         _completed = true;
+        _confirmationLocked = true;
         HapticFeedback.heavyImpact();
         _flashController.forward(from: 0);
         widget.onConfirmed();
         Future.delayed(const Duration(milliseconds: 1400), () {
           if (mounted) {
             _holdController.reset();
-            setState(() => _completed = false);
+            setState(() {
+              _completed = false;
+              _confirmationLocked = false;
+            });
           }
         });
       }
@@ -103,11 +129,13 @@ class _SoulFireButtonState extends State<SoulFireButton>
   }
 
   void _onPointerDown(PointerDownEvent event) {
-    if (!widget.enabled || _completed) return;
+    if (!widget.enabled || _completed || _confirmationLocked) return;
     _pointerStart = event.position;
+    _pointerIsDown = true;
     _holdDelayTimer?.cancel();
     _holdDelayTimer = Timer(const Duration(milliseconds: 120), () {
-      if (_pointerStart != null && !_completed) {
+      if (_pointerStart != null && !_completed && _pointerIsDown) {
+        _holdStartedAt = DateTime.now();
         _holdController.forward(from: 0);
         HapticFeedback.lightImpact();
       }
@@ -123,6 +151,7 @@ class _SoulFireButtonState extends State<SoulFireButton>
   }
 
   void _onPointerUp(PointerUpEvent _) {
+    _pointerIsDown = false;
     _cancelHold();
   }
 
@@ -130,6 +159,7 @@ class _SoulFireButtonState extends State<SoulFireButton>
     _holdDelayTimer?.cancel();
     _holdDelayTimer = null;
     _pointerStart = null;
+    _holdStartedAt = null;
     if (_completed) return;
     // Smooth reverse back to starting state instead of harsh snap
     if (_holdController.value > 0) {
@@ -215,7 +245,10 @@ class _SoulFireButtonState extends State<SoulFireButton>
               onPointerDown: _onPointerDown,
               onPointerMove: _onPointerMove,
               onPointerUp: _onPointerUp,
-              onPointerCancel: (_) => _cancelHold(),
+              onPointerCancel: (_) {
+                _pointerIsDown = false;
+                _cancelHold();
+              },
               child: SizedBox(width: _size, height: _size),
             ),
           ),
