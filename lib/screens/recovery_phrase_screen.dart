@@ -361,10 +361,9 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'This will replace your current encryption keys. '
-                            'Any vault entries created on this device before restoring '
-                            'will become permanently unreadable and will not be sent '
-                            'to your beneficiaries.',
+                            'This will replace the encryption keys on this device. '
+                            'Only use this to recover YOUR OWN keys from another device. '
+                            'Do not restore a different account\'s phrase.',
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall
