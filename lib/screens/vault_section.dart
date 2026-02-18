@@ -869,12 +869,7 @@ class _EntryDetailsSheetState extends State<_EntryDetailsSheet> {
 
         return SafeArea(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              24,
-              16,
-              24,
-              24 + MediaQuery.of(context).viewInsets.bottom,
-            ),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1432,15 +1427,21 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     return SafeArea(
 
-      child: SingleChildScrollView(
+      child: Column(
 
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        children: [
 
-        child: Column(
+          Expanded(
 
-          crossAxisAlignment: CrossAxisAlignment.start,
+            child: SingleChildScrollView(
 
-          children: [
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+
+              child: Column(
+
+                crossAxisAlignment: CrossAxisAlignment.start,
+
+                children: [
 
             const _SheetHandle(),
 
@@ -2180,11 +2181,17 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
             ),
 
-            const _KeyboardSpacer(),
+              ],
 
-          ],
+            ),
+
+          ),
 
         ),
+
+          const _KeyboardSpacer(),
+
+        ],
 
       ),
 
