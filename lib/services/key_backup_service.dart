@@ -7,15 +7,55 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'device_secret_service.dart';
 
-class KeyBackupService {
-  KeyBackupService({
-    required SupabaseClient client,
-    required DeviceSecretService deviceSecretService,
-  })  : _client = client,
-        _deviceSecretService = deviceSecretService;
+String normalizeRecoveryPhrase(String phrase) {
+  return phrase
+      .trim()
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .where((word) => word.isNotEmpty)
+      .join(' ');
+}
+
+abstract class KeyBackupRemoteStore {
+  Future<String?> fetchEncryptedBackup(String userId);
+  Future<void> saveEncryptedBackup(String userId, String encryptedBackup);
+}
+
+class SupabaseKeyBackupRemoteStore implements KeyBackupRemoteStore {
+  SupabaseKeyBackupRemoteStore(this._client);
 
   final SupabaseClient _client;
-  final DeviceSecretService _deviceSecretService;
+
+  @override
+  Future<String?> fetchEncryptedBackup(String userId) async {
+    final response = await _client
+        .from('profiles')
+        .select('key_backup_encrypted')
+        .eq('id', userId)
+        .maybeSingle();
+    return response?['key_backup_encrypted'] as String?;
+  }
+
+  @override
+  Future<void> saveEncryptedBackup(String userId, String encryptedBackup) async {
+    await _client
+        .from('profiles')
+        .update({'key_backup_encrypted': encryptedBackup})
+        .eq('id', userId);
+  }
+}
+
+class KeyBackupService {
+  KeyBackupService({
+    SupabaseClient? client,
+    KeyBackupRemoteStore? remoteStore,
+    required KeyMaterialStore deviceSecretService,
+  })  : assert(client != null || remoteStore != null),
+        _remoteStore = remoteStore ?? SupabaseKeyBackupRemoteStore(client!),
+        _deviceSecretService = deviceSecretService;
+
+  final KeyBackupRemoteStore _remoteStore;
+  final KeyMaterialStore _deviceSecretService;
 
   static const int _pbkdf2Iterations = 100000;
   final _cipher = AesGcm.with256bits();
@@ -27,18 +67,14 @@ class KeyBackupService {
 
   /// Check if a backup exists on the server for this user.
   Future<bool> hasServerBackup(String userId) async {
-    final response = await _client
-        .from('profiles')
-        .select('key_backup_encrypted')
-        .eq('id', userId)
-        .maybeSingle();
-    return response != null && response['key_backup_encrypted'] != null;
+    final backup = await _remoteStore.fetchEncryptedBackup(userId);
+    return backup != null && backup.trim().isNotEmpty;
   }
 
   /// Create an encrypted backup of the user's local keys and upload it.
   /// Returns the 12-word recovery phrase.
   Future<String> createBackup(String userId) async {
-    final mnemonic = bip39.generateMnemonic();
+    final mnemonic = normalizeRecoveryPhrase(bip39.generateMnemonic());
 
     // Read current local keys
     final hmacKey = await _deviceSecretService.loadOrCreateHmacKey(userId: userId);
@@ -71,10 +107,7 @@ class KeyBackupService {
     });
 
     // Upload to server
-    await _client
-        .from('profiles')
-        .update({'key_backup_encrypted': backup})
-        .eq('id', userId);
+    await _remoteStore.saveEncryptedBackup(userId, backup);
 
     // Store mnemonic locally so user can re-reveal it
     await _deviceSecretService.storeMnemonic(userId: userId, mnemonic: mnemonic);
@@ -84,35 +117,28 @@ class KeyBackupService {
 
   /// Restore local keys from the encrypted server backup using the mnemonic.
   Future<void> restoreBackup(String userId, String mnemonic) async {
-    final trimmed = mnemonic.trim().toLowerCase();
-    if (!bip39.validateMnemonic(trimmed)) {
+    final normalized = normalizeRecoveryPhrase(mnemonic);
+    if (!bip39.validateMnemonic(normalized)) {
       throw const KeyBackupFailure('Invalid recovery phrase.');
     }
 
     // Download backup from server
-    final response = await _client
-        .from('profiles')
-        .select('key_backup_encrypted')
-        .eq('id', userId)
-        .maybeSingle();
-
-    final backupStr = response?['key_backup_encrypted'] as String?;
+    final backupStr = await _remoteStore.fetchEncryptedBackup(userId);
     if (backupStr == null || backupStr.isEmpty) {
       throw const KeyBackupFailure('No backup found for this account.');
     }
 
-    // Parse
-    final backup = jsonDecode(backupStr) as Map<String, dynamic>;
-    final salt = base64.decode(backup['salt'] as String);
-    final nonce = base64.decode(backup['nonce'] as String);
-    final ct = base64.decode(backup['ct'] as String);
-    final mac = base64.decode(backup['mac'] as String);
+    final backup = _parseBackupBlob(backupStr);
 
     // Derive AES key from mnemonic
-    final aesKey = await _deriveKey(trimmed, Uint8List.fromList(salt));
+    final aesKey = await _deriveKey(normalized, backup.salt);
 
     // Decrypt
-    final secretBox = SecretBox(ct, nonce: nonce, mac: Mac(mac));
+    final secretBox = SecretBox(
+      backup.cipherText,
+      nonce: backup.nonce,
+      mac: Mac(backup.mac),
+    );
     final List<int> payload;
     try {
       payload = await _cipher.decrypt(secretBox, secretKey: aesKey);
@@ -133,7 +159,56 @@ class KeyBackupService {
     await _deviceSecretService.storeDeviceWrappingKey(userId: userId, bytes: deviceBytes);
 
     // Store mnemonic locally for re-reveal
-    await _deviceSecretService.storeMnemonic(userId: userId, mnemonic: trimmed);
+    await _deviceSecretService.storeMnemonic(userId: userId, mnemonic: normalized);
+  }
+
+  _EncryptedBackupBlob _parseBackupBlob(String backupStr) {
+    try {
+      final decoded = jsonDecode(backupStr);
+      if (decoded is! Map<String, dynamic>) {
+        throw const KeyBackupFailure('Corrupted backup data.');
+      }
+
+      final version = decoded['v'];
+      final parsedVersion = version is num
+          ? version.toInt()
+          : int.tryParse(version?.toString() ?? '1');
+      if (parsedVersion != 1) {
+        throw const KeyBackupFailure('Unsupported backup format.');
+      }
+
+      final salt = _decodeBase64Field(decoded, 'salt');
+      final nonce = _decodeBase64Field(decoded, 'nonce');
+      final cipherText = _decodeBase64Field(decoded, 'ct');
+      final mac = _decodeBase64Field(decoded, 'mac');
+
+      if (salt.length < 8 || nonce.isEmpty || cipherText.isEmpty || mac.isEmpty) {
+        throw const KeyBackupFailure('Corrupted backup data.');
+      }
+
+      return _EncryptedBackupBlob(
+        salt: Uint8List.fromList(salt),
+        nonce: nonce,
+        cipherText: cipherText,
+        mac: mac,
+      );
+    } on KeyBackupFailure {
+      rethrow;
+    } catch (_) {
+      throw const KeyBackupFailure('Corrupted backup data.');
+    }
+  }
+
+  List<int> _decodeBase64Field(Map<String, dynamic> payload, String key) {
+    final value = payload[key];
+    if (value is! String || value.isEmpty) {
+      throw const KeyBackupFailure('Corrupted backup data.');
+    }
+    try {
+      return base64.decode(value);
+    } catch (_) {
+      throw const KeyBackupFailure('Corrupted backup data.');
+    }
   }
 
   Future<SecretKey> _deriveKey(String mnemonic, Uint8List salt) async {
@@ -154,4 +229,18 @@ class KeyBackupFailure implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+class _EncryptedBackupBlob {
+  const _EncryptedBackupBlob({
+    required this.salt,
+    required this.nonce,
+    required this.cipherText,
+    required this.mac,
+  });
+
+  final Uint8List salt;
+  final List<int> nonce;
+  final List<int> cipherText;
+  final List<int> mac;
 }

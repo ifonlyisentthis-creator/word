@@ -170,7 +170,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
         final action = await _showBackupExistsDialog(context);
         if (!context.mounted) return;
         if (action == _BackupAction.restore) {
-          _handleRestore(context);
+          await _handleRestore(context);
           return;
         }
         if (action != _BackupAction.createNew) return;
@@ -217,13 +217,16 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
   }
 
   void _showRecoveryPhrase(BuildContext context, String mnemonic) {
-    final words = mnemonic.split(' ');
+    final normalizedMnemonic = normalizeRecoveryPhrase(mnemonic);
+    final words = normalizedMnemonic.split(' ');
     final theme = Theme.of(context);
+    final td = context.read<ThemeProvider>().themeData;
+    final messenger = ScaffoldMessenger.of(context);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: context.watch<ThemeProvider>().themeData.cardGradientStart,
+      backgroundColor: td.cardGradientStart,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -291,8 +294,8 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: () {
-                  Clipboard.setData(ClipboardData(text: mnemonic));
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  Clipboard.setData(ClipboardData(text: normalizedMnemonic));
+                  messenger.showSnackBar(
                     const SnackBar(
                         content:
                             Text('Recovery phrase copied to clipboard')),
@@ -323,115 +326,119 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
     if (userId == null) return;
 
     final tc = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final wordCount = tc.text
-              .trim()
-              .split(RegExp(r'\s+'))
-              .where((w) => w.isNotEmpty)
-              .length;
-          final isValid = wordCount == 12;
-          return AlertDialog(
-            title: const Text('Restore Recovery Phrase'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .error
-                          .withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final wordCount = tc.text
+                .trim()
+                .split(RegExp(r'\s+'))
+                .where((w) => w.isNotEmpty)
+                .length;
+            final isValid = wordCount == 12;
+            return AlertDialog(
+              title: const Text('Restore Recovery Phrase'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
                         color: Theme.of(context)
                             .colorScheme
                             .error
-                            .withValues(alpha: 0.3),
+                            .withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .error
+                              .withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.error),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'This will replace the encryption keys on this device. '
+                              'Only use this to recover YOUR OWN keys from another device. '
+                              'Do not restore a different account\'s phrase.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.error,
+                                    height: 1.4,
+                                  ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded,
-                            size: 18,
-                            color: Theme.of(context).colorScheme.error),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'This will replace the encryption keys on this device. '
-                            'Only use this to recover YOUR OWN keys from another device. '
-                            'Do not restore a different account\'s phrase.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color:
-                                      Theme.of(context).colorScheme.error,
-                                  height: 1.4,
-                                ),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 16),
+                    const Text('Enter your 12-word recovery phrase:'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: tc,
+                      maxLines: 3,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'word1 word2 word3 ...',
+                        filled: true,
+                        helperText: '$wordCount / 12 words',
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Enter your 12-word recovery phrase:'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: tc,
-                    maxLines: 3,
-                    onChanged: (_) => setDialogState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'word1 word2 word3 ...',
-                      filled: true,
-                      helperText: '$wordCount / 12 words',
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed:
-                    isValid ? () => Navigator.pop(context, true) : null,
-                child: const Text('Restore'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final phrase = tc.text.trim().toLowerCase();
-    setState(() {
-      _busy = true;
-      _localError = null;
-    });
-    try {
-      await _keyBackupService.restoreBackup(userId, phrase);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Keys restored successfully.')),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed:
+                      isValid ? () => Navigator.pop(context, true) : null,
+                  child: const Text('Restore'),
+                ),
+              ],
+            );
+          },
+        ),
       );
-    } on KeyBackupFailure catch (e) {
-      if (!context.mounted) return;
-      setState(() => _localError = e.message);
-    } catch (e) {
-      if (!context.mounted) return;
-      setState(() => _localError = 'Restore failed: $e');
+
+      if (confirmed != true) return;
+
+      final phrase = tc.text.trim().toLowerCase();
+      setState(() {
+        _busy = true;
+        _localError = null;
+      });
+      try {
+        await _keyBackupService.restoreBackup(userId, phrase);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Keys restored successfully.')),
+        );
+      } on KeyBackupFailure catch (e) {
+        if (!context.mounted) return;
+        setState(() => _localError = e.message);
+      } catch (e) {
+        if (!context.mounted) return;
+        setState(() => _localError = 'Restore failed: $e');
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      tc.dispose();
     }
   }
 }

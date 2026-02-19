@@ -3,7 +3,18 @@ import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class DeviceSecretService {
+abstract class KeyMaterialStore {
+  Future<SecretKey> loadOrCreateHmacKey({required String userId});
+  Future<void> storeHmacKey({required String userId, required List<int> bytes});
+
+  Future<SecretKey> loadOrCreateDeviceWrappingKey({required String userId});
+  Future<void> storeDeviceWrappingKey({required String userId, required List<int> bytes});
+
+  Future<String?> readMnemonic({required String userId});
+  Future<void> storeMnemonic({required String userId, required String mnemonic});
+}
+
+class DeviceSecretService implements KeyMaterialStore {
   DeviceSecretService({FlutterSecureStorage? storage})
       : _storage = storage ?? const FlutterSecureStorage();
 
@@ -16,6 +27,7 @@ class DeviceSecretService {
   String _hmacKeyFor(String userId) => 'afterword_hmac_key_$userId';
   String _deviceKeyFor(String userId) => 'afterword_device_wrap_v1_$userId';
 
+  @override
   Future<SecretKey> loadOrCreateHmacKey({required String userId}) async {
     final perAccountKey = _hmacKeyFor(userId);
 
@@ -39,6 +51,7 @@ class DeviceSecretService {
     return key;
   }
 
+  @override
   Future<void> storeHmacKey({required String userId, required List<int> bytes}) async {
     await _storage.write(key: _hmacKeyFor(userId), value: base64.encode(bytes));
   }
@@ -47,6 +60,7 @@ class DeviceSecretService {
     await _storage.delete(key: _hmacKeyFor(userId));
   }
 
+  @override
   Future<SecretKey> loadOrCreateDeviceWrappingKey({required String userId}) async {
     final perAccountKey = _deviceKeyFor(userId);
 
@@ -67,6 +81,7 @@ class DeviceSecretService {
     return key;
   }
 
+  @override
   Future<void> storeDeviceWrappingKey({required String userId, required List<int> bytes}) async {
     await _storage.write(key: _deviceKeyFor(userId), value: base64.encode(bytes));
   }
@@ -78,10 +93,12 @@ class DeviceSecretService {
   static const String _mnemonicPrefix = 'afterword_recovery_phrase';
   String _mnemonicKeyFor(String userId) => '${_mnemonicPrefix}_$userId';
 
+  @override
   Future<String?> readMnemonic({required String userId}) async {
     return _storage.read(key: _mnemonicKeyFor(userId));
   }
 
+  @override
   Future<void> storeMnemonic({required String userId, required String mnemonic}) async {
     await _storage.write(key: _mnemonicKeyFor(userId), value: mnemonic);
   }
