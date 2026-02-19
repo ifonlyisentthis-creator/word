@@ -482,6 +482,22 @@ body {
 
 }
 
+.result__actions .report-button {
+
+  border-color: rgba(229, 115, 115, 0.45);
+
+  color: #f3b0b0;
+
+}
+
+.result__actions .report-button:hover {
+
+  border-color: rgba(229, 115, 115, 0.8);
+
+  color: #ffd4d4;
+
+}
+
 
 
 #result-body {

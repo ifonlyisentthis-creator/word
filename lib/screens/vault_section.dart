@@ -13,7 +13,6 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../services/theme_provider.dart';
 
@@ -819,57 +818,6 @@ class _EntryDetailsSheetState extends State<_EntryDetailsSheet> {
                         ).textTheme.bodySmall?.copyWith(color: Colors.white70),
                       ),
                   ],
-                  const SizedBox(height: 24),
-                  Divider(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    height: 1,
-                  ),
-                  const SizedBox(height: 16),
-                  // Report button — premium aesthetic
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () async {
-                        final subject = Uri.encodeComponent(
-                          'Afterword Report — ${widget.entry.title}',
-                        );
-                        final body = Uri.encodeComponent(
-                          'Entry ID: ${widget.entry.id}\n'
-                          'Type: ${widget.entry.actionType.label} / ${widget.entry.dataType.name}\n'
-                          '\nPlease describe the issue:\n',
-                        );
-                        final uri = Uri.parse(
-                          'mailto:afterword.app@gmail.com?subject=$subject&body=$body',
-                        );
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri);
-                        }
-                      },
-                      icon: Icon(
-                        Icons.flag_outlined,
-                        size: 16,
-                        color: Colors.white.withValues(alpha: 0.35),
-                      ),
-                      label: Text(
-                        'Report this entry',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.35),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.08),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),

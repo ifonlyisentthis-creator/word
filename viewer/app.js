@@ -127,6 +127,31 @@ function createDownloadButton(label, blob, filename) {
   return button;
 }
 
+function createReportButton(entry) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "report-button";
+  button.textContent = "Report this entry";
+  button.addEventListener("click", () => {
+    const supportEmail = config.supportEmail || "afterword.app@gmail.com";
+    const subject = encodeURIComponent(
+      `Afterword Report - ${entry.title || "Untitled"}`
+    );
+    const details = [
+      `Entry ID: ${entry.id}`,
+      `Type: ${entry.data_type || "unknown"}`,
+      lastSenderName ? `Sender: ${lastSenderName}` : null,
+      "",
+      "Please describe the issue:",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const body = encodeURIComponent(details);
+    window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+  });
+  return button;
+}
+
 function renderExpiredMessage(senderName) {
   resultTitle.textContent = "Message Unavailable";
   resultBody.innerHTML = "";
@@ -290,6 +315,8 @@ async function unlock() {
         createDownloadButton("Download Text", textBlob, "afterword.txt")
       );
     }
+
+    resultActions.appendChild(createReportButton(entry));
 
     resultEl.classList.remove("hidden");
     setStatus("Vault unlocked.", "success");
