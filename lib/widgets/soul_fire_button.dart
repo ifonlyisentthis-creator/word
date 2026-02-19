@@ -161,12 +161,12 @@ class _SoulFireButtonState extends State<SoulFireButton>
     _pointerStart = null;
     _holdStartedAt = null;
     if (_completed) return;
-    // Smooth reverse back to starting state instead of harsh snap
+    // Smooth, gradual reverse — feels organic, not snappy
     if (_holdController.value > 0) {
       _holdController.animateTo(
         0,
-        duration: Duration(milliseconds: (350 * _holdController.value).round().clamp(100, 350)),
-        curve: Curves.easeOutCubic,
+        duration: Duration(milliseconds: (800 * _holdController.value).round().clamp(250, 800)),
+        curve: Curves.easeOutQuart,
       );
     } else {
       _holdController.stop();

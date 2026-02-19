@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/theme_provider.dart';
 
@@ -970,12 +971,13 @@ class _EntryDetailsSheetState extends State<_EntryDetailsSheet> {
                                   ?.copyWith(color: Colors.white70),
                             );
                           }
+                          final detailTd = context.read<ThemeProvider>().themeData;
                           return Container(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.04),
+                              color: detailTd.accentGlow.withValues(alpha: 0.03),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white12),
+                              border: Border.all(color: detailTd.accentGlow.withValues(alpha: 0.12)),
                             ),
                             child: _AudioPlaybackSection(
                               audioPath: audioPath,
@@ -1003,19 +1005,24 @@ class _EntryDetailsSheetState extends State<_EntryDetailsSheet> {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white12),
-                        ),
-                        child: Text(
-                          message,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
+                      Builder(builder: (context) {
+                        final msgTd = context.read<ThemeProvider>().themeData;
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: msgTd.accentGlow.withValues(alpha: 0.03),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: msgTd.accentGlow.withValues(alpha: 0.12)),
+                          ),
+                          child: Text(
+                            message,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              height: 1.5,
+                            ),
+                          ),
+                        );
+                      }),
                     ] else
                       Text(
                         'No message attached.',
@@ -1025,6 +1032,49 @@ class _EntryDetailsSheetState extends State<_EntryDetailsSheet> {
                             ?.copyWith(color: Colors.white70),
                       ),
                   ],
+                  const SizedBox(height: 24),
+                  Divider(color: Colors.white.withValues(alpha: 0.06), height: 1),
+                  const SizedBox(height: 16),
+                  // Report button — premium aesthetic
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final subject = Uri.encodeComponent(
+                          'Afterword Report — ${widget.entry.title}',
+                        );
+                        final body = Uri.encodeComponent(
+                          'Entry ID: ${widget.entry.id}\n'
+                          'Type: ${widget.entry.actionType.label} / ${widget.entry.dataType.name}\n'
+                          '\nPlease describe the issue:\n',
+                        );
+                        final uri = Uri.parse(
+                          'mailto:afterword.app@gmail.com?subject=$subject&body=$body',
+                        );
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri);
+                        }
+                      },
+                      icon: Icon(
+                        Icons.flag_outlined,
+                        size: 16,
+                        color: Colors.white.withValues(alpha: 0.35),
+                      ),
+                      label: Text(
+                        'Report this entry',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1079,6 +1129,8 @@ class _VaultEntryTile extends StatelessWidget {
 
         : Icons.text_snippet_outlined;
 
+    final td = context.read<ThemeProvider>().themeData;
+
     return Container(
 
       decoration: BoxDecoration(
@@ -1089,13 +1141,21 @@ class _VaultEntryTile extends StatelessWidget {
 
           end: Alignment.bottomRight,
 
-          colors: [context.read<ThemeProvider>().themeData.cardGradientStart, context.read<ThemeProvider>().themeData.cardGradientEnd],
+          colors: [td.cardGradientStart, td.cardGradientEnd],
 
         ),
 
         borderRadius: BorderRadius.circular(18),
 
-        border: Border.all(color: context.read<ThemeProvider>().themeData.dividerColor),
+        border: Border.all(color: td.dividerColor),
+
+        boxShadow: [
+          BoxShadow(
+            color: td.accentGlow.withValues(alpha: 0.06),
+            blurRadius: 16,
+            spreadRadius: -2,
+          ),
+        ],
 
       ),
 
@@ -2901,19 +2961,36 @@ class _SheetContainerState extends State<_SheetContainer> {
 
           border: Border.all(color: td.dividerColor),
 
-          // No BoxShadow — blurred shadows are extremely expensive to
-          // re-rasterize on every keyboard animation frame.
-
         ),
 
         child: ClipRRect(
 
           borderRadius: BorderRadius.circular(28),
 
-          child: RepaintBoundary(
-            child: _childReady
-                ? widget.child
-                : const SizedBox.shrink(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Subtle accent top accent line
+              Container(
+                height: 2,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      td.accentGlow.withValues(alpha: 0.30),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+              Flexible(
+                child: RepaintBoundary(
+                  child: _childReady
+                      ? widget.child
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ],
           ),
 
         ),
@@ -2938,6 +3015,8 @@ class _SheetHandle extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
+    final accent = context.read<ThemeProvider>().themeData.accentGlow;
+
     return Center(
 
       child: Container(
@@ -2948,7 +3027,13 @@ class _SheetHandle extends StatelessWidget {
 
         decoration: BoxDecoration(
 
-          color: Colors.white24,
+          gradient: LinearGradient(
+            colors: [
+              accent.withValues(alpha: 0.15),
+              accent.withValues(alpha: 0.40),
+              accent.withValues(alpha: 0.15),
+            ],
+          ),
 
           borderRadius: BorderRadius.circular(999),
 
@@ -3009,6 +3094,14 @@ class _VaultCard extends StatelessWidget {
 
         border: Border.all(color: td.dividerColor),
 
+        boxShadow: [
+          BoxShadow(
+            color: td.accentGlow.withValues(alpha: 0.06),
+            blurRadius: 20,
+            spreadRadius: -2,
+          ),
+        ],
+
       ),
 
       child: ClipRRect(
@@ -3041,17 +3134,19 @@ class _VaultChip extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
+    final accent = context.read<ThemeProvider>().themeData.accentGlow;
+
     return Container(
 
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
 
       decoration: BoxDecoration(
 
-        color: Colors.white10,
+        color: accent.withValues(alpha: 0.08),
 
         borderRadius: BorderRadius.circular(999),
 
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: accent.withValues(alpha: 0.18)),
 
       ),
 
@@ -3065,7 +3160,7 @@ class _VaultChip extends StatelessWidget {
 
             .labelSmall
 
-            ?.copyWith(color: Colors.white70),
+            ?.copyWith(color: Colors.white70, letterSpacing: 0.3),
 
       ),
 

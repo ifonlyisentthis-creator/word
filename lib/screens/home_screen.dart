@@ -619,11 +619,11 @@ class _HeaderRow extends StatelessWidget {
 
           decoration: BoxDecoration(
 
-            color: Colors.white10,
+            color: context.read<ThemeProvider>().themeData.accentGlow.withValues(alpha: 0.06),
 
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
 
-            border: Border.all(color: Colors.white12),
+            border: Border.all(color: context.read<ThemeProvider>().themeData.accentGlow.withValues(alpha: 0.15)),
 
           ),
 
@@ -1184,7 +1184,7 @@ class _TimerCardState extends State<_TimerCard> {
 
                 value: progress.clamp(0, 1),
 
-                minHeight: 5,
+                minHeight: 6,
 
                 backgroundColor: Colors.white.withValues(alpha: 0.06),
 
@@ -1621,12 +1621,23 @@ class _VaultSummaryCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        theme.colorScheme.primary.withValues(alpha: 0.15),
+                        theme.colorScheme.primary.withValues(alpha: 0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.20),
+                    ),
                   ),
-                  child: const Icon(Icons.lock_outline, size: 18),
+                  child: Icon(Icons.lock_outline, size: 18,
+                    color: theme.colorScheme.primary),
                 ),
                 const SizedBox(width: 10),
                 Text('Vault', style: theme.textTheme.titleMedium),
