@@ -1,6 +1,8 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+export {};
+
 declare const Deno: {
   env: {
     get(name: string): string | undefined;
@@ -19,6 +21,22 @@ function withCorsHeaders(headers: Headers) {
   headers.set("Access-Control-Allow-Origin", "*");
   headers.set("Access-Control-Allow-Headers", "authorization, x-client-info, apikey, content-type");
   headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+}
+
+const OUTBOUND_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs = OUTBOUND_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function b64Encode(bytes: Uint8Array): string {
@@ -109,7 +127,7 @@ async function getUserIdFromAuth(
   supabaseAnonKey: string,
   authHeader: string,
 ): Promise<string | null> {
-  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+  const response = await fetchWithTimeout(`${supabaseUrl}/auth/v1/user`, {
     method: "GET",
     headers: {
       apikey: supabaseAnonKey,
@@ -138,7 +156,7 @@ async function getProfileHmacKeyEncrypted(
   url.searchParams.set("id", `eq.${userId}`);
   url.searchParams.set("select", "hmac_key_encrypted");
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithTimeout(url.toString(), {
     method: "GET",
     headers: {
       apikey: supabaseAnonKey,
@@ -281,9 +299,9 @@ Deno.serve(async (req: Request) => {
       status: 400,
     });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
-      { headers, status: 400 },
-    );
+    return new Response(JSON.stringify({ error: "Bad request" }), {
+      headers,
+      status: 400,
+    });
   }
 });

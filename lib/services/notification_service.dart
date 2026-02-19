@@ -88,11 +88,11 @@ class NotificationService {
 
     final push66AlreadySent = push66SentAt != null &&
 
-        push66SentAt.isAfter(lastCheckIn);
+        !push66SentAt.isBefore(lastCheckIn);
 
     final push33AlreadySent = push33SentAt != null &&
 
-        push33SentAt.isAfter(lastCheckIn);
+        !push33SentAt.isBefore(lastCheckIn);
 
 
 

@@ -4568,3 +4568,412 @@ GRANT UPDATE (hmac_key_encrypted) ON profiles TO authenticated;
 -- ============================================================================
 
 
+36:
+-- Clear stale push timestamps so heartbeat retries sending notifications
+UPDATE profiles
+SET push_66_sent_at = NULL,
+    push_33_sent_at = NULL
+WHERE push_66_sent_at IS NOT NULL
+   OR push_33_sent_at IS NOT NULL;
+
+
+37:
+-- 1. Add protocol_executed_at column
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
+
+-- 2. Reset any existing 'archived' users to fresh active state
+-- (legacy state that's no longer used)
+UPDATE profiles
+SET status = 'active',
+    timer_days = 30,
+    last_check_in = now(),
+    protocol_executed_at = NULL,
+    warning_sent_at = NULL,
+    push_66_sent_at = NULL,
+    push_33_sent_at = NULL
+WHERE status = 'archived';
+
+-- 3. Clear stale push timestamps (from earlier bug)
+UPDATE profiles
+SET push_66_sent_at = NULL,
+    push_33_sent_at = NULL
+WHERE push_66_sent_at IS NOT NULL
+   OR push_33_sent_at IS NOT NULL;
+
+38.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
+
+39.
+-- 1. Add protocol_executed_at column (for grace period tracking)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
+
+-- 2. Allow users to delete their own tombstones (needed for account deletion)
+DROP POLICY IF EXISTS tombstones_delete_own ON vault_entry_tombstones;
+CREATE POLICY tombstones_delete_own ON vault_entry_tombstones
+FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
+-- 3. Grant DELETE on tombstones to authenticated users
+GRANT DELETE ON TABLE vault_entry_tombstones TO authenticated;
+
+40.
+-- 1. Add protocol_executed_at column
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
+
+-- 2. Allow users to delete their own tombstones (for account deletion)
+DROP POLICY IF EXISTS tombstones_delete_own ON vault_entry_tombstones;
+CREATE POLICY tombstones_delete_own ON vault_entry_tombstones
+FOR DELETE TO authenticated USING (auth.uid() = user_id);
+GRANT DELETE ON TABLE vault_entry_tombstones TO authenticated;
+
+-- 3. FIX: Replace old cleanup_sent_entries that marked 'archived'
+--    with fresh reset matching Python heartbeat behavior
+CREATE OR REPLACE FUNCTION public.cleanup_sent_entries()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  -- a. Create tombstones for entries about to be purged
+  INSERT INTO vault_entry_tombstones (vault_entry_id, user_id, sender_name, sent_at, expired_at)
+  SELECT ve.id, ve.user_id, p.sender_name, ve.sent_at, now()
+  FROM vault_entries ve
+  JOIN profiles p ON p.id = ve.user_id
+  WHERE ve.status = 'sent'
+    AND ve.sent_at IS NOT NULL
+    AND ve.sent_at < now() - interval '30 days'
+  ON CONFLICT (vault_entry_id) DO NOTHING;
+
+  -- b. Delete audio storage objects
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name IN (
+      SELECT audio_file_path FROM vault_entries
+      WHERE status = 'sent'
+        AND sent_at < now() - interval '30 days'
+        AND audio_file_path IS NOT NULL
+    );
+
+  -- c. Purge sent entries older than 30 days
+  DELETE FROM vault_entries
+  WHERE status = 'sent'
+    AND sent_at IS NOT NULL
+    AND sent_at < now() - interval '30 days';
+
+  -- d. Reset profiles to FRESH ACTIVE STATE (not 'archived')
+  --    Only for users with no remaining entries + have tombstones
+  UPDATE profiles p
+  SET status = 'active',
+      timer_days = 30,
+      last_check_in = now(),
+      protocol_executed_at = NULL,
+      warning_sent_at = NULL,
+      push_66_sent_at = NULL,
+      push_33_sent_at = NULL,
+      last_entry_at = NULL
+  WHERE p.status IN ('active', 'inactive', 'archived')
+    AND NOT EXISTS (
+      SELECT 1 FROM vault_entries v WHERE v.user_id = p.id
+    )
+    AND EXISTS (
+      SELECT 1 FROM vault_entry_tombstones t WHERE t.user_id = p.id
+    );
+END;
+$$;
+
+ALTER FUNCTION public.cleanup_sent_entries() SET search_path = public, auth, storage;
+REVOKE ALL ON FUNCTION public.cleanup_sent_entries() FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_sent_entries() TO service_role;
+
+
+41.
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  1. NEW COLUMNS                                                        ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+-- Grace period tracking
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
+
+-- Permanent activity flag (prevents bot deletion of destroy-only users)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS had_vault_activity boolean NOT NULL DEFAULT false;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  2. AUTO-SET had_vault_activity ON FIRST ENTRY CREATION                ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+CREATE OR REPLACE FUNCTION public.mark_vault_activity()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE profiles SET had_vault_activity = true
+  WHERE id = NEW.user_id AND had_vault_activity = false;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_mark_vault_activity ON vault_entries;
+CREATE TRIGGER trg_mark_vault_activity
+AFTER INSERT ON vault_entries
+FOR EACH ROW EXECUTE FUNCTION public.mark_vault_activity();
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  3. TOMBSTONE DELETE POLICY (for account deletion from app)            ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+DROP POLICY IF EXISTS tombstones_delete_own ON vault_entry_tombstones;
+CREATE POLICY tombstones_delete_own ON vault_entry_tombstones
+FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
+GRANT DELETE ON TABLE vault_entry_tombstones TO authenticated;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  4. FIX cleanup_sent_entries — FRESH RESET (not 'archived')            ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+CREATE OR REPLACE FUNCTION public.cleanup_sent_entries()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  -- a. Create tombstones for sent entries about to be purged (history)
+  INSERT INTO vault_entry_tombstones (vault_entry_id, user_id, sender_name, sent_at, expired_at)
+  SELECT ve.id, ve.user_id, p.sender_name, ve.sent_at, now()
+  FROM vault_entries ve
+  JOIN profiles p ON p.id = ve.user_id
+  WHERE ve.status = 'sent'
+    AND ve.sent_at IS NOT NULL
+    AND ve.sent_at < now() - interval '30 days'
+  ON CONFLICT (vault_entry_id) DO NOTHING;
+
+  -- b. Delete audio storage objects
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name IN (
+      SELECT audio_file_path FROM vault_entries
+      WHERE status = 'sent'
+        AND sent_at < now() - interval '30 days'
+        AND audio_file_path IS NOT NULL
+    );
+
+  -- c. Purge sent entries older than 30 days
+  DELETE FROM vault_entries
+  WHERE status = 'sent'
+    AND sent_at IS NOT NULL
+    AND sent_at < now() - interval '30 days';
+
+  -- d. Reset profiles to FRESH ACTIVE STATE
+  --    Only for users with zero remaining entries + have tombstones (had send entries)
+  --    Does NOT touch: hmac_key_encrypted, subscription_status, sender_name,
+  --                    selected_theme, selected_soul_fire, had_vault_activity, email
+  UPDATE profiles p
+  SET status = 'active',
+      timer_days = 30,
+      last_check_in = now(),
+      protocol_executed_at = NULL,
+      warning_sent_at = NULL,
+      push_66_sent_at = NULL,
+      push_33_sent_at = NULL,
+      last_entry_at = NULL
+  WHERE p.status IN ('active', 'inactive', 'archived')
+    AND NOT EXISTS (
+      SELECT 1 FROM vault_entries v WHERE v.user_id = p.id
+    )
+    AND EXISTS (
+      SELECT 1 FROM vault_entry_tombstones t WHERE t.user_id = p.id
+    );
+END;
+$$;
+
+ALTER FUNCTION public.cleanup_sent_entries() SET search_path = public, auth, storage;
+REVOKE ALL ON FUNCTION public.cleanup_sent_entries() FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_sent_entries() TO service_role;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  5. GRANT UPDATE on had_vault_activity for heartbeat (service_role)    ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+-- service_role already has full access, but ensure the column is updatable
+-- by the heartbeat's update call (uses service_role key)
+-- No additional grant needed — service_role bypasses RLS.
+
+42.
+-- Add column for encrypted key backup (recovery phrase feature)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS key_backup_encrypted text;
+
+43.
+-- 1. New columns
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS had_vault_activity boolean NOT NULL DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS key_backup_encrypted text;
+
+-- 2. Auto-set had_vault_activity on first entry creation
+CREATE OR REPLACE FUNCTION public.mark_vault_activity()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE profiles SET had_vault_activity = true
+  WHERE id = NEW.user_id AND had_vault_activity = false;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_mark_vault_activity ON vault_entries;
+CREATE TRIGGER trg_mark_vault_activity
+AFTER INSERT ON vault_entries
+FOR EACH ROW EXECUTE FUNCTION public.mark_vault_activity();
+
+-- 3. Tombstone delete policy (for account deletion from app)
+DROP POLICY IF EXISTS tombstones_delete_own ON vault_entry_tombstones;
+CREATE POLICY tombstones_delete_own ON vault_entry_tombstones
+FOR DELETE TO authenticated USING (auth.uid() = user_id);
+GRANT DELETE ON TABLE vault_entry_tombstones TO authenticated;
+
+-- 4. Fix cleanup_sent_entries — fresh reset (not 'archived')
+CREATE OR REPLACE FUNCTION public.cleanup_sent_entries()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO vault_entry_tombstones (vault_entry_id, user_id, sender_name, sent_at, expired_at)
+  SELECT ve.id, ve.user_id, p.sender_name, ve.sent_at, now()
+  FROM vault_entries ve
+  JOIN profiles p ON p.id = ve.user_id
+  WHERE ve.status = 'sent'
+    AND ve.sent_at IS NOT NULL
+    AND ve.sent_at < now() - interval '30 days'
+  ON CONFLICT (vault_entry_id) DO NOTHING;
+
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name IN (
+      SELECT audio_file_path FROM vault_entries
+      WHERE status = 'sent'
+        AND sent_at < now() - interval '30 days'
+        AND audio_file_path IS NOT NULL
+    );
+
+  DELETE FROM vault_entries
+  WHERE status = 'sent'
+    AND sent_at IS NOT NULL
+    AND sent_at < now() - interval '30 days';
+
+  UPDATE profiles p
+  SET status = 'active',
+      timer_days = 30,
+      last_check_in = now(),
+      protocol_executed_at = NULL,
+      warning_sent_at = NULL,
+      push_66_sent_at = NULL,
+      push_33_sent_at = NULL,
+      last_entry_at = NULL
+  WHERE p.status IN ('active', 'inactive', 'archived')
+    AND NOT EXISTS (SELECT 1 FROM vault_entries v WHERE v.user_id = p.id)
+    AND EXISTS (SELECT 1 FROM vault_entry_tombstones t WHERE t.user_id = p.id);
+END;
+$$;
+
+ALTER FUNCTION public.cleanup_sent_entries() SET search_path = public, auth, storage;
+REVOKE ALL ON FUNCTION public.cleanup_sent_entries() FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_sent_entries() TO service_role;
+
+44.
+-- 1. New columns
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS had_vault_activity boolean NOT NULL DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS key_backup_encrypted text;
+
+-- 2. Allow users to update their own profile row (fixes "permission denied" error)
+DROP POLICY IF EXISTS profiles_update_own ON profiles;
+CREATE POLICY profiles_update_own ON profiles
+FOR UPDATE TO authenticated
+USING (auth.uid() = id)
+WITH CHECK (auth.uid() = id);
+
+-- 3. Auto-set had_vault_activity on first entry creation
+CREATE OR REPLACE FUNCTION public.mark_vault_activity()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE profiles SET had_vault_activity = true
+  WHERE id = NEW.user_id AND had_vault_activity = false;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_mark_vault_activity ON vault_entries;
+CREATE TRIGGER trg_mark_vault_activity
+AFTER INSERT ON vault_entries
+FOR EACH ROW EXECUTE FUNCTION public.mark_vault_activity();
+
+-- 4. Tombstone delete policy (for account deletion)
+DROP POLICY IF EXISTS tombstones_delete_own ON vault_entry_tombstones;
+CREATE POLICY tombstones_delete_own ON vault_entry_tombstones
+FOR DELETE TO authenticated USING (auth.uid() = user_id);
+GRANT DELETE ON TABLE vault_entry_tombstones TO authenticated;
+
+-- 5. Fix cleanup_sent_entries — fresh reset
+CREATE OR REPLACE FUNCTION public.cleanup_sent_entries()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO vault_entry_tombstones (vault_entry_id, user_id, sender_name, sent_at, expired_at)
+  SELECT ve.id, ve.user_id, p.sender_name, ve.sent_at, now()
+  FROM vault_entries ve
+  JOIN profiles p ON p.id = ve.user_id
+  WHERE ve.status = 'sent'
+    AND ve.sent_at IS NOT NULL
+    AND ve.sent_at < now() - interval '30 days'
+  ON CONFLICT (vault_entry_id) DO NOTHING;
+
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name IN (
+      SELECT audio_file_path FROM vault_entries
+      WHERE status = 'sent'
+        AND sent_at < now() - interval '30 days'
+        AND audio_file_path IS NOT NULL
+    );
+
+  DELETE FROM vault_entries
+  WHERE status = 'sent'
+    AND sent_at IS NOT NULL
+    AND sent_at < now() - interval '30 days';
+
+  UPDATE profiles p
+  SET status = 'active',
+      timer_days = 30,
+      last_check_in = now(),
+      protocol_executed_at = NULL,
+      warning_sent_at = NULL,
+      push_66_sent_at = NULL,
+      push_33_sent_at = NULL,
+      last_entry_at = NULL
+  WHERE p.status IN ('active', 'inactive', 'archived')
+    AND NOT EXISTS (SELECT 1 FROM vault_entries v WHERE v.user_id = p.id)
+    AND EXISTS (SELECT 1 FROM vault_entry_tombstones t WHERE t.user_id = p.id);
+END;
+$$;
+
+ALTER FUNCTION public.cleanup_sent_entries() SET search_path = public, auth, storage;
+REVOKE ALL ON FUNCTION public.cleanup_sent_entries() FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_sent_entries() TO service_role;
+
+45.
+SELECT policyname, cmd, qual, with_check FROM pg_policies WHERE tablename = 'profiles';
+
+46.
+GRANT UPDATE (key_backup_encrypted) ON profiles TO authenticated;
+
+47.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_entry_at timestamptz;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS had_vault_activity boolean DEFAULT false;
+
+GRANT UPDATE (
+  timer_days,
+  last_check_in,
+  selected_theme,
+  selected_soul_fire,
+  protocol_executed_at,
+  last_entry_at,
+  had_vault_activity
+) ON profiles TO service_role;
+
+GRANT UPDATE (
+  subscription_status,
+  status,
+  warning_sent_at,
+  push_66_sent_at,
+  push_33_sent_at
+) ON profiles TO service_role;
+
+GRANT UPDATE (hmac_key_encrypted) ON profiles TO authenticated;
+

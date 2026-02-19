@@ -17,12 +17,33 @@ class AccountService {
   final DeviceSecretService _deviceSecretService;
 
   Future<void> deleteAccount(String userId) async {
-    await _vaultService.deleteAllEntries(userId);
-    await _client.from('vault_entry_tombstones').delete().eq('user_id', userId);
-    await _client.from('push_devices').delete().eq('user_id', userId);
-    await _client.from('profiles').delete().eq('id', userId);
-    await _deviceSecretService.clearHmacKey(userId: userId);
-    await _deviceSecretService.clearDeviceWrappingKey(userId: userId);
-    await _deviceSecretService.clearMnemonic(userId: userId);
+    final currentUser = _client.auth.currentUser;
+    if (currentUser == null || currentUser.id != userId) {
+      throw const AccountServiceFailure('Not authorized to delete this account.');
+    }
+
+    try {
+      await _client.rpc('delete_my_account');
+    } on PostgrestException catch (error) {
+      // Backward-compatible fallback for databases that do not yet have
+      // delete_my_account() migration applied.
+      final message = error.message.toLowerCase();
+      if (!message.contains('delete_my_account')) rethrow;
+
+      await _vaultService.deleteAllEntries(userId);
+      await _client.from('vault_entry_tombstones').delete().eq('user_id', userId);
+      await _client.from('push_devices').delete().eq('user_id', userId);
+      await _client.from('profiles').delete().eq('id', userId);
+    } finally {
+      await _deviceSecretService.clearHmacKey(userId: userId);
+      await _deviceSecretService.clearDeviceWrappingKey(userId: userId);
+      await _deviceSecretService.clearMnemonic(userId: userId);
+    }
   }
+}
+
+class AccountServiceFailure implements Exception {
+  const AccountServiceFailure(this.message);
+
+  final String message;
 }

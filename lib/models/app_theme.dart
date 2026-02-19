@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// All available app themes. Free users get only [oledVoid].
+/// All available app themes.
+/// Free users get [oledVoid], [midnightFrost], and [shadowRose].
 /// Pro users unlock [obsidianSteel], [midnightEmber], [deepOcean].
 /// Lifetime users additionally unlock [auroraNight], [cosmicDusk].
 enum AppThemeId {

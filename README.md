@@ -50,4 +50,8 @@ flutter run --dart-define=SUPABASE_URL="..." --dart-define=SUPABASE_ANON_KEY="..
 
 ## SQL
 
-Run `supabase/v35_downgrade_and_cleanup.sql` in the SQL Editor for subscription downgrade support.
+Run these in order on existing projects:
+
+1. `supabase/v35_downgrade_and_cleanup.sql` (downgrade/lifecycle grants)
+2. `supabase/v36_theme_preferences_alignment.sql` (theme/soul-fire enum alignment)
+3. `supabase/v37_account_deletion_rpc.sql` (true auth-user account deletion RPC)

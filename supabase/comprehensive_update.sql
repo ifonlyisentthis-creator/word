@@ -21,6 +21,11 @@
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS selected_theme text;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS selected_soul_fire text;
 
+-- Server-managed lifecycle columns used by heartbeat + grace-period flow
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_entry_at timestamptz;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS had_vault_activity boolean DEFAULT false;
+
 -- Valid theme values
 DO $$
 BEGIN
@@ -30,7 +35,8 @@ BEGIN
   ) THEN
     ALTER TABLE profiles ADD CONSTRAINT profiles_theme_check
       CHECK (selected_theme IS NULL OR selected_theme IN (
-        'oledVoid','obsidianSteel','midnightEmber','deepOcean','auroraNight','cosmicDusk'
+        'oledVoid','midnightFrost','shadowRose',
+        'obsidianSteel','midnightEmber','deepOcean','auroraNight','cosmicDusk'
       ));
   END IF;
 END $$;
@@ -44,7 +50,8 @@ BEGIN
   ) THEN
     ALTER TABLE profiles ADD CONSTRAINT profiles_soul_fire_check
       CHECK (selected_soul_fire IS NULL OR selected_soul_fire IN (
-        'etherealOrb','voidPortal','plasmaBurst','plasmaCell','toxicCore','crystalAscend'
+        'etherealOrb','goldenPulse','nebulaHeart',
+        'voidPortal','plasmaBurst','plasmaCell','toxicCore','crystalAscend'
       ));
   END IF;
 END $$;
@@ -84,6 +91,8 @@ BEGIN
   IF p_theme IS NOT NULL THEN
     theme_tier := CASE p_theme
       WHEN 'oledVoid' THEN 'free'
+      WHEN 'midnightFrost' THEN 'free'
+      WHEN 'shadowRose' THEN 'free'
       WHEN 'obsidianSteel' THEN 'pro'
       WHEN 'midnightEmber' THEN 'pro'
       WHEN 'deepOcean' THEN 'pro'
@@ -106,6 +115,8 @@ BEGIN
   IF p_soul_fire IS NOT NULL THEN
     sf_tier := CASE p_soul_fire
       WHEN 'etherealOrb' THEN 'free'
+      WHEN 'goldenPulse' THEN 'free'
+      WHEN 'nebulaHeart' THEN 'free'
       WHEN 'voidPortal' THEN 'pro'
       WHEN 'plasmaBurst' THEN 'pro'
       WHEN 'plasmaCell' THEN 'pro'
@@ -262,6 +273,39 @@ BEGIN
   RETURN result;
 END;
 $$;
+
+-- 5a.1 delete_my_account (authenticated self-delete; hard delete auth user)
+CREATE OR REPLACE FUNCTION public.delete_my_account()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, storage
+AS $$
+DECLARE
+  uid uuid;
+BEGIN
+  uid := auth.uid();
+  IF uid IS NULL THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+
+  -- Remove encrypted audio objects first (best-effort hard delete semantics).
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name LIKE uid::text || '/%';
+
+  -- Delete auth identity; cascades to profiles/vault_entries/push_devices/tombstones.
+  DELETE FROM auth.users WHERE id = uid;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'user not found';
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.delete_my_account() FROM public;
+REVOKE ALL ON FUNCTION public.delete_my_account() FROM anon;
+GRANT EXECUTE ON FUNCTION public.delete_my_account() TO authenticated;
 
 -- 5b. set_subscription_status (SERVICE ROLE ONLY)
 CREATE OR REPLACE FUNCTION public.set_subscription_status(user_id uuid, subscription_status text)
@@ -759,8 +803,21 @@ REVOKE UPDATE ON profiles FROM authenticated, anon;
 -- (all other profile mutations go through SECURITY DEFINER RPCs)
 GRANT UPDATE (hmac_key_encrypted) ON profiles TO authenticated;
 
--- Service role can update server-managed columns
-GRANT UPDATE (subscription_status, status, warning_sent_at, push_66_sent_at, push_33_sent_at) ON profiles TO service_role;
+-- Service role can update server-managed columns (heartbeat + subscription sync)
+GRANT UPDATE (
+  subscription_status,
+  status,
+  warning_sent_at,
+  push_66_sent_at,
+  push_33_sent_at,
+  timer_days,
+  last_check_in,
+  selected_theme,
+  selected_soul_fire,
+  protocol_executed_at,
+  last_entry_at,
+  had_vault_activity
+) ON profiles TO service_role;
 
 -- Table-level grants
 GRANT SELECT, INSERT, DELETE ON TABLE profiles TO authenticated;

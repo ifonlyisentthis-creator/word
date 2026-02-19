@@ -82,11 +82,18 @@ class PushService {
 
       _tokenRefreshSubscription = _messaging.onTokenRefresh.listen(
         (token) async {
-          debugPrint('[PUSH] Token refreshed');
-          await _storage.write(key: _tokenStorageKey, value: token);
-          if (_currentUserId != null) {
-            await _upsertToken(userId: _currentUserId!, token: token);
+          try {
+            debugPrint('[PUSH] Token refreshed');
+            await _storage.write(key: _tokenStorageKey, value: token);
+            if (_currentUserId != null) {
+              await _upsertToken(userId: _currentUserId!, token: token);
+            }
+          } catch (e) {
+            debugPrint('[PUSH] Token refresh handling failed: $e');
           }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          debugPrint('[PUSH] Token refresh stream error: $error');
         },
       );
 
@@ -131,6 +138,7 @@ class PushService {
   Future<void> onSignOut() async {
     final token = await _storage.read(key: _tokenStorageKey);
     _currentUserId = null;
+    _lastTokenAttempt = null;
 
     if (token != null && token.isNotEmpty) {
       try {

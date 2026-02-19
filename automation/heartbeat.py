@@ -10,6 +10,8 @@ import json
 
 import os
 
+import random
+
 import sys
 
 import time
@@ -40,6 +42,20 @@ FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 
 PAGE_SIZE = 1000
 
+PROFILE_BATCH_SIZE = 200
+
+PROFILE_SELECT_FIELDS = (
+    "id,email,sender_name,status,subscription_status,last_check_in,timer_days,"
+    "hmac_key_encrypted,warning_sent_at,push_66_sent_at,push_33_sent_at,"
+    "selected_theme,selected_soul_fire,created_at"
+)
+
+REQUEST_TIMEOUT_SECONDS = 30
+
+HTTP_RETRY_DELAYS_SECONDS = (1, 3, 8)
+
+STALE_SENDING_LOCK_MINUTES = 30
+
 
 def fetch_all_rows(query_builder) -> list[dict]:
     """Paginate through a Supabase query to fetch all matching rows.
@@ -65,6 +81,46 @@ def fetch_all_rows(query_builder) -> list[dict]:
             break
         offset += PAGE_SIZE
     return all_rows
+
+
+def iter_rows(query_builder, page_size: int = PAGE_SIZE):
+    """Yield paginated rows in batches to avoid loading huge result sets at once."""
+    offset = 0
+    while True:
+        response = query_builder.range(offset, offset + page_size - 1).execute()
+        batch = response.data or []
+        if not batch:
+            break
+        yield batch
+        if len(batch) < page_size:
+            break
+        offset += page_size
+
+
+def iter_active_profiles(client, page_size: int = PROFILE_BATCH_SIZE):
+    """Yield active profiles via keyset pagination to avoid offset-skip issues.
+
+    Heartbeat mutates profile.status while processing users. Offset pagination can
+    skip rows when the filtered set shrinks mid-run. Keyset pagination on `id`
+    remains stable under those updates.
+    """
+    last_seen_id: str | None = None
+    while True:
+        query = (
+            client.table("profiles")
+            .select(PROFILE_SELECT_FIELDS)
+            .eq("status", "active")
+            .order("id")
+            .limit(page_size)
+        )
+        if last_seen_id is not None:
+            query = query.gt("id", last_seen_id)
+        response = query.execute()
+        batch = response.data or []
+        if not batch:
+            break
+        yield batch
+        last_seen_id = str(batch[-1]["id"])
 
 
 
@@ -94,7 +150,13 @@ def parse_iso(value: str | None) -> datetime | None:
 
         value = value.replace("Z", "+00:00")
 
-    return datetime.fromisoformat(value)
+    parsed = datetime.fromisoformat(value)
+
+    if parsed.tzinfo is None:
+
+        return parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
 
 
 
@@ -193,12 +255,104 @@ def build_viewer_link(base_url: str, entry_id: str) -> str:
     return f"{base_url.rstrip('/')}/?entry={entry_id}"
 
 
+def _is_retryable_http_status(status_code: int) -> bool:
+
+    return status_code in (408, 425, 429, 500, 502, 503, 504)
+
+
+def _post_json_with_retries(
+    url: str,
+    *,
+    headers: dict[str, str],
+    payload: dict,
+    idempotency_key: str | None = None,
+    timeout: int = REQUEST_TIMEOUT_SECONDS,
+) -> requests.Response:
+
+    request_headers = dict(headers)
+    if idempotency_key:
+        request_headers["Idempotency-Key"] = idempotency_key
+
+    for attempt in range(len(HTTP_RETRY_DELAYS_SECONDS) + 1):
+
+        try:
+
+            response = requests.post(
+
+                url,
+
+                headers=request_headers,
+
+                json=payload,
+
+                timeout=timeout,
+
+            )
+
+        except requests.RequestException as exc:
+
+            if attempt < len(HTTP_RETRY_DELAYS_SECONDS):
+
+                base_delay = HTTP_RETRY_DELAYS_SECONDS[attempt]
+                delay = base_delay + random.uniform(0, base_delay * 0.25)
+
+                print(
+
+                    f"HTTP request failed ({exc}); retrying in {delay}s "
+
+                    f"[{attempt + 1}/{len(HTTP_RETRY_DELAYS_SECONDS) + 1}]"
+
+                )
+
+                time.sleep(delay)
+
+                continue
+
+            raise
+
+        if (
+
+            _is_retryable_http_status(response.status_code)
+
+            and attempt < len(HTTP_RETRY_DELAYS_SECONDS)
+
+        ):
+
+            base_delay = HTTP_RETRY_DELAYS_SECONDS[attempt]
+            delay = base_delay + random.uniform(0, base_delay * 0.25)
+
+            print(
+
+                f"HTTP {response.status_code} retry in {delay}s "
+
+                f"[{attempt + 1}/{len(HTTP_RETRY_DELAYS_SECONDS) + 1}]"
+
+            )
+
+            time.sleep(delay)
+
+            continue
+
+        return response
+
+    raise RuntimeError("Unreachable retry state")
 
 
 
-def send_email(api_key: str, from_email: str, to_email: str, subject: str, text: str, html: str) -> None:
 
-    response = requests.post(
+
+def send_email(
+    api_key: str,
+    from_email: str,
+    to_email: str,
+    subject: str,
+    text: str,
+    html: str,
+    *,
+    idempotency_key: str | None = None,
+) -> None:
+
+    response = _post_json_with_retries(
 
         "https://api.resend.com/emails",
 
@@ -210,7 +364,7 @@ def send_email(api_key: str, from_email: str, to_email: str, subject: str, text:
 
         },
 
-        json={
+        payload={
 
             "from": from_email,
 
@@ -224,7 +378,7 @@ def send_email(api_key: str, from_email: str, to_email: str, subject: str, text:
 
         },
 
-        timeout=30,
+        idempotency_key=idempotency_key,
 
     )
 
@@ -289,7 +443,16 @@ def send_warning_email(
         "<p style='color:#888;font-size:12px'>— The Afterword Team</p>"
     )
 
-    send_email(resend_key, from_email, email, subject, text, html)
+    idempotency_key = f"warning-{profile.get('id', 'unknown')}-{deadline.date().isoformat()}"
+    send_email(
+        resend_key,
+        from_email,
+        email,
+        subject,
+        text,
+        html,
+        idempotency_key=idempotency_key,
+    )
 
 
 
@@ -355,7 +518,7 @@ def send_push_v1(
 
 
 
-    return requests.post(
+    return _post_json_with_retries(
 
         url,
 
@@ -367,9 +530,7 @@ def send_push_v1(
 
         },
 
-        json=payload,
-
-        timeout=30,
+        payload=payload,
 
     )
 
@@ -395,7 +556,49 @@ def build_fcm_context(firebase_sa_json: str) -> dict | None:
     except Exception as exc:  # noqa: BLE001
         print(f"Failed to mint FCM access token: {exc}")
         return None
-    return {"project_id": project_id, "access_token": access_token}
+    return {
+        "project_id": project_id,
+        "access_token": access_token,
+        "service_account_info": sa_info,
+    }
+
+
+def refresh_fcm_access_token(fcm_ctx: dict) -> bool:
+
+    sa_info = fcm_ctx.get("service_account_info")
+
+    if not isinstance(sa_info, dict):
+
+        return False
+
+    try:
+
+        fcm_ctx["access_token"] = get_fcm_access_token(sa_info)
+
+        return True
+
+    except Exception as exc:  # noqa: BLE001
+
+        print(f"Failed to refresh FCM access token: {exc}")
+
+        return False
+
+
+def _is_invalid_fcm_token_response(response_text: str) -> bool:
+
+    lowered = response_text.lower()
+
+    return (
+
+        "unregistered" in lowered
+
+        or "registration-token-not-registered" in lowered
+
+        or "invalid registration token" in lowered
+
+        or "requested entity was not found" in lowered
+
+    )
 
 
 def _send_push_to_user(
@@ -417,31 +620,54 @@ def _send_push_to_user(
         .execute()
     )
     rows = tokens_response.data or []
-    tokens = [row.get("fcm_token") for row in rows if row.get("fcm_token")]
+    tokens = list(
+        dict.fromkeys(
+            str(row.get("fcm_token")).strip()
+            for row in rows
+            if row.get("fcm_token")
+        )
+    )
     if not tokens:
         print(f"No FCM tokens for user {user_id}, push skipped")
         return False
 
     sent = False
     for token in tokens:
-        response = send_push_v1(
-            project_id=fcm_ctx["project_id"],
-            access_token=fcm_ctx["access_token"],
-            fcm_token=str(token),
-            title=title,
-            body=body,
-            data=data,
-        )
-        if response.status_code == 404:
-            client.table("push_devices").delete().eq("fcm_token", token).execute()
+        try:
+            response = send_push_v1(
+                project_id=fcm_ctx["project_id"],
+                access_token=fcm_ctx["access_token"],
+                fcm_token=token,
+                title=title,
+                body=body,
+                data=data,
+            )
+        except requests.RequestException as exc:
+            print(f"Push request failed for user {user_id}: {exc}")
             continue
+
+        if response.status_code in (401, 403) and refresh_fcm_access_token(fcm_ctx):
+            try:
+                response = send_push_v1(
+                    project_id=fcm_ctx["project_id"],
+                    access_token=fcm_ctx["access_token"],
+                    fcm_token=token,
+                    title=title,
+                    body=body,
+                    data=data,
+                )
+            except requests.RequestException as exc:
+                print(f"Push retry failed for user {user_id}: {exc}")
+                continue
+
         if response.status_code >= 400:
             text = response.text or ""
-            if "UNREGISTERED" in text or "registration-token-not-registered" in text:
+            if _is_invalid_fcm_token_response(text):
                 client.table("push_devices").delete().eq("fcm_token", token).execute()
                 continue
             print(f"Push failed for user {user_id}: {response.status_code} {text}")
             continue
+
         sent = True
     return sent
 
@@ -524,6 +750,8 @@ def send_unlock_email(
 
     recipient_email: str,
 
+    entry_id: str,
+
     sender_name: str,
 
     entry_title: str,
@@ -598,7 +826,15 @@ def send_unlock_email(
 
     )
 
-    send_email(resend_key, from_email, recipient_email, subject, text, html)
+    send_email(
+        resend_key,
+        from_email,
+        recipient_email,
+        subject,
+        text,
+        html,
+        idempotency_key=f"unlock-{entry_id}",
+    )
 
 
 
@@ -608,11 +844,17 @@ def delete_entry(client, entry: dict) -> None:
 
     audio_path = entry.get("audio_file_path")
 
+    client.table("vault_entries").delete().eq("id", entry["id"]).execute()
+
     if audio_path:
 
-        client.storage.from_(AUDIO_BUCKET).remove([audio_path])
+        try:
 
-    client.table("vault_entries").delete().eq("id", entry["id"]).execute()
+            client.storage.from_(AUDIO_BUCKET).remove([audio_path])
+
+        except Exception as exc:  # noqa: BLE001
+
+            print(f"Failed to delete audio object '{audio_path}' for entry {entry.get('id', '?')}: {exc}")
 
 
 
@@ -666,7 +908,45 @@ def release_entry_lock(client, entry_id: str) -> None:
 
         "id", entry_id
 
-    ).execute()
+    ).eq("status", "sending").execute()
+
+
+def mark_entry_sent(client, entry_id: str, sent_at: datetime) -> bool:
+
+    response = client.table("vault_entries").update(
+
+        {"status": "sent", "sent_at": sent_at.isoformat()}
+
+    ).eq("id", entry_id).eq("status", "sending").execute()
+
+    return bool(response.data)
+
+
+def requeue_stale_sending_entries(client, now: datetime) -> int:
+
+    cutoff = (now - timedelta(minutes=STALE_SENDING_LOCK_MINUTES)).isoformat()
+
+    try:
+
+        response = client.table("vault_entries").update({"status": "active"}).eq(
+
+            "status", "sending"
+
+        ).lt("updated_at", cutoff).execute()
+
+        count = len(response.data or [])
+
+        if count:
+
+            print(f"Recovered {count} stale sending locks")
+
+        return count
+
+    except Exception as exc:  # noqa: BLE001
+
+        print(f"Failed to recover stale sending locks: {exc}")
+
+        return 0
 
 
 
@@ -720,7 +1000,13 @@ def process_expired_entries(
 
         entry_id = entry.get("id", "unknown")
 
+        unlock_email_sent = False
+
         try:
+
+            if not claim_entry_for_sending(client, entry_id):
+
+                continue
 
             action = (entry.get("action_type") or "send").lower()
 
@@ -741,12 +1027,6 @@ def process_expired_entries(
                     pass
 
                 delete_entry(client, entry)
-
-                continue
-
-
-
-            if not claim_entry_for_sending(client, entry_id):
 
                 continue
 
@@ -814,6 +1094,8 @@ def process_expired_entries(
 
                 recipient_email,
 
+                entry_id,
+
                 sender_name,
 
                 entry_title,
@@ -828,15 +1110,15 @@ def process_expired_entries(
 
             )
 
+            unlock_email_sent = True
+
 
 
             had_send = True
 
-            client.table("vault_entries").update(
+            if not mark_entry_sent(client, entry_id, now):
 
-                {"status": "sent", "sent_at": now.isoformat()}
-
-            ).eq("id", entry_id).execute()
+                raise RuntimeError("Failed to mark entry as sent")
 
 
 
@@ -861,6 +1143,28 @@ def process_expired_entries(
                 print(f"Push executed failed for entry {entry_id}: {exc}")
 
         except Exception as exc:  # noqa: BLE001
+
+            if unlock_email_sent:
+
+                try:
+
+                    if mark_entry_sent(client, entry_id, now):
+
+                        print(
+
+                            f"Recovered post-email sent state for entry {entry_id}"
+
+                        )
+
+                        continue
+
+                except Exception as mark_exc:  # noqa: BLE001
+
+                    print(
+
+                        f"Failed to recover sent state for entry {entry_id}: {mark_exc}"
+
+                    )
 
             # Release the sending lock so the entry can be retried next cycle
             try:
@@ -1033,6 +1337,7 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
 def handle_subscription_downgrade(
     client,
     profile: dict,
+    active_entries: list[dict],
     resend_key: str,
     from_email: str,
     now: datetime,
@@ -1066,12 +1371,18 @@ def handle_subscription_downgrade(
     has_custom_theme = selected_theme is not None and selected_theme not in FREE_THEMES
     has_custom_soul_fire = selected_soul_fire is not None and selected_soul_fire not in FREE_SOUL_FIRES
 
+    active_audio_entries = [
+        entry
+        for entry in active_entries
+        if (entry.get("data_type") or "").lower() == "audio"
+    ]
+    has_audio = bool(active_audio_entries)
+    audio_entries: list[dict] = []
+
     # Only query for audio if there are other pro/lifetime indicators.
     # This avoids a DB query for every always-free user at scale.
     has_pro_indicators = has_custom_timer or has_custom_theme or has_custom_soul_fire
-    audio_entries: list[dict] = []
-    has_audio = False
-    if has_pro_indicators or (selected_soul_fire in ("toxicCore", "crystalAscend")):
+    if not has_audio and (has_pro_indicators or (selected_soul_fire in ("toxicCore", "crystalAscend"))):
         try:
             audio_check = (
                 client.table("vault_entries")
@@ -1109,14 +1420,17 @@ def handle_subscription_downgrade(
 
     # 2. If former lifetime: delete audio vault entries
     if was_lifetime:
-        audio_entries = (
-            client.table("vault_entries")
-            .select("id,audio_file_path")
-            .eq("user_id", uid)
-            .eq("data_type", "audio")
-            .eq("status", "active")
-            .execute()
-        ).data or []
+        if active_audio_entries:
+            audio_entries = active_audio_entries
+        else:
+            audio_entries = (
+                client.table("vault_entries")
+                .select("id,audio_file_path")
+                .eq("user_id", uid)
+                .eq("data_type", "audio")
+                .eq("status", "active")
+                .execute()
+            ).data or []
         for entry in audio_entries:
             delete_entry(client, entry)
         if audio_entries:
@@ -1163,7 +1477,15 @@ def handle_subscription_downgrade(
             "<p>— The Afterword Team</p>"
         )
         try:
-            send_email(resend_key, from_email, email, subject, text, html)
+            send_email(
+                resend_key,
+                from_email,
+                email,
+                subject,
+                text,
+                html,
+                idempotency_key=f"downgrade-{uid}-{now.date().isoformat()}",
+            )
             print(f"Sent downgrade notification to {uid}")
         except Exception as exc:  # noqa: BLE001
             print(f"Failed to send downgrade email to {uid}: {exc}")
@@ -1195,297 +1517,297 @@ def main() -> int:
 
     fcm_ctx = build_fcm_context(firebase_sa_json)
 
+    requeue_stale_sending_entries(client, now)
 
 
-    profiles = fetch_all_rows(
 
-        client.table("profiles")
+    processed_profiles = 0
 
-        .select(
+    processed_entries = 0
 
-            "id,email,sender_name,status,subscription_status,last_check_in,timer_days,"
+    for profile_batch in iter_active_profiles(client):
 
-            "hmac_key_encrypted,warning_sent_at,push_66_sent_at,push_33_sent_at,"
+      batch_user_ids = [str(p["id"]) for p in profile_batch if p.get("id")]
 
-            "selected_theme,selected_soul_fire,created_at"
+      batch_entries_by_user: dict[str, list[dict]] = {}
+
+      if batch_user_ids:
+
+        batch_entries = fetch_all_rows(
+
+            client.table("vault_entries")
+
+            .select(
+
+                "id,user_id,title,action_type,data_type,status,payload_encrypted,recipient_email_encrypted,data_key_encrypted,hmac_signature,audio_file_path"
+
+            )
+
+            .eq("status", "active")
+
+            .in_("user_id", batch_user_ids)
+
+            .order("id")
 
         )
 
-        .eq("status", "active")
+        processed_entries += len(batch_entries)
 
-    )
-    print(f"Active profiles: {len(profiles)}")
+        for entry in batch_entries:
 
+            batch_entries_by_user.setdefault(str(entry["user_id"]), []).append(entry)
 
+      for profile in profile_batch:
 
-    entries = fetch_all_rows(
+        processed_profiles += 1
 
-        client.table("vault_entries")
+        try:
 
-        .select(
+          user_id = str(profile["id"])
 
-            "id,user_id,title,action_type,data_type,status,payload_encrypted,recipient_email_encrypted,data_key_encrypted,hmac_signature,audio_file_path"
+          last_check_in = parse_iso(profile.get("last_check_in"))
 
-        )
+          timer_days = int(profile.get("timer_days") or 30)
 
-        .eq("status", "active")
+          if last_check_in is None:
 
-    )
-    print(f"Active entries: {len(entries)}")
+              continue
 
-    entries_by_user: dict[str, list[dict]] = {}
 
-    for entry in entries:
 
-        entries_by_user.setdefault(entry["user_id"], []).append(entry)
+          deadline = last_check_in + timedelta(days=timer_days)
 
+          remaining = deadline - now
 
+          total_seconds = timer_days * 86400
 
-    for profile in profiles:
+          remaining_seconds = max(remaining.total_seconds(), 0)
 
-      try:
+          remaining_fraction = remaining_seconds / total_seconds if total_seconds > 0 else 0
 
-        user_id = profile["id"]
+          active_entries = batch_entries_by_user.get(user_id, [])
 
-        last_check_in = parse_iso(profile.get("last_check_in"))
+          has_entries = len(active_entries) > 0
 
-        timer_days = int(profile.get("timer_days") or 30)
+          sender_name = profile.get("sender_name") or "Afterword"
+          sub_status = (profile.get("subscription_status") or "free").lower()
 
-        if last_check_in is None:
+          # ── PASS 0: Subscription downgrade → revert to free tier ──
+          if sub_status == "free":
+              try:
+                  reverted = handle_subscription_downgrade(
+                      client, profile, active_entries, resend_key, from_email, now,
+                  )
+                  if reverted:
+                      # Profile was modified in DB (timer reset, theme cleared).
+                      # In-memory profile dict is now stale — skip remaining passes.
+                      # Next heartbeat cycle will use the fresh values.
+                      continue
+              except Exception as exc:  # noqa: BLE001
+                  print(f"Subscription downgrade handling failed for {user_id}: {exc}")
 
-            continue
+          # ── PASS 1: Timer expired → execute protocol ──
 
+          if remaining.total_seconds() <= 0:
 
+              if not has_entries:
+                  # Empty vault = timer has no effect. Do NOT mark inactive.
+                  # User stays active; timer just sits expired until they add entries.
+                  continue
 
-        deadline = last_check_in + timedelta(days=timer_days)
+              had_send = process_expired_entries(
 
-        remaining = deadline - now
+                  client,
 
-        total_seconds = timer_days * 86400
+                  profile,
 
-        remaining_seconds = max(remaining.total_seconds(), 0)
+                  active_entries,
 
-        remaining_fraction = remaining_seconds / total_seconds if total_seconds > 0 else 0
+                  server_secret,
 
-        active_entries = entries_by_user.get(user_id, [])
+                  resend_key,
 
-        has_entries = len(active_entries) > 0
+                  from_email,
 
-        sender_name = profile.get("sender_name") or "Afterword"
-        sub_status = (profile.get("subscription_status") or "free").lower()
+                  viewer_base_url,
 
-        # ── PASS 0: Subscription downgrade → revert to free tier ──
-        if sub_status == "free":
-            try:
-                reverted = handle_subscription_downgrade(
-                    client, profile, resend_key, from_email, now,
-                )
-                if reverted:
-                    # Profile was modified in DB (timer reset, theme cleared).
-                    # In-memory profile dict is now stale — skip remaining passes.
-                    # Next heartbeat cycle will use the fresh values.
-                    continue
-            except Exception as exc:  # noqa: BLE001
-                print(f"Subscription downgrade handling failed for {user_id}: {exc}")
+                  fcm_ctx,
 
-        # ── PASS 1: Timer expired → execute protocol ──
+                  now,
 
-        if remaining.total_seconds() <= 0:
+              )
 
-            if not has_entries:
-                # Empty vault = timer has no effect. Do NOT mark inactive.
-                # User stays active; timer just sits expired until they add entries.
-                continue
+              # Mark user as having had vault activity (prevents bot auto-deletion)
+              try:
+                  client.table("profiles").update({
+                      "had_vault_activity": True,
+                  }).eq("id", user_id).execute()
+              except Exception:  # noqa: BLE001
+                  pass
 
-            had_send = process_expired_entries(
+              # Check if any entries still need processing (failed during this run)
+              pending = (
+                  client.table("vault_entries")
+                  .select("id", count="exact")
+                  .eq("user_id", user_id)
+                  .in_("status", ["active", "sending"])
+                  .execute()
+              )
+              has_pending = (pending.count or 0) > 0
 
-                client,
+              if has_pending:
+                  print(f"User {user_id}: {pending.count} entries still pending, keeping active for retry")
+              elif had_send:
+                  # Send entries exist → enter grace period (beneficiary can download)
+                  client.table("profiles").update({
+                      "status": "inactive",
+                      "timer_days": 30,
+                      "protocol_executed_at": now.isoformat(),
+                      "warning_sent_at": None,
+                      "push_66_sent_at": None,
+                      "push_33_sent_at": None,
+                      "last_entry_at": None,
+                  }).eq("id", user_id).execute()
+                  print(f"User {user_id}: protocol executed, grace period started")
+              else:
+                  # Destroy-only → no grace needed, reset to fresh immediately
+                  client.table("profiles").update({
+                      "status": "active",
+                      "timer_days": 30,
+                      "last_check_in": now.isoformat(),
+                      "protocol_executed_at": None,
+                      "warning_sent_at": None,
+                      "push_66_sent_at": None,
+                      "push_33_sent_at": None,
+                      "last_entry_at": None,
+                  }).eq("id", user_id).execute()
+                  print(f"User {user_id}: destroy-only vault cleared, account reset to fresh")
 
-                profile,
+              continue
 
-                active_entries,
 
-                server_secret,
 
-                resend_key,
+          # Skip users with empty vaults — no warnings needed
 
-                from_email,
+          if not has_entries:
 
-                viewer_base_url,
+              continue
 
-                fcm_ctx,
 
-                now,
 
-            )
+          # ── PASS 2: Push #1 at 66% remaining (ALL users) ──
 
-            # Mark user as having had vault activity (prevents bot auto-deletion)
-            try:
-                client.table("profiles").update({
-                    "had_vault_activity": True,
-                }).eq("id", user_id).execute()
-            except Exception:  # noqa: BLE001
-                pass
+          if remaining_fraction <= 0.66:
 
-            # Check if any entries still need processing (failed during this run)
-            pending = (
-                client.table("vault_entries")
-                .select("id", count="exact")
-                .eq("user_id", user_id)
-                .in_("status", ["active", "sending"])
-                .execute()
-            )
-            has_pending = (pending.count or 0) > 0
+              push_66_sent = parse_iso(profile.get("push_66_sent_at"))
 
-            if has_pending:
-                print(f"User {user_id}: {pending.count} entries still pending, keeping active for retry")
-            elif had_send:
-                # Send entries exist → enter grace period (beneficiary can download)
-                client.table("profiles").update({
-                    "status": "inactive",
-                    "timer_days": 30,
-                    "protocol_executed_at": now.isoformat(),
-                    "warning_sent_at": None,
-                    "push_66_sent_at": None,
-                    "push_33_sent_at": None,
-                    "last_entry_at": None,
-                }).eq("id", user_id).execute()
-                print(f"User {user_id}: protocol executed, grace period started")
-            else:
-                # Destroy-only → no grace needed, reset to fresh immediately
-                client.table("profiles").update({
-                    "status": "active",
-                    "timer_days": 30,
-                    "last_check_in": now.isoformat(),
-                    "protocol_executed_at": None,
-                    "warning_sent_at": None,
-                    "push_66_sent_at": None,
-                    "push_33_sent_at": None,
-                    "last_entry_at": None,
-                }).eq("id", user_id).execute()
-                print(f"User {user_id}: destroy-only vault cleared, account reset to fresh")
+              already_sent_66 = bool(
 
-            continue
+                  push_66_sent and last_check_in and push_66_sent >= last_check_in
 
+              )
 
+              if not already_sent_66:
 
-        # Skip users with empty vaults — no warnings needed
+                  push_sent = False
 
-        if not has_entries:
+                  try:
 
-            continue
+                      push_sent = send_warning_push(
 
+                          client, user_id, sender_name, deadline, fcm_ctx,
+                          remaining_fraction=remaining_fraction,
 
+                      )
 
-        # ── PASS 2: Push #1 at 66% remaining (ALL users) ──
+                  except Exception as exc:  # noqa: BLE001
 
-        if remaining_fraction <= 0.66:
+                      print(f"Push 66% warning failed for user {user_id}: {exc}")
 
-            push_66_sent = parse_iso(profile.get("push_66_sent_at"))
+                  if push_sent:
 
-            already_sent_66 = bool(
+                      client.table("profiles").update(
 
-                push_66_sent and last_check_in and push_66_sent >= last_check_in
+                          {"push_66_sent_at": now.isoformat()}
 
-            )
+                      ).eq("id", user_id).execute()
 
-            if not already_sent_66:
 
-                push_sent = False
 
-                try:
+          # ── PASS 3: Push #2 at 33% remaining (ALL users) ──
 
-                    push_sent = send_warning_push(
+          if remaining_fraction <= 0.33:
 
-                        client, user_id, sender_name, deadline, fcm_ctx,
-                        remaining_fraction=remaining_fraction,
+              push_33_sent = parse_iso(profile.get("push_33_sent_at"))
 
-                    )
+              already_sent_33 = bool(
 
-                except Exception as exc:  # noqa: BLE001
+                  push_33_sent and last_check_in and push_33_sent >= last_check_in
 
-                    print(f"Push 66% warning failed for user {user_id}: {exc}")
+              )
 
-                if push_sent:
+              if not already_sent_33:
 
-                    client.table("profiles").update(
+                  push_sent = False
 
-                        {"push_66_sent_at": now.isoformat()}
+                  try:
 
-                    ).eq("id", user_id).execute()
+                      push_sent = send_warning_push(
 
+                          client, user_id, sender_name, deadline, fcm_ctx,
+                          remaining_fraction=remaining_fraction,
 
+                      )
 
-        # ── PASS 3: Push #2 at 33% remaining (ALL users) ──
+                  except Exception as exc:  # noqa: BLE001
 
-        if remaining_fraction <= 0.33:
+                      print(f"Push 33% warning failed for user {user_id}: {exc}")
 
-            push_33_sent = parse_iso(profile.get("push_33_sent_at"))
+                  if push_sent:
 
-            already_sent_33 = bool(
+                      client.table("profiles").update(
 
-                push_33_sent and last_check_in and push_33_sent >= last_check_in
+                          {"push_33_sent_at": now.isoformat()}
 
-            )
+                      ).eq("id", user_id).execute()
 
-            if not already_sent_33:
 
-                push_sent = False
 
-                try:
+          # ── PASS 4: Email at 24h before expiry (PAID users only) ──
 
-                    push_sent = send_warning_push(
+          if remaining <= WARNING_WINDOW and is_paid(profile.get("subscription_status")):
 
-                        client, user_id, sender_name, deadline, fcm_ctx,
-                        remaining_fraction=remaining_fraction,
+              warning_sent_at = parse_iso(profile.get("warning_sent_at"))
 
-                    )
+              already_warned = bool(
 
-                except Exception as exc:  # noqa: BLE001
+                  warning_sent_at and last_check_in and warning_sent_at >= last_check_in
 
-                    print(f"Push 33% warning failed for user {user_id}: {exc}")
+              )
 
-                if push_sent:
+              if not already_warned:
 
-                    client.table("profiles").update(
+                  try:
 
-                        {"push_33_sent_at": now.isoformat()}
+                      send_warning_email(
+                          profile, deadline, resend_key, from_email,
+                          remaining_fraction=remaining_fraction,
+                      )
 
-                    ).eq("id", user_id).execute()
+                      mark_warning_sent(client, user_id, now)
 
+                  except Exception as exc:  # noqa: BLE001
 
+                      print(f"Warning email failed for user {user_id}: {exc}")
 
-        # ── PASS 4: Email at 24h before expiry (PAID users only) ──
 
-        if remaining <= WARNING_WINDOW and is_paid(profile.get("subscription_status")):
 
-            warning_sent_at = parse_iso(profile.get("warning_sent_at"))
+        except Exception as exc:  # noqa: BLE001
+            print(f"Processing failed for user {profile.get('id', '?')}: {exc}")
 
-            already_warned = bool(
+    print(f"Active profiles processed: {processed_profiles}")
 
-                warning_sent_at and last_check_in and warning_sent_at >= last_check_in
-
-            )
-
-            if not already_warned:
-
-                try:
-
-                    send_warning_email(
-                        profile, deadline, resend_key, from_email,
-                        remaining_fraction=remaining_fraction,
-                    )
-
-                    mark_warning_sent(client, user_id, now)
-
-                except Exception as exc:  # noqa: BLE001
-
-                    print(f"Warning email failed for user {user_id}: {exc}")
-
-
-
-      except Exception as exc:  # noqa: BLE001
-          print(f"Processing failed for user {profile.get('id', '?')}: {exc}")
+    print(f"Active entries processed: {processed_entries}")
 
     try:
         cleanup_sent_entries(client)
@@ -1498,6 +1820,39 @@ def main() -> int:
         print(f"cleanup_bot_accounts failed: {exc}")
 
     return 0
+
+
+def is_transient_error_message(message: str) -> bool:
+
+    lowered = message.lower()
+
+    return any(
+
+        token in lowered
+
+        for token in (
+
+            "500",
+
+            "502",
+
+            "503",
+
+            "504",
+
+            "429",
+
+            "connectionerror",
+
+            "timeout",
+
+            "temporar",
+
+            "network",
+
+        )
+
+    )
 
 
 
@@ -1517,9 +1872,7 @@ if __name__ == "__main__":
 
             _err = str(exc)
 
-            _transient = any(
-                c in _err for c in ("500", "502", "503", "504", "ConnectionError", "Timeout")
-            )
+            _transient = is_transient_error_message(_err)
 
             if _transient and _attempt < 2:
 

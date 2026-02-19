@@ -23,7 +23,7 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+export {};
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
@@ -39,6 +39,27 @@ interface RevenueCatSubscriber {
     subscriptions: Record<string, unknown>;
     non_subscriptions: Record<string, unknown[]>;
   };
+}
+
+const OUTBOUND_TIMEOUT_MS = 10_000;
+
+function isTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.name === "AbortError";
+}
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs = OUTBOUND_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function corsHeaders(): Headers {
@@ -62,7 +83,7 @@ async function getVerifiedUserId(
   authHeader: string,
 ): Promise<string | null> {
   try {
-    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    const response = await fetchWithTimeout(`${supabaseUrl}/auth/v1/user`, {
       method: "GET",
       headers: {
         apikey: supabaseAnonKey,
@@ -97,6 +118,12 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
+    return new Response(
+      JSON.stringify({ error: "Supabase edge function secrets are not configured" }),
+      { headers, status: 500 }
+    );
+  }
   const rcSecret = Deno.env.get("REVENUECAT_API_SECRET") || "";
   if (!rcSecret) {
     return new Response(
@@ -109,6 +136,12 @@ Deno.serve(async (req: Request) => {
 
   // ── 2. Verify JWT server-side (prevents forged-token attacks) ────
   const authHeader = req.headers.get("authorization") || "";
+  if (!authHeader.toLowerCase().startsWith("bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      headers,
+      status: 401,
+    });
+  }
   const userId = await getVerifiedUserId(supabaseUrl, supabaseAnonKey, authHeader);
   if (!userId) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -120,7 +153,7 @@ Deno.serve(async (req: Request) => {
   // ── 3. Call RevenueCat REST API ────────────────────────────────────
   let rcData: RevenueCatSubscriber;
   try {
-    const rcRes = await fetch(
+    const rcRes = await fetchWithTimeout(
       `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`,
       {
         headers: {
@@ -144,8 +177,9 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     return new Response(
       JSON.stringify({
-        error: "Failed to reach RevenueCat",
-        detail: err instanceof Error ? err.message : String(err),
+        error: isTimeoutError(err)
+          ? "RevenueCat request timed out"
+          : "Failed to reach RevenueCat",
       }),
       { headers, status: 502 }
     );
@@ -153,12 +187,19 @@ Deno.serve(async (req: Request) => {
 
   // ── 4. Determine subscription status ───────────────────────────────
   const subscriber = rcData.subscriber;
-  const activeEntitlements = Object.entries(subscriber.entitlements).filter(
-    ([, ent]) => {
-      if (!ent.expires_date) return true; // lifetime / non-expiring
-      return new Date(ent.expires_date) > new Date();
-    }
-  );
+  const entitlementsRaw =
+    subscriber && typeof subscriber.entitlements === "object" && subscriber.entitlements
+      ? subscriber.entitlements
+      : {};
+  const activeEntitlements = Object.entries(entitlementsRaw).filter(([, ent]) => {
+    if (!ent || typeof ent !== "object") return false;
+    const expiresDate =
+      "expires_date" in ent && typeof ent.expires_date === "string"
+        ? ent.expires_date
+        : null;
+    if (!expiresDate) return true; // lifetime / non-expiring
+    return new Date(expiresDate) > new Date();
+  });
 
   const hasEntitlement = activeEntitlements.some(
     ([key]) => key === entitlementId
@@ -167,9 +208,16 @@ Deno.serve(async (req: Request) => {
   // Check for lifetime product ONLY in active entitlements.
   // Do NOT check non_subscriptions — it includes refunded purchases,
   // so a user who bought lifetime and got a refund would still match.
-  const isLifetime = activeEntitlements.some(([, ent]) =>
-    ent.product_identifier.toLowerCase().includes("lifetime")
-  );
+  const isLifetime = activeEntitlements.some(([, ent]) => {
+    const productId =
+      ent &&
+      typeof ent === "object" &&
+      "product_identifier" in ent &&
+      typeof ent.product_identifier === "string"
+        ? ent.product_identifier
+        : "";
+    return productId.toLowerCase().includes("lifetime");
+  });
 
   let status: string;
   if (isLifetime) {
@@ -180,28 +228,41 @@ Deno.serve(async (req: Request) => {
     status = "free";
   }
 
-  // ── 5. Update profiles via service_role using Supabase JS client ───
-  // Using createClient with service_role key ensures the JWT role GUC
-  // is set correctly, so the guard_subscription_status trigger passes.
+  // ── 5. Update profiles via service_role through Supabase RPC REST ───
   try {
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    });
-    const { error: rpcError } = await supabaseAdmin.rpc(
-      "edge_set_subscription_status",
-      { target_user_id: userId, new_status: status }
+    const rpcRes = await fetchWithTimeout(
+      `${supabaseUrl}/rest/v1/rpc/edge_set_subscription_status`,
+      {
+        method: "POST",
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          target_user_id: userId,
+          new_status: status,
+        }),
+      },
     );
-    if (rpcError) {
+
+    if (!rpcRes.ok) {
+      const detailText = await rpcRes.text();
       return new Response(
-        JSON.stringify({ error: "Profile update failed", detail: rpcError }),
-        { headers, status: 500 }
+        JSON.stringify({
+          error: "Profile update failed",
+          detail: detailText,
+          supabase_status: rpcRes.status,
+        }),
+        { headers, status: 500 },
       );
     }
   } catch (err) {
     return new Response(
       JSON.stringify({
-        error: "Profile update error",
-        detail: err instanceof Error ? err.message : String(err),
+        error: isTimeoutError(err)
+          ? "Profile update request timed out"
+          : "Profile update error",
       }),
       { headers, status: 500 }
     );

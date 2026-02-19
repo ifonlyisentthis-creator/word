@@ -129,36 +129,47 @@ class VaultService {
     final dataKeyEncrypted =
         await _encryptMetadataKey(dataKey, deviceWrappingKey);
 
-    if (isAudio && draft.audioFilePath != null && audioFilePath != null) {
-      await _uploadEncryptedAudio(
-        sourceFilePath: draft.audioFilePath!,
-        storagePath: audioFilePath,
-        dataKey: dataKey,
-      );
+    var uploadedAudio = false;
+    try {
+      if (isAudio && draft.audioFilePath != null && audioFilePath != null) {
+        await _uploadEncryptedAudio(
+          sourceFilePath: draft.audioFilePath!,
+          storagePath: audioFilePath,
+          dataKey: dataKey,
+        );
+        uploadedAudio = true;
+      }
+
+      await _ensureProfileHmacKey(userId, hmacKey);
+      final signatureMessage =
+          _buildSignatureMessage(payloadEncrypted, recipientEncrypted);
+      final hmacSignature =
+          await _cryptoService.computeHmac(signatureMessage, hmacKey);
+
+      final inserted = await _client.from('vault_entries').insert({
+        'id': entryId,
+        'user_id': userId,
+        'title': normalizedTitle,
+        'action_type': draft.actionType.value,
+        'data_type': draft.dataType.value,
+        'status': VaultStatus.active.value,
+        'payload_encrypted': payloadEncrypted,
+        'recipient_email_encrypted': recipientEncrypted,
+        'data_key_encrypted': dataKeyEncrypted,
+        'hmac_signature': hmacSignature,
+        'audio_file_path': audioFilePath,
+        'audio_duration_seconds': audioDurationSeconds,
+      }).select().single();
+
+      return VaultEntry.fromMap(inserted);
+    } catch (_) {
+      if (uploadedAudio && audioFilePath != null) {
+        try {
+          await _deleteAudioFile(audioFilePath);
+        } catch (_) {}
+      }
+      rethrow;
     }
-
-    await _ensureProfileHmacKey(userId, hmacKey);
-    final signatureMessage =
-        _buildSignatureMessage(payloadEncrypted, recipientEncrypted);
-    final hmacSignature =
-        await _cryptoService.computeHmac(signatureMessage, hmacKey);
-
-    final inserted = await _client.from('vault_entries').insert({
-      'id': entryId,
-      'user_id': userId,
-      'title': normalizedTitle,
-      'action_type': draft.actionType.value,
-      'data_type': draft.dataType.value,
-      'status': VaultStatus.active.value,
-      'payload_encrypted': payloadEncrypted,
-      'recipient_email_encrypted': recipientEncrypted,
-      'data_key_encrypted': dataKeyEncrypted,
-      'hmac_signature': hmacSignature,
-      'audio_file_path': audioFilePath,
-      'audio_duration_seconds': audioDurationSeconds,
-    }).select().single();
-
-    return VaultEntry.fromMap(inserted);
   }
 
   Future<VaultEntry> updateEntry(VaultEntry entry, VaultEntryDraft draft) async {
@@ -174,8 +185,11 @@ class VaultService {
     final isAudio = draft.dataType == VaultDataType.audio;
     final wasAudio = entry.dataType == VaultDataType.audio;
     final hasNewAudio = draft.audioFilePath != null;
+    final previousAudioPath = entry.audioFilePath;
     String? audioFilePath = entry.audioFilePath;
     int? audioDurationSeconds = entry.audioDurationSeconds;
+    String? uploadedAudioPath;
+    var shouldDeletePreviousAudioAfterUpdate = false;
 
     final hmacKey = await _deviceSecretService.loadOrCreateHmacKey(userId: entry.userId);
     final deviceWrappingKey =
@@ -188,7 +202,11 @@ class VaultService {
         dataKey = await _cryptoService.generateDataKey();
         dataKeyEncrypted =
             await _encryptMetadataKey(dataKey, deviceWrappingKey);
-        audioFilePath ??= _buildAudioPath(userId: entry.userId, entryId: entry.id);
+        final uploadToken = _uuid.v4().replaceAll('-', '');
+        audioFilePath = _buildAudioPath(
+          userId: entry.userId,
+          entryId: '${entry.id}_$uploadToken',
+        );
         audioDurationSeconds = draft.audioDurationSeconds;
         if (audioDurationSeconds == null) {
           throw const VaultFailure('Record audio before saving.');
@@ -198,6 +216,9 @@ class VaultService {
           storagePath: audioFilePath,
           dataKey: dataKey,
         );
+        uploadedAudioPath = audioFilePath;
+        shouldDeletePreviousAudioAfterUpdate =
+            previousAudioPath != null && previousAudioPath != audioFilePath;
       } else {
         if (audioFilePath == null || audioDurationSeconds == null) {
           throw const VaultFailure('Record audio before saving.');
@@ -212,9 +233,8 @@ class VaultService {
     } else {
       dataKey = await _cryptoService.generateDataKey();
       dataKeyEncrypted = await _encryptMetadataKey(dataKey, deviceWrappingKey);
-      if (wasAudio && audioFilePath != null) {
-        await _deleteAudioFile(audioFilePath);
-      }
+      shouldDeletePreviousAudioAfterUpdate =
+          wasAudio && previousAudioPath != null;
       audioFilePath = null;
       audioDurationSeconds = null;
     }
@@ -231,33 +251,50 @@ class VaultService {
     final hmacSignature =
         await _cryptoService.computeHmac(signatureMessage, hmacKey);
 
-    final updated = await _client
-        .from('vault_entries')
-        .update({
-          'title': normalizedTitle,
-          'action_type': draft.actionType.value,
-          'data_type': draft.dataType.value,
-          'payload_encrypted': payloadEncrypted,
-          'recipient_email_encrypted': recipientEncrypted,
-          'data_key_encrypted': dataKeyEncrypted,
-          'hmac_signature': hmacSignature,
-          'audio_file_path': audioFilePath,
-          'audio_duration_seconds': audioDurationSeconds,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        })
-        .eq('id', entry.id)
-        .select()
-        .single();
+    try {
+      final updated = await _client
+          .from('vault_entries')
+          .update({
+            'title': normalizedTitle,
+            'action_type': draft.actionType.value,
+            'data_type': draft.dataType.value,
+            'payload_encrypted': payloadEncrypted,
+            'recipient_email_encrypted': recipientEncrypted,
+            'data_key_encrypted': dataKeyEncrypted,
+            'hmac_signature': hmacSignature,
+            'audio_file_path': audioFilePath,
+            'audio_duration_seconds': audioDurationSeconds,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', entry.id)
+          .select()
+          .single();
 
-    return VaultEntry.fromMap(updated);
+      if (shouldDeletePreviousAudioAfterUpdate && previousAudioPath != null) {
+        try {
+          await _deleteAudioFile(previousAudioPath);
+        } catch (_) {}
+      }
+
+      return VaultEntry.fromMap(updated);
+    } catch (_) {
+      if (uploadedAudioPath != null) {
+        try {
+          await _deleteAudioFile(uploadedAudioPath);
+        } catch (_) {}
+      }
+      rethrow;
+    }
   }
 
   Future<void> deleteEntry(VaultEntry entry) async {
     await _refreshSession();
-    if (entry.dataType == VaultDataType.audio && entry.audioFilePath != null) {
-      await _deleteAudioFile(entry.audioFilePath!);
-    }
     await _client.from('vault_entries').delete().eq('id', entry.id);
+    if (entry.dataType == VaultDataType.audio && entry.audioFilePath != null) {
+      try {
+        await _deleteAudioFile(entry.audioFilePath!);
+      } catch (_) {}
+    }
   }
 
   Future<void> deleteAllEntries(String userId) async {
@@ -268,10 +305,12 @@ class VaultService {
         .map((entry) => entry.audioFilePath)
         .whereType<String>()
         .toList();
-    if (audioPaths.isNotEmpty) {
-      await _client.storage.from(_audioBucket).remove(audioPaths);
-    }
     await _client.from('vault_entries').delete().eq('user_id', userId);
+    if (audioPaths.isNotEmpty) {
+      try {
+        await _client.storage.from(_audioBucket).remove(audioPaths);
+      } catch (_) {}
+    }
   }
 
   Future<String> downloadAudio(VaultEntry entry) async {

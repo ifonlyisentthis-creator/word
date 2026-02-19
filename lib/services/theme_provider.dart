@@ -82,6 +82,8 @@ class ThemeProvider extends ChangeNotifier {
       } catch (_) {
         _themeId = AppThemeId.oledVoid;
       }
+    } else {
+      _themeId = AppThemeId.oledVoid;
     }
 
     // Parse soul fire style from profile
@@ -98,6 +100,8 @@ class ThemeProvider extends ChangeNotifier {
       } catch (_) {
         _soulFireId = SoulFireStyleId.etherealOrb;
       }
+    } else {
+      _soulFireId = SoulFireStyleId.etherealOrb;
     }
 
     if (_subscriptionStatus != oldSub ||
@@ -138,6 +142,7 @@ class ThemeProvider extends ChangeNotifier {
       _soulFireId = SoulFireStyleId.etherealOrb;
     }
     notifyListeners();
+    _saveToCache();
   }
 
   /// Reset to free defaults. Call on sign-out so the next user
