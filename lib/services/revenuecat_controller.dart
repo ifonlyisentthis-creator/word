@@ -31,8 +31,9 @@ class RevenueCatController extends ChangeNotifier {
   bool get isLifetime {
     final active = _customerInfo?.entitlements.active;
     if (active == null || active.isEmpty) return false;
-    return active.values
-        .any((ent) => ent.productIdentifier.toLowerCase().contains('lifetime'));
+    return active.values.any(
+      (ent) => ent.productIdentifier.toLowerCase().contains('lifetime'),
+    );
   }
 
   /// The product identifier of the user's active entitlement (if any).
@@ -50,9 +51,16 @@ class RevenueCatController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (kDebugMode) {
-      Purchases.setLogLevel(LogLevel.debug);
-    }
+    // Keep native RC logs quiet by default (they can be extremely noisy and
+    // impact debug-time frame pacing). Enable verbose logs only when explicitly
+    // requested via --dart-define=RC_VERBOSE_LOGS=true.
+    const rcVerboseLogs = bool.fromEnvironment(
+      'RC_VERBOSE_LOGS',
+      defaultValue: false,
+    );
+    Purchases.setLogLevel(
+      kDebugMode && rcVerboseLogs ? LogLevel.debug : LogLevel.warn,
+    );
     try {
       await Purchases.configure(PurchasesConfiguration(apiKey));
       Purchases.addCustomerInfoUpdateListener(_handleCustomerInfoUpdate);
@@ -209,7 +217,9 @@ class RevenueCatController extends ChangeNotifier {
       final now = DateTime.now();
       if (_lastSyncAttempt != null &&
           now.difference(_lastSyncAttempt!).inSeconds < 30) {
-        if (kDebugMode) debugPrint('[RC-SYNC] Debounced (< 30s since last attempt)');
+        if (kDebugMode) {
+          debugPrint('[RC-SYNC] Debounced (< 30s since last attempt)');
+        }
         return;
       }
     }
@@ -222,7 +232,11 @@ class RevenueCatController extends ChangeNotifier {
         if (kDebugMode) debugPrint('[RC-SYNC] No Supabase user, skipping sync');
         return;
       }
-      if (kDebugMode) debugPrint('[RC-SYNC] Verifying subscription server-side for ${user.id}');
+      if (kDebugMode) {
+        debugPrint(
+          '[RC-SYNC] Verifying subscription server-side for ${user.id}',
+        );
+      }
 
       // Ensure the JWT is fresh before calling the Edge Function.
       try {

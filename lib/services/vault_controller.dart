@@ -4,11 +4,9 @@ import '../models/vault_entry.dart';
 import 'vault_service.dart';
 
 class VaultController extends ChangeNotifier {
-  VaultController({
-    required VaultService vaultService,
-    required String userId,
-  })  : _vaultService = vaultService,
-        _userId = userId;
+  VaultController({required VaultService vaultService, required String userId})
+    : _vaultService = vaultService,
+      _userId = userId;
 
   bool _isDisposed = false;
 
@@ -22,6 +20,8 @@ class VaultController extends ChangeNotifier {
   final Map<String, VaultEntryPayload> _payloadCache = {};
   final Map<String, String> _audioCache = {};
   List<VaultEntry> _entries = [];
+  bool _entriesLoaded = false;
+  Future<void>? _entriesLoadFuture;
   bool _isLoading = false;
   String? _errorMessage;
   DateTime? _lastCreateAttemptAt;
@@ -43,15 +43,34 @@ class VaultController extends ChangeNotifier {
   }
 
   int get audioSecondsUsed => _entries
-      .where((entry) =>
-          entry.status == VaultStatus.active &&
-          entry.dataType == VaultDataType.audio)
+      .where(
+        (entry) =>
+            entry.status == VaultStatus.active &&
+            entry.dataType == VaultDataType.audio,
+      )
       .fold(0, (total, entry) => total + (entry.audioDurationSeconds ?? 0));
 
   Future<void> loadEntries() async {
+    if (_isDisposed) return;
+    if (_entriesLoadFuture != null) {
+      await _entriesLoadFuture;
+      return;
+    }
+
+    final future = _loadEntriesInternal();
+    _entriesLoadFuture = future;
+    try {
+      await future;
+    } finally {
+      _entriesLoadFuture = null;
+    }
+  }
+
+  Future<void> _loadEntriesInternal() async {
     _setLoading(true);
     try {
       _entries = await _vaultService.fetchEntries(_userId);
+      _entriesLoaded = true;
       if (_isDisposed) return;
       _errorMessage = null;
     } catch (_) {
@@ -99,6 +118,15 @@ class VaultController extends ChangeNotifier {
     required bool isPro,
     required bool isLifetime,
   }) async {
+    if (!_entriesLoaded) {
+      await loadEntries();
+      if (!_entriesLoaded) {
+        _errorMessage = 'Unable to verify vault limits. Please try again.';
+        notifyListeners();
+        return false;
+      }
+    }
+
     final normalizedDraft = _applyPlaintextLimit(draft);
     final failure = _validateDraft(
       normalizedDraft,
@@ -142,6 +170,15 @@ class VaultController extends ChangeNotifier {
     required bool isPro,
     required bool isLifetime,
   }) async {
+    if (!_entriesLoaded) {
+      await loadEntries();
+      if (!_entriesLoaded) {
+        _errorMessage = 'Unable to verify vault limits. Please try again.';
+        notifyListeners();
+        return false;
+      }
+    }
+
     if (!entry.isEditable) {
       _errorMessage = 'This entry is locked.';
       notifyListeners();
@@ -235,7 +272,8 @@ class VaultController extends ChangeNotifier {
         return 'Record audio before saving.';
       }
       final totalUsed = audioSecondsUsed;
-      final availableSeconds = audioTimeBankSeconds -
+      final availableSeconds =
+          audioTimeBankSeconds -
           totalUsed +
           (hasExistingAudio ? (existingEntry?.audioDurationSeconds ?? 0) : 0);
       if (durationSeconds > availableSeconds) {

@@ -13,9 +13,9 @@ class AuthController extends ChangeNotifier {
     required RevenueCatController revenueCatController,
     required String redirectUrl,
     required PushService pushService,
-  })  : _supabaseClient = supabaseClient,
-        _revenueCatController = revenueCatController,
-        _pushService = pushService;
+  }) : _supabaseClient = supabaseClient,
+       _revenueCatController = revenueCatController,
+       _pushService = pushService;
 
   final SupabaseClient _supabaseClient;
   final RevenueCatController _revenueCatController;
@@ -38,6 +38,8 @@ class AuthController extends ChangeNotifier {
   AuthFailure? _lastFailure;
   bool _isLoading = false;
   bool _signingOut = false;
+  String? _servicesBoundUserId;
+  bool _canBindUserServices = false;
 
   Session? get session => _session;
   User? get user => _user;
@@ -51,20 +53,20 @@ class AuthController extends ChangeNotifier {
   void quickInit() {
     _session = _supabaseClient.auth.currentSession;
     _user = _session?.user;
-    _authSubscription = _supabaseClient.auth.onAuthStateChange.listen(
-      (data) async {
-        await _handleAuthState(data);
-      },
-    );
+    _authSubscription = _supabaseClient.auth.onAuthStateChange.listen((
+      data,
+    ) async {
+      await _handleAuthState(data);
+    });
     notifyListeners();
   }
 
   /// Slow deferred init: push registration + RevenueCat login.
   /// Call after UI is visible.
   Future<void> deferredInit() async {
+    _canBindUserServices = true;
     if (_user != null) {
-      await _pushService.onSignIn(_user!.id);
-      await _revenueCatController.logIn(_user!.id);
+      await _bindServicesForUser(_user!.id);
     }
   }
 
@@ -138,8 +140,9 @@ class AuthController extends ChangeNotifier {
     _user = data.session?.user;
     if (_user != null) {
       _signingOut = false;
-      await _pushService.onSignIn(_user!.id);
-      await _revenueCatController.logIn(_user!.id);
+      if (_canBindUserServices) {
+        await _bindServicesForUser(_user!.id);
+      }
     } else if (hadUser && !_signingOut) {
       // Only log out if we previously had a signed-in user AND signOut()
       // hasn't already handled cleanup. signOut() sets _signingOut = true
@@ -147,8 +150,18 @@ class AuthController extends ChangeNotifier {
       await _pushService.onSignOut();
       await _revenueCatController.logOut();
     }
-    if (_user == null) _signingOut = false;
+    if (_user == null) {
+      _signingOut = false;
+      _servicesBoundUserId = null;
+    }
     notifyListeners();
+  }
+
+  Future<void> _bindServicesForUser(String userId) async {
+    if (_servicesBoundUserId == userId) return;
+    await _pushService.onSignIn(userId);
+    await _revenueCatController.logIn(userId);
+    _servicesBoundUserId = userId;
   }
 
   void _setLoading(bool value) {

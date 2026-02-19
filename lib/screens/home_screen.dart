@@ -8,8 +8,6 @@ import 'package:provider/provider.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-
-
 import '../models/profile.dart';
 
 import '../services/account_service.dart';
@@ -47,83 +45,58 @@ import 'my_vault_page.dart';
 import 'vault_section.dart';
 
 class HomeScreen extends StatelessWidget {
-
   const HomeScreen({super.key});
 
-
-
   @override
-
   Widget build(BuildContext context) {
-
     final authController = context.watch<AuthController>();
 
     final user = authController.user;
 
     if (user == null) {
-
-      return const Scaffold(
-
-        body: Center(child: CircularProgressIndicator()),
-
-      );
-
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-
-
     final rc = context.read<RevenueCatController>();
-    final subStatus = rc.isLifetime ? 'lifetime' : rc.isPro ? 'pro' : 'free';
+    final subStatus = rc.isLifetime
+        ? 'lifetime'
+        : rc.isPro
+        ? 'pro'
+        : 'free';
 
     return ChangeNotifierProvider(
-
       key: ValueKey(user.id),
 
       create: (ctx) => HomeController(
-
         profileService: ProfileService(Supabase.instance.client),
 
         notificationService: NotificationService(),
 
         accountService: AccountService(
-
           client: Supabase.instance.client,
 
           vaultService: VaultService(
-
             client: Supabase.instance.client,
 
             cryptoService: CryptoService(),
 
-            serverCryptoService:
-
-                ServerCryptoService(client: Supabase.instance.client),
+            serverCryptoService: ServerCryptoService(
+              client: Supabase.instance.client,
+            ),
 
             deviceSecretService: DeviceSecretService(),
-
           ),
 
           deviceSecretService: DeviceSecretService(),
-
         ),
 
         themeProvider: ctx.read<ThemeProvider>(),
-
       )..initialize(user, subscriptionStatus: subStatus),
 
-      child: _HomeView(
-
-        userId: user.id,
-
-      ),
-
+      child: _HomeView(userId: user.id),
     );
-
   }
-
 }
-
-
 
 class _GracePeriodCard extends StatefulWidget {
   const _GracePeriodCard({
@@ -182,19 +155,19 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
     final countdownText = remaining == Duration.zero
         ? 'Cleanup in progress\u2026'
         : days > 0
-            ? '${days}d ${hours}h remaining'
-            : hours > 0
-                ? '${hours}h ${minutes}m remaining'
-                : '${minutes}m remaining';
+        ? '${days}d ${hours}h remaining'
+        : hours > 0
+        ? '${hours}h ${minutes}m remaining'
+        : '${minutes}m remaining';
 
     // Progress: 0 = just executed, 1 = grace fully elapsed
     double progressValue = 1.0;
     if (widget.graceEndDate != null && widget.executedAt != null) {
-      final totalSec =
-          widget.graceEndDate!.difference(widget.executedAt!).inSeconds;
+      final totalSec = widget.graceEndDate!
+          .difference(widget.executedAt!)
+          .inSeconds;
       if (totalSec > 0) {
-        progressValue =
-            (1.0 - remaining.inSeconds / totalSec).clamp(0.0, 1.0);
+        progressValue = (1.0 - remaining.inSeconds / totalSec).clamp(0.0, 1.0);
       }
     }
 
@@ -204,10 +177,7 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              errorColor.withValues(alpha: 0.10),
-              Colors.transparent,
-            ],
+            colors: [errorColor.withValues(alpha: 0.10), Colors.transparent],
           ),
           borderRadius: BorderRadius.circular(22),
         ),
@@ -218,7 +188,10 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
             children: [
               // Status badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: errorColor.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(999),
@@ -227,7 +200,11 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.warning_amber_rounded, size: 14, color: errorColor),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 14,
+                      color: errorColor,
+                    ),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
@@ -270,9 +247,7 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
               // Explanation
               Text(
                 'Protocol executed on $executedLabel',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: onSurface,
-                ),
+                style: theme.textTheme.titleSmall?.copyWith(color: onSurface),
               ),
               const SizedBox(height: 8),
               Text(
@@ -292,8 +267,11 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
               // Blocked features notice
               Row(
                 children: [
-                  Icon(Icons.lock_outline, size: 16,
-                      color: onSurface.withValues(alpha: 0.30)),
+                  Icon(
+                    Icons.lock_outline,
+                    size: 16,
+                    color: onSurface.withValues(alpha: 0.30),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -316,89 +294,51 @@ class _GracePeriodCardState extends State<_GracePeriodCard> {
   }
 }
 
-
-
 class _HomeView extends StatefulWidget {
-
-  const _HomeView({
-
-    required this.userId,
-
-  });
-
-
+  const _HomeView({required this.userId});
 
   final String userId;
 
-
-
   @override
-
   State<_HomeView> createState() => _HomeViewState();
-
 }
 
-
-
 class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
-
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final ScrollController _scrollController = ScrollController();
 
   final DateFormat _dateFormat = DateFormat('MMM d, yyyy');
 
-
-
-
   @override
-
   void initState() {
-
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
-
   }
 
-
-
   @override
-
   void dispose() {
-
     WidgetsBinding.instance.removeObserver(this);
 
     _scrollController.dispose();
 
     super.dispose();
-
   }
 
-
-
   @override
-
   void didChangeAppLifecycleState(AppLifecycleState state) {
-
     if (state == AppLifecycleState.resumed) {
-
       // Delay so the lock screen appears first — prevents visible data refresh
       // behind the authentication gate.
       Future.delayed(const Duration(milliseconds: 800), () {
         if (mounted) context.read<HomeController>().autoCheckIn();
       });
-
     }
-
   }
 
-
-
   @override
-
   Widget build(BuildContext context) {
-
     final controller = context.watch<HomeController>();
 
     final revenueCat = context.watch<RevenueCatController>();
@@ -414,188 +354,189 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
     final isPro = revenueCat.isPro || isLifetime;
 
-
-
     return Scaffold(
-
       key: _scaffoldKey,
+      resizeToAvoidBottomInset: false,
 
-      drawer: AppDrawer(
-
-        userId: widget.userId,
-
-      ),
+      drawer: AppDrawer(userId: widget.userId),
 
       body: Stack(
-
         children: [
-
           const RepaintBoundary(child: AmbientBackground()),
 
           SafeArea(
-
             child: RefreshIndicator(
               displacement: 50,
               edgeOffset: 10,
               strokeWidth: 2,
               onRefresh: () async {
                 final hc = context.read<HomeController>();
-                await Future.wait([
-                  hc.autoCheckIn(),
-                  hc.refreshVaultStatus(),
-                ]);
+                await Future.wait([hc.autoCheckIn(), hc.refreshVaultStatus()]);
               },
               color: Theme.of(context).colorScheme.primary,
-              backgroundColor: context.watch<ThemeProvider>().themeData.cardGradientStart,
+              backgroundColor: context
+                  .watch<ThemeProvider>()
+                  .themeData
+                  .cardGradientStart,
               child: ListView(
+                controller: _scrollController,
 
-              controller: _scrollController,
-
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: ClampingScrollPhysics(),
-              ),
-
-              cacheExtent: 500,
-
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-
-              children: [
-
-                _HeaderRow(
-
-                  isPro: isPro,
-
-                  isLifetime: isLifetime,
-
-                  onMenu: () => _scaffoldKey.currentState?.openDrawer(),
-
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
                 ),
 
-                const SizedBox(height: 16),
+                cacheExtent: 500,
 
-                // Timer OR Grace period card (grace replaces timer)
-                if (isInGracePeriod)
-                  _GracePeriodCard(
-                    executedAt: controller.protocolExecutedAt,
-                    graceEndDate: controller.graceEndDate,
-                    graceExpired: controller.graceExpired,
-                    dateFormat: _dateFormat,
-                  )
-                else
-                  RepaintBoundary(child: _TimerCard(
-                    profile: profile,
-                    dateFormat: _dateFormat,
-                    isLoading: controller.isLoading,
-                    errorMessage: controller.errorMessage,
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+
+                children: [
+                  _HeaderRow(
                     isPro: isPro,
+
                     isLifetime: isLifetime,
-                    hasVaultEntries: controller.hasVaultEntries,
-                    onTimerChanged: (days) => controller.updateTimerDays(days),
-                  )),
 
-                const SizedBox(height: 24),
+                    onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                  ),
 
-                // Soul Fire — greyed out & non-interactive during grace
-                IgnorePointer(
-                  ignoring: isInGracePeriod,
-                  child: AnimatedOpacity(
-                    opacity: isInGracePeriod ? 0.28 : 1.0,
-                    duration: const Duration(milliseconds: 350),
-                    child: Column(
-                      children: [
-                        Center(
-                          child: RepaintBoundary(child: SoulFireButton(
-                            styleId: context.watch<ThemeProvider>().soulFireId,
-                            enabled: !isInGracePeriod && !controller.isLoading && profile != null,
-                            onConfirmed: () async {
-                              final success = await controller.manualCheckIn();
-                              if (!context.mounted) return;
-                              if (success) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Signal verified.')),
-                                );
-                              }
-                            },
-                          )),
-                        ),
-                        const SizedBox(height: 8),
-                        Center(
-                          child: Text(
-                            'Hold to verify your signal',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Colors.white60, letterSpacing: 1.1),
+                  const SizedBox(height: 16),
+
+                  // Timer OR Grace period card (grace replaces timer)
+                  if (isInGracePeriod)
+                    _GracePeriodCard(
+                      executedAt: controller.protocolExecutedAt,
+                      graceEndDate: controller.graceEndDate,
+                      graceExpired: controller.graceExpired,
+                      dateFormat: _dateFormat,
+                    )
+                  else
+                    RepaintBoundary(
+                      child: _TimerCard(
+                        profile: profile,
+                        dateFormat: _dateFormat,
+                        isLoading: controller.isLoading,
+                        errorMessage: controller.errorMessage,
+                        isPro: isPro,
+                        isLifetime: isLifetime,
+                        hasVaultEntries: controller.hasVaultEntries,
+                        onTimerChanged: (days) =>
+                            controller.updateTimerDays(days),
+                      ),
+                    ),
+
+                  const SizedBox(height: 24),
+
+                  // Soul Fire — greyed out & non-interactive during grace
+                  IgnorePointer(
+                    ignoring: isInGracePeriod,
+                    child: AnimatedOpacity(
+                      opacity: isInGracePeriod ? 0.28 : 1.0,
+                      duration: const Duration(milliseconds: 350),
+                      child: Column(
+                        children: [
+                          Center(
+                            child: RepaintBoundary(
+                              child: TickerMode(
+                                enabled:
+                                    ModalRoute.of(context)?.isCurrent ?? true,
+                                child: SoulFireButton(
+                                  styleId: context
+                                      .watch<ThemeProvider>()
+                                      .soulFireId,
+                                  enabled:
+                                      !isInGracePeriod &&
+                                      !controller.isLoading &&
+                                      profile != null,
+                                  onConfirmed: () async {
+                                    final success = await controller
+                                        .manualCheckIn();
+                                    if (!context.mounted) return;
+                                    if (success) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Signal verified.'),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          Center(
+                            child: Text(
+                              'Hold to verify your signal',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Colors.white60,
+                                    letterSpacing: 1.1,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
 
-                const SizedBox(height: 28),
+                  const SizedBox(height: 28),
 
-                // Vault — View All always works, Add Entry disabled during grace
-                RepaintBoundary(child: _VaultSummaryCard(
-                  entryCount: controller.vaultEntryCount,
-                  isLoading: controller.isLoading,
-                  onViewAll: () {
-                    Navigator.push(
-                      context,
-                      PremiumPageRoute(page: MyVaultPage(
-                        userId: widget.userId,
-                        readOnly: isInGracePeriod,
-                      )),
-                    ).then((_) {
-                      if (context.mounted) {
-                        context.read<HomeController>().refreshVaultStatus();
-                      }
-                    });
-                  },
-                  onAdd: isInGracePeriod ? null : () async {
-                    final created = await openVaultEntryEditor(
-                      context,
-                      userId: widget.userId,
-                      isPro: isPro,
-                      isLifetime: isLifetime,
-                    );
-                    if (created && context.mounted) {
-                      context.read<HomeController>().refreshVaultStatus();
-                    }
-                  },
-                )),
-
-              ],
-
-            ),
+                  // Vault — View All always works, Add Entry disabled during grace
+                  RepaintBoundary(
+                    child: _VaultSummaryCard(
+                      entryCount: controller.vaultEntryCount,
+                      isLoading: controller.isLoading,
+                      onViewAll: () {
+                        Navigator.push(
+                          context,
+                          PremiumPageRoute(
+                            page: MyVaultPage(
+                              userId: widget.userId,
+                              readOnly: isInGracePeriod,
+                            ),
+                          ),
+                        ).then((_) {
+                          if (context.mounted) {
+                            context.read<HomeController>().refreshVaultStatus();
+                          }
+                        });
+                      },
+                      onAdd: isInGracePeriod
+                          ? null
+                          : () async {
+                              final created = await openVaultEntryEditor(
+                                context,
+                                userId: widget.userId,
+                                isPro: isPro,
+                                isLifetime: isLifetime,
+                              );
+                              if (created && context.mounted) {
+                                context
+                                    .read<HomeController>()
+                                    .refreshVaultStatus();
+                              }
+                            },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
-
   }
-
-
-
-
 }
 
-
-
 class _HeaderRow extends StatelessWidget {
-
   const _HeaderRow({
-
     required this.isPro,
 
     required this.isLifetime,
 
     required this.onMenu,
-
   });
-
-
 
   final bool isPro;
 
@@ -603,174 +544,115 @@ class _HeaderRow extends StatelessWidget {
 
   final VoidCallback onMenu;
 
-
-
   @override
-
   Widget build(BuildContext context) {
-
     return Row(
-
       crossAxisAlignment: CrossAxisAlignment.center,
 
       children: [
-
         Container(
-
           decoration: BoxDecoration(
-
-            color: context.read<ThemeProvider>().themeData.accentGlow.withValues(alpha: 0.06),
+            color: context
+                .read<ThemeProvider>()
+                .themeData
+                .accentGlow
+                .withValues(alpha: 0.06),
 
             borderRadius: BorderRadius.circular(14),
 
-            border: Border.all(color: context.read<ThemeProvider>().themeData.accentGlow.withValues(alpha: 0.15)),
-
+            border: Border.all(
+              color: context
+                  .read<ThemeProvider>()
+                  .themeData
+                  .accentGlow
+                  .withValues(alpha: 0.15),
+            ),
           ),
 
           child: IconButton(
-
             onPressed: onMenu,
 
             icon: const Icon(Icons.menu),
 
             tooltip: 'Menu',
-
           ),
-
         ),
 
         const SizedBox(width: 12),
 
         Flexible(
-
           child: Column(
-
             crossAxisAlignment: CrossAxisAlignment.start,
 
             children: [
-
               Text(
-
                 'Afterword',
 
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
 
-                      fontWeight: FontWeight.w600,
-
-                      letterSpacing: 1.3,
-
-                    ),
+                  letterSpacing: 1.3,
+                ),
 
                 overflow: TextOverflow.ellipsis,
-
               ),
 
               const SizedBox(height: 2),
 
               Text(
-
                 'Signal-secure vault',
 
-                style: Theme.of(context)
-
-                    .textTheme
-
-                    .bodySmall
-
-                    ?.copyWith(color: Colors.white60),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.white60),
 
                 overflow: TextOverflow.ellipsis,
-
               ),
-
             ],
-
           ),
-
         ),
 
         const SizedBox(width: 8),
 
         _PlanChip(isPro: isPro, isLifetime: isLifetime),
-
       ],
-
     );
-
   }
-
 }
 
-
-
 class _PlanChip extends StatelessWidget {
-
-  const _PlanChip({
-
-    required this.isPro,
-
-    required this.isLifetime,
-
-  });
-
-
+  const _PlanChip({required this.isPro, required this.isLifetime});
 
   final bool isPro;
 
   final bool isLifetime;
 
-
-
   @override
-
   Widget build(BuildContext context) {
-
     final label = isLifetime
-
         ? 'Lifetime'
-
         : isPro
-
-            ? 'Pro'
-
-            : 'Free';
+        ? 'Pro'
+        : 'Free';
 
     final icon = isLifetime
-
         ? Icons.workspace_premium
-
         : isPro
-
-            ? Icons.stars
-
-            : Icons.lock_outline;
+        ? Icons.stars
+        : Icons.lock_outline;
 
     final gradient = isLifetime
-
-        ? const LinearGradient(
-
-            colors: [Color(0xFF5BC0B4), Color(0xFF7ED9CE)],
-
-          )
-
+        ? const LinearGradient(colors: [Color(0xFF5BC0B4), Color(0xFF7ED9CE)])
         : isPro
-
-            ? const LinearGradient(
-
-                colors: [Color(0xFFFFB85C), Color(0xFFFFD18A)],
-
-              )
-
-            : null;
+        ? const LinearGradient(colors: [Color(0xFFFFB85C), Color(0xFFFFD18A)])
+        : null;
 
     final textColor = (isPro || isLifetime) ? const Color(0xFF1B1410) : null;
 
     return Container(
-
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
 
       decoration: BoxDecoration(
-
         color: gradient == null ? Colors.white10 : null,
 
         gradient: gradient,
@@ -778,57 +660,40 @@ class _PlanChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
 
         border: Border.all(
-
           color: gradient == null ? Colors.white24 : Colors.transparent,
-
         ),
-
       ),
 
       child: Row(
-
         mainAxisSize: MainAxisSize.min,
 
         children: [
+          Icon(
+            icon,
 
-          Icon(icon,
+            size: 14,
 
-              size: 14,
-
-              color: textColor ?? Theme.of(context).colorScheme.secondary),
+            color: textColor ?? Theme.of(context).colorScheme.secondary,
+          ),
 
           const SizedBox(width: 6),
 
           Text(
-
             label,
 
-            style: Theme.of(context)
-
-                .textTheme
-
-                .labelSmall
-
-                ?.copyWith(color: textColor ?? Colors.white70, letterSpacing: 0.8),
-
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: textColor ?? Colors.white70,
+              letterSpacing: 0.8,
+            ),
           ),
-
         ],
-
       ),
-
     );
-
   }
-
 }
 
-
-
 class _TimerCard extends StatefulWidget {
-
   const _TimerCard({
-
     required this.profile,
 
     required this.dateFormat,
@@ -844,10 +709,7 @@ class _TimerCard extends StatefulWidget {
     required this.hasVaultEntries,
 
     required this.onTimerChanged,
-
   });
-
-
 
   final Profile? profile;
 
@@ -865,21 +727,20 @@ class _TimerCard extends StatefulWidget {
 
   final ValueChanged<int> onTimerChanged;
 
-
-
   @override
-
   State<_TimerCard> createState() => _TimerCardState();
-
 }
 
 class _TimerCardState extends State<_TimerCard> {
-
   bool _showLongTimerWarning = false;
   Timer? _warningTimer;
 
   int get _minDays => widget.isPro || widget.isLifetime ? 7 : 30;
-  int get _maxDays => widget.isLifetime ? 3650 : widget.isPro ? 365 : 30;
+  int get _maxDays => widget.isLifetime
+      ? 3650
+      : widget.isPro
+      ? 365
+      : 30;
   bool get _canAdjust => widget.isPro || widget.isLifetime;
 
   @override
@@ -933,81 +794,50 @@ class _TimerCardState extends State<_TimerCard> {
   }
 
   @override
-
   Widget build(BuildContext context) {
-
     final resolvedProfile = widget.profile;
 
     if (resolvedProfile == null) {
-
       // Fixed-height skeleton prevents CLS (layout jump) when data loads
       return _SurfaceCard(
-
         child: ConstrainedBox(
-
           constraints: const BoxConstraints(minHeight: 160),
 
           child: Padding(
+            padding: const EdgeInsets.all(20),
 
-          padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
 
-          child: Column(
-
-            crossAxisAlignment: CrossAxisAlignment.start,
-
-            children: [
-
-              Text(
-
-                widget.isLoading
-
-                    ? 'Syncing your timer...'
-
-                    : widget.errorMessage != null
-
-                        ? 'Unable to sync timer'
-
-                        : 'Syncing your timer...',
-
-                style: Theme.of(context).textTheme.bodyMedium,
-
-              ),
-
-              const SizedBox(height: 8),
-
-              if (widget.errorMessage != null && !widget.isLoading)
-
+              children: [
                 Text(
+                  widget.isLoading
+                      ? 'Syncing your timer...'
+                      : widget.errorMessage != null
+                      ? 'Unable to sync timer'
+                      : 'Syncing your timer...',
 
-                  'Pull down to retry or restart the app.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
 
-                  style: Theme.of(context)
+                const SizedBox(height: 8),
 
-                      .textTheme
+                if (widget.errorMessage != null && !widget.isLoading)
+                  Text(
+                    'Pull down to retry or restart the app.',
 
-                      .bodySmall
-
-                      ?.copyWith(color: Colors.white54),
-
-                )
-
-              else
-
-                const LinearProgressIndicator(),
-
-            ],
-
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.white54),
+                  )
+                else
+                  const LinearProgressIndicator(),
+              ],
+            ),
           ),
-
         ),
-
-        ),
-
       );
-
     }
-
-
 
     final theme = Theme.of(context);
 
@@ -1022,100 +852,83 @@ class _TimerCardState extends State<_TimerCard> {
     final timerLabel = vaultEmpty
         ? '${resolvedProfile.timerDays} days'
         : remaining.isNegative
-            ? 'Expired'
-            : days > 0
-                ? '$days days'
-                : '${hours}h remaining';
+        ? 'Expired'
+        : days > 0
+        ? '$days days'
+        : '${hours}h remaining';
 
     final timerSub = vaultEmpty
         ? null
         : remaining.isNegative
-            ? 'Check in to reactivate'
-            : days > 0 && hours > 0
-                ? '+ ${hours}h'
-                : null;
+        ? 'Check in to reactivate'
+        : days > 0 && hours > 0
+        ? '+ ${hours}h'
+        : null;
 
     final statusMessage = vaultEmpty
         ? 'Standby'
         : resolvedProfile.status.toLowerCase() == 'active'
-            ? 'Protocol secure'
-            : 'Protocol executed';
+        ? 'Protocol secure'
+        : 'Protocol executed';
 
     final statusColor = vaultEmpty
         ? Colors.white38
         : resolvedProfile.status.toLowerCase() == 'active'
-            ? theme.colorScheme.secondary
-            : theme.colorScheme.error;
+        ? theme.colorScheme.secondary
+        : theme.colorScheme.error;
 
     final totalSeconds = resolvedProfile.timerDays * 24 * 60 * 60;
 
-    final remainingSeconds =
-
-        remaining.inSeconds.clamp(0, totalSeconds.toInt());
+    final remainingSeconds = remaining.inSeconds.clamp(0, totalSeconds.toInt());
 
     final progress = vaultEmpty
         ? 1.0
         : totalSeconds == 0
-
         ? 0.0
-
         : remainingSeconds / totalSeconds.toDouble();
 
     final currentDays = resolvedProfile.timerDays;
 
-
-
     return _SurfaceCard(
-
       child: Padding(
-
         padding: const EdgeInsets.all(20),
 
         child: Column(
-
           crossAxisAlignment: CrossAxisAlignment.start,
 
           children: [
-
             Row(
-
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
 
               children: [
-
                 Flexible(
                   child: Container(
-
-                    padding:
-
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
 
                     decoration: BoxDecoration(
-
                       color: statusColor.withValues(alpha: 0.18),
 
                       borderRadius: BorderRadius.circular(999),
 
-                      border: Border.all(color: statusColor.withValues(alpha: 0.4)),
-
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: 0.4),
+                      ),
                     ),
 
                     child: Text(
-
                       statusMessage.toUpperCase(),
 
                       style: theme.textTheme.labelSmall?.copyWith(
-
                         color: statusColor,
 
                         letterSpacing: 1.6,
-
                       ),
 
                       overflow: TextOverflow.ellipsis,
-
                     ),
-
                   ),
                 ),
 
@@ -1127,89 +940,71 @@ class _TimerCardState extends State<_TimerCard> {
                     color: Colors.white54,
                   ),
                 ),
-
               ],
-
             ),
 
             const SizedBox(height: 14),
 
             Row(
-
               crossAxisAlignment: CrossAxisAlignment.baseline,
 
               textBaseline: TextBaseline.alphabetic,
 
               children: [
-
                 Text(
-
                   timerLabel,
 
                   style: theme.textTheme.headlineMedium?.copyWith(
-
                     fontWeight: FontWeight.w700,
 
                     letterSpacing: -0.5,
-
                   ),
-
                 ),
 
                 if (timerSub != null) ...[
-
                   const SizedBox(width: 8),
 
                   Flexible(
                     child: Text(
                       timerSub,
-                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white54,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-
                 ],
-
               ],
-
             ),
 
             const SizedBox(height: 14),
 
             ClipRRect(
-
               borderRadius: BorderRadius.circular(999),
 
               child: LinearProgressIndicator(
-
                 value: progress.clamp(0, 1),
 
                 minHeight: 6,
 
                 backgroundColor: Colors.white.withValues(alpha: 0.06),
-
               ),
-
             ),
 
             const SizedBox(height: 12),
 
             Text(
-
               'Deadline: ${widget.dateFormat.format(resolvedProfile.deadline)}',
 
               style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60),
-
             ),
 
             const SizedBox(height: 4),
 
             Text(
-
               'Last check-in: ${widget.dateFormat.format(resolvedProfile.lastCheckIn.toLocal())}',
 
               style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54),
-
             ),
 
             // --- Timer settings section ---
@@ -1229,14 +1024,18 @@ class _TimerCardState extends State<_TimerCard> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline,
-                        size: 16, color: theme.colorScheme.secondary),
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: theme.colorScheme.secondary,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Vault is empty — timer has no effect until you add an entry.',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.secondary, fontSize: 11,
+                          color: theme.colorScheme.secondary,
+                          fontSize: 11,
                         ),
                       ),
                     ),
@@ -1286,15 +1085,19 @@ class _TimerCardState extends State<_TimerCard> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.warning_amber_rounded,
-                          size: 16, color: theme.colorScheme.error),
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 16,
+                        color: theme.colorScheme.error,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Time Capsule mode — beneficiaries won\'t receive '
                           'anything until the full duration passes.',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.error, fontSize: 11,
+                            color: theme.colorScheme.error,
+                            fontSize: 11,
                           ),
                         ),
                       ),
@@ -1305,32 +1108,30 @@ class _TimerCardState extends State<_TimerCard> {
             ] else ...[
               Row(
                 children: [
-                  const Icon(Icons.lock_outline, size: 14, color: Colors.white38),
+                  const Icon(
+                    Icons.lock_outline,
+                    size: 14,
+                    color: Colors.white38,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Fixed at 30 days · Upgrade to customize',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: Colors.white38, fontSize: 11),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ],
               ),
             ],
-
           ],
-
         ),
-
       ),
-
     );
-
   }
-
 }
-
-
 
 class _TimerPickerSheet extends StatefulWidget {
   const _TimerPickerSheet({
@@ -1357,9 +1158,10 @@ class _TimerPickerSheetState extends State<_TimerPickerSheet> {
   @override
   void initState() {
     super.initState();
-    _sliderValue = widget.currentDays
-        .toDouble()
-        .clamp(widget.minDays.toDouble(), widget.maxDays.toDouble());
+    _sliderValue = widget.currentDays.toDouble().clamp(
+      widget.minDays.toDouble(),
+      widget.maxDays.toDouble(),
+    );
   }
 
   int get _selectedDays => _sliderValue.round();
@@ -1383,170 +1185,171 @@ class _TimerPickerSheetState extends State<_TimerPickerSheet> {
     return SafeArea(
       top: false,
       child: Container(
-      decoration: BoxDecoration(
-        color: context.watch<ThemeProvider>().themeData.cardGradientStart,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Adjust Timer',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Set how long before protocol executes',
-            style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
-          ),
-          const SizedBox(height: 28),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Text(
-              _fmtDays(_selectedDays),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Text(
-                _fmtDays(widget.minDays),
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: Colors.white30, fontSize: 10),
-              ),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 4,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 8),
-                    overlayShape:
-                        const RoundSliderOverlayShape(overlayRadius: 18),
-                    activeTrackColor: theme.colorScheme.primary,
-                    inactiveTrackColor: Colors.white10,
-                    thumbColor: Colors.white,
-                    overlayColor:
-                        theme.colorScheme.primary.withValues(alpha: 0.12),
-                  ),
-                  child: Slider(
-                    min: widget.minDays.toDouble(),
-                    max: widget.maxDays.toDouble(),
-                    divisions: divisions,
-                    value: _sliderValue,
-                    onChanged: (v) => setState(() => _sliderValue = v),
-                  ),
+        decoration: BoxDecoration(
+          color: context.watch<ThemeProvider>().themeData.cardGradientStart,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              Text(
-                _fmtDays(widget.maxDays),
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: Colors.white30, fontSize: 10),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Adjust Timer',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
               ),
-            ],
-          ),
-          if (_selectedDays >= 365) ...[
-            const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Set how long before protocol executes',
+              style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
+            ),
+            const SizedBox(height: 28),
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
               decoration: BoxDecoration(
-                color: theme.colorScheme.error.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: theme.colorScheme.error.withValues(alpha: 0.25)),
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white10),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.warning_amber_rounded,
-                      size: 16, color: theme.colorScheme.error),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Beneficiaries won\'t receive anything until the '
-                      'full ${_fmtDays(_selectedDays)} duration passes.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
-                        fontSize: 11,
+              child: Text(
+                _fmtDays(_selectedDays),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Text(
+                  _fmtDays(widget.minDays),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white30,
+                    fontSize: 10,
+                  ),
+                ),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 4,
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 8,
+                      ),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 18,
+                      ),
+                      activeTrackColor: theme.colorScheme.primary,
+                      inactiveTrackColor: Colors.white10,
+                      thumbColor: Colors.white,
+                      overlayColor: theme.colorScheme.primary.withValues(
+                        alpha: 0.12,
                       ),
                     ),
+                    child: Slider(
+                      min: widget.minDays.toDouble(),
+                      max: widget.maxDays.toDouble(),
+                      divisions: divisions,
+                      value: _sliderValue,
+                      onChanged: (v) => setState(() => _sliderValue = v),
+                    ),
                   ),
-                ],
+                ),
+                Text(
+                  _fmtDays(widget.maxDays),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white30,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+            if (_selectedDays >= 365) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.error.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 16,
+                      color: theme.colorScheme.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Beneficiaries won\'t receive anything until the '
+                        'full ${_fmtDays(_selectedDays)} duration passes.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => widget.onConfirm(_selectedDays),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: Text('Set to ${_fmtDays(_selectedDays)}'),
               ),
             ),
           ],
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () => widget.onConfirm(_selectedDays),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-              child: Text('Set to ${_fmtDays(_selectedDays)}'),
-            ),
-          ),
-        ],
-      ),
+        ),
       ),
     );
   }
 }
 
 class _SurfaceCard extends StatelessWidget {
-
   const _SurfaceCard({required this.child});
-
-
 
   final Widget child;
 
-
-
   @override
-
   Widget build(BuildContext context) {
-
     final td = context.watch<ThemeProvider>().themeData;
 
     return Container(
-
       decoration: BoxDecoration(
-
         gradient: LinearGradient(
-
           begin: Alignment.topLeft,
 
           end: Alignment.bottomRight,
 
           colors: [td.cardGradientStart, td.cardGradientEnd],
-
         ),
 
         borderRadius: BorderRadius.circular(22),
@@ -1554,46 +1357,28 @@ class _SurfaceCard extends StatelessWidget {
         border: Border.all(color: td.dividerColor),
 
         boxShadow: [
-
           BoxShadow(
-
             color: td.accentGlow.withValues(alpha: 0.08),
 
             blurRadius: 24,
 
             spreadRadius: -4,
-
           ),
 
           BoxShadow(
-
             color: Colors.black.withValues(alpha: 0.35),
 
             blurRadius: 18,
 
             offset: const Offset(0, 12),
-
           ),
-
         ],
-
       ),
 
-      child: ClipRRect(
-
-        borderRadius: BorderRadius.circular(22),
-
-        child: child,
-
-      ),
-
+      child: ClipRRect(borderRadius: BorderRadius.circular(22), child: child),
     );
-
   }
-
 }
-
-
 
 class _VaultSummaryCard extends StatelessWidget {
   const _VaultSummaryCard({
@@ -1636,18 +1421,22 @@ class _VaultSummaryCard extends StatelessWidget {
                       color: theme.colorScheme.primary.withValues(alpha: 0.20),
                     ),
                   ),
-                  child: Icon(Icons.lock_outline, size: 18,
-                    color: theme.colorScheme.primary),
+                  child: Icon(
+                    Icons.lock_outline,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Text('Vault', style: theme.textTheme.titleMedium),
                 const SizedBox(width: 10),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary
-                        .withValues(alpha: 0.15),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -1672,8 +1461,7 @@ class _VaultSummaryCard extends StatelessWidget {
               entryCount == 0
                   ? 'Your vault is empty. Add a secure message.'
                   : '$entryCount encrypted ${entryCount == 1 ? 'entry' : 'entries'} stored.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: Colors.white60),
+              style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60),
             ),
             const SizedBox(height: 14),
             SizedBox(
