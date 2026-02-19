@@ -2,8 +2,12 @@ name: Afterword Heartbeat
 
 on:
   schedule:
-    - cron: "0 5 * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
+
+concurrency:
+  group: afterword-heartbeat
+  cancel-in-progress: false
 
 jobs:
   heartbeat:

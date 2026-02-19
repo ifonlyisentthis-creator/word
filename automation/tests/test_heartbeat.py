@@ -1,6 +1,7 @@
 import sys
 import types
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -132,6 +133,173 @@ class _MinimalClient:
 
 
 class HeartbeatTests(unittest.TestCase):
+    def test_build_timer_state_uses_utc_deadline_and_stage_triggers(self):
+        last_check_in = datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 2, 5, 2, 0, tzinfo=timezone.utc)
+
+        state = heartbeat.build_timer_state(last_check_in, 7, now)
+
+        self.assertEqual(
+            state.deadline,
+            datetime(2026, 2, 8, 0, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            state.push_66_at,
+            datetime(2026, 2, 3, 9, 7, 12, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            state.push_33_at,
+            datetime(2026, 2, 5, 16, 33, 36, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            state.email_24h_at,
+            datetime(2026, 2, 7, 0, 0, tzinfo=timezone.utc),
+        )
+
+    def test_should_send_push_33_when_due_and_unmarked(self):
+        last_check_in = datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 2, 6, 2, 0, tzinfo=timezone.utc)
+        state = heartbeat.build_timer_state(last_check_in, 7, now)
+
+        profile = {
+            "subscription_status": "premium",
+            "push_33_sent_at": None,
+        }
+
+        self.assertTrue(heartbeat.should_send_push_33(profile, state, now))
+
+    def test_should_not_send_push_33_before_trigger_time(self):
+        last_check_in = datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 2, 5, 10, 0, tzinfo=timezone.utc)
+        state = heartbeat.build_timer_state(last_check_in, 7, now)
+
+        profile = {
+            "subscription_status": "premium",
+            "push_33_sent_at": None,
+        }
+
+        self.assertFalse(heartbeat.should_send_push_33(profile, state, now))
+
+    def test_should_send_24h_warning_email_only_for_paid_and_once_per_cycle(self):
+        last_check_in = datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 2, 7, 1, 0, tzinfo=timezone.utc)
+        state = heartbeat.build_timer_state(last_check_in, 7, now)
+
+        paid_profile = {
+            "subscription_status": "pro",
+            "warning_sent_at": None,
+        }
+        free_profile = {
+            "subscription_status": "free",
+            "warning_sent_at": None,
+        }
+        already_sent_profile = {
+            "subscription_status": "pro",
+            "warning_sent_at": (last_check_in + timedelta(days=2)).isoformat(),
+        }
+
+        self.assertTrue(heartbeat.should_send_24h_warning_email(paid_profile, state, now))
+        self.assertFalse(heartbeat.should_send_24h_warning_email(free_profile, state, now))
+        self.assertFalse(
+            heartbeat.should_send_24h_warning_email(already_sent_profile, state, now)
+        )
+
+    def test_short_timer_clamps_24h_email_trigger_to_last_check_in(self):
+        last_check_in = datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc)
+
+        state = heartbeat.build_timer_state(last_check_in, 0, now)
+
+        self.assertEqual(state.email_24h_at, last_check_in)
+
+    def test_process_expired_entries_sends_to_beneficiary_and_marks_sent(self):
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        client = object()
+        profile = {
+            "id": "user-1",
+            "sender_name": "Alice",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+        entries = [
+            {
+                "id": "entry-1",
+                "action_type": "send",
+                "title": "Vault Letter",
+                "payload_encrypted": "payload",
+                "recipient_email_encrypted": "enc-recipient",
+                "data_key_encrypted": "enc-data-key",
+                "hmac_signature": "sig-1",
+            }
+        ]
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "extract_server_ciphertext", side_effect=lambda value: value),
+            patch.object(
+                heartbeat,
+                "decrypt_with_server_secret",
+                side_effect=[
+                    b"h" * 32,
+                    b"beneficiary@example.com",
+                    b"k" * 32,
+                ],
+            ),
+            patch.object(heartbeat, "compute_hmac_signature", return_value="sig-1"),
+            patch.object(heartbeat, "send_unlock_email") as mock_send_unlock_email,
+            patch.object(heartbeat, "mark_entry_sent", return_value=True) as mock_mark_sent,
+            patch.object(heartbeat, "send_executed_push", return_value=True),
+        ):
+            had_send = heartbeat.process_expired_entries(
+                client=client,
+                profile=profile,
+                entries=entries,
+                server_secret="server-secret",
+                resend_key="rk_test",
+                from_email="from@example.com",
+                viewer_base_url="https://viewer.afterword.app",
+                fcm_ctx=None,
+                now=now,
+            )
+
+        self.assertTrue(had_send)
+        mock_send_unlock_email.assert_called_once()
+        mock_mark_sent.assert_called_once_with(client, "entry-1", now)
+
+    def test_process_expired_entries_destroy_path_deletes_without_grace_flag(self):
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        profile = {
+            "id": "user-2",
+            "sender_name": "Alice",
+            "hmac_key_encrypted": None,
+        }
+        entries = [
+            {
+                "id": "entry-destroy",
+                "action_type": "destroy",
+                "title": "Temporary Note",
+            }
+        ]
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "delete_entry") as mock_delete_entry,
+            patch.object(heartbeat, "send_executed_push", return_value=True),
+        ):
+            had_send = heartbeat.process_expired_entries(
+                client=object(),
+                profile=profile,
+                entries=entries,
+                server_secret="server-secret",
+                resend_key="rk_test",
+                from_email="from@example.com",
+                viewer_base_url="https://viewer.afterword.app",
+                fcm_ctx=None,
+                now=now,
+            )
+
+        self.assertFalse(had_send)
+        mock_delete_entry.assert_called_once()
+
     def test_send_email_passes_idempotency_key(self):
         with patch.object(
             heartbeat,

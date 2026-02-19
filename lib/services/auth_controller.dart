@@ -116,7 +116,11 @@ class AuthController extends ChangeNotifier {
   Future<void> signOut() async {
     _setLoading(true);
     try {
-      await _pushService.onSignOut();
+      try {
+        await _pushService.onSignOut();
+      } catch (_) {
+        // Push cleanup is best-effort — must not block sign-out.
+      }
 
       await _ensureGoogleInit();
       final gsi = GoogleSignIn.instance;

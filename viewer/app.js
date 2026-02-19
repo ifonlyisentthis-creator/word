@@ -237,13 +237,9 @@ async function unlock() {
       throw new Error("invalid_key_format");
     }
 
-    const { data: entry, error } = await client
-      .from("vault_entries")
-      .select(
-        "id,title,data_type,payload_encrypted,audio_file_path,audio_duration_seconds,status"
-      )
-      .eq("id", entryId)
-      .maybeSingle();
+    const { data: entry, error } = await client.rpc("viewer_get_entry", {
+      entry_id: entryId,
+    });
 
     if (error || !entry) {
       throw new Error("not_found");

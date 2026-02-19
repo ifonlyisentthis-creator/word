@@ -20,6 +20,7 @@
 
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS selected_theme text;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS selected_soul_fire text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS key_backup_encrypted text;
 
 -- Server-managed lifecycle columns used by heartbeat + grace-period flow
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protocol_executed_at timestamptz;
@@ -372,6 +373,45 @@ REVOKE ALL ON FUNCTION public.viewer_entry_status(uuid) FROM public;
 GRANT EXECUTE ON FUNCTION public.viewer_entry_status(uuid) TO anon;
 GRANT EXECUTE ON FUNCTION public.viewer_entry_status(uuid) TO authenticated;
 
+-- 5d2. viewer_get_entry (anonymous access to one specific sent entry)
+DROP FUNCTION IF EXISTS public.viewer_get_entry(uuid);
+CREATE OR REPLACE FUNCTION public.viewer_get_entry(entry_id uuid)
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE rec record;
+BEGIN
+  SELECT
+    ve.id,
+    ve.title,
+    ve.data_type,
+    ve.payload_encrypted,
+    ve.audio_file_path,
+    ve.audio_duration_seconds,
+    ve.status
+  INTO rec
+  FROM vault_entries ve
+  WHERE ve.id = entry_id
+    AND ve.status = 'sent';
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN json_build_object(
+    'id', rec.id,
+    'title', rec.title,
+    'data_type', rec.data_type,
+    'payload_encrypted', rec.payload_encrypted,
+    'audio_file_path', rec.audio_file_path,
+    'audio_duration_seconds', rec.audio_duration_seconds,
+    'status', rec.status
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.viewer_get_entry(uuid) FROM public;
+GRANT EXECUTE ON FUNCTION public.viewer_get_entry(uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.viewer_get_entry(uuid) TO authenticated;
+
 -- 5e. handle_new_user (auto-create profile on signup)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -646,10 +686,6 @@ FOR DELETE USING (auth.uid() = id);
 CREATE POLICY entries_select_own ON vault_entries
 FOR SELECT USING (auth.uid() = user_id);
 
--- Anonymous (web viewer) can read entries that have been sent
-CREATE POLICY entries_select_sent_anon ON vault_entries
-FOR SELECT TO anon USING (status = 'sent');
-
 -- Insert: enforces free tier limit (3 text), subscription gates (destroy=pro, audio=lifetime)
 CREATE POLICY entries_insert_own ON vault_entries
 FOR INSERT WITH CHECK (
@@ -743,16 +779,30 @@ CREATE POLICY vault_audio_read_owner ON storage.objects
 FOR SELECT TO authenticated
 USING (bucket_id = 'vault-audio' AND (storage.foldername(name))[1] = auth.uid()::text);
 
+-- Helper: SECURITY DEFINER so the storage policy can check vault_entries
+-- even after we revoke direct anon SELECT on the table.
+DROP FUNCTION IF EXISTS public.is_sent_audio_path(text);
+CREATE OR REPLACE FUNCTION public.is_sent_audio_path(file_path text)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM vault_entries ve
+    WHERE ve.audio_file_path = file_path
+      AND ve.status = 'sent'
+  );
+$$;
+REVOKE ALL ON FUNCTION public.is_sent_audio_path(text) FROM public;
+GRANT EXECUTE ON FUNCTION public.is_sent_audio_path(text) TO anon;
+
 -- Anonymous (web viewer) can read audio for sent entries
 CREATE POLICY vault_audio_read_sent_anon ON storage.objects
 FOR SELECT TO anon
 USING (
   bucket_id = 'vault-audio'
-  AND EXISTS (
-    SELECT 1 FROM vault_entries ve
-    WHERE ve.audio_file_path = storage.objects.name
-      AND ve.status = 'sent'
-  )
+  AND public.is_sent_audio_path(name)
 );
 
 -- Only Lifetime users can upload audio (folder must match their user_id)
@@ -799,9 +849,9 @@ USING (
 -- Revoke broad UPDATE from client roles
 REVOKE UPDATE ON profiles FROM authenticated, anon;
 
--- Authenticated users can only directly UPDATE hmac_key_encrypted
+-- Authenticated users can only directly UPDATE client-managed encrypted key fields
 -- (all other profile mutations go through SECURITY DEFINER RPCs)
-GRANT UPDATE (hmac_key_encrypted) ON profiles TO authenticated;
+GRANT UPDATE (hmac_key_encrypted, key_backup_encrypted) ON profiles TO authenticated;
 
 -- Service role can update server-managed columns (heartbeat + subscription sync)
 GRANT UPDATE (
@@ -822,7 +872,6 @@ GRANT UPDATE (
 -- Table-level grants
 GRANT SELECT, INSERT, DELETE ON TABLE profiles TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE vault_entries TO authenticated;
-GRANT SELECT ON TABLE vault_entries TO anon;
 GRANT SELECT ON TABLE vault_entry_tombstones TO authenticated;
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗

@@ -18,6 +18,8 @@ import time
 
 from datetime import datetime, timedelta, timezone
 
+from dataclasses import dataclass
+
 
 
 import requests
@@ -37,6 +39,10 @@ AUDIO_BUCKET = "vault-audio"
 PAID_STATUSES = {"pro", "lifetime", "premium"}
 
 WARNING_WINDOW = timedelta(days=1)
+
+PUSH_66_REMAINING_FRACTION = 0.66
+
+PUSH_33_REMAINING_FRACTION = 0.33
 
 FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 
@@ -157,6 +163,159 @@ def parse_iso(value: str | None) -> datetime | None:
         return parsed.replace(tzinfo=timezone.utc)
 
     return parsed.astimezone(timezone.utc)
+
+
+@dataclass(frozen=True)
+class TimerState:
+
+    last_check_in: datetime
+
+    deadline: datetime
+
+    total_seconds: int
+
+    remaining_seconds: int
+
+    remaining_fraction: float
+
+    push_66_at: datetime
+
+    push_33_at: datetime
+
+    email_24h_at: datetime
+
+
+def _normalize_timer_days(timer_days: int | str | None) -> int:
+
+    try:
+
+        parsed = int(timer_days or 0)
+
+    except Exception:  # noqa: BLE001
+
+        parsed = 0
+
+    return max(1, parsed)
+
+
+def _compute_trigger_from_remaining(
+
+    *,
+
+    last_check_in: datetime,
+
+    total_seconds: int,
+
+    remaining_fraction: float,
+
+) -> datetime:
+
+    elapsed_fraction = 1.0 - remaining_fraction
+
+    elapsed_seconds = max(0.0, min(1.0, elapsed_fraction)) * total_seconds
+
+    return last_check_in + timedelta(seconds=elapsed_seconds)
+
+
+def build_timer_state(last_check_in: datetime, timer_days: int | str | None, now: datetime) -> TimerState:
+
+    normalized_days = _normalize_timer_days(timer_days)
+
+    total_seconds = normalized_days * 86400
+
+    deadline = last_check_in + timedelta(seconds=total_seconds)
+
+    remaining_seconds = max(int((deadline - now).total_seconds()), 0)
+
+    remaining_fraction = remaining_seconds / total_seconds if total_seconds > 0 else 0.0
+
+    push_66_at = _compute_trigger_from_remaining(
+
+        last_check_in=last_check_in,
+
+        total_seconds=total_seconds,
+
+        remaining_fraction=PUSH_66_REMAINING_FRACTION,
+
+    )
+
+    push_33_at = _compute_trigger_from_remaining(
+
+        last_check_in=last_check_in,
+
+        total_seconds=total_seconds,
+
+        remaining_fraction=PUSH_33_REMAINING_FRACTION,
+
+    )
+
+    email_24h_at = deadline - WARNING_WINDOW
+
+    if email_24h_at < last_check_in:
+
+        email_24h_at = last_check_in
+
+    return TimerState(
+
+        last_check_in=last_check_in,
+
+        deadline=deadline,
+
+        total_seconds=total_seconds,
+
+        remaining_seconds=remaining_seconds,
+
+        remaining_fraction=remaining_fraction,
+
+        push_66_at=push_66_at,
+
+        push_33_at=push_33_at,
+
+        email_24h_at=email_24h_at,
+
+    )
+
+
+def _already_marked_in_cycle(sent_at: datetime | None, last_check_in: datetime) -> bool:
+
+    return bool(sent_at and sent_at >= last_check_in)
+
+
+def should_send_push_66(profile: dict, timer_state: TimerState, now: datetime) -> bool:
+
+    if now < timer_state.push_66_at:
+
+        return False
+
+    push_66_sent = parse_iso(profile.get("push_66_sent_at"))
+
+    return not _already_marked_in_cycle(push_66_sent, timer_state.last_check_in)
+
+
+def should_send_push_33(profile: dict, timer_state: TimerState, now: datetime) -> bool:
+
+    if now < timer_state.push_33_at:
+
+        return False
+
+    push_33_sent = parse_iso(profile.get("push_33_sent_at"))
+
+    return not _already_marked_in_cycle(push_33_sent, timer_state.last_check_in)
+
+
+def should_send_24h_warning_email(profile: dict, timer_state: TimerState, now: datetime) -> bool:
+
+    if now < timer_state.email_24h_at:
+
+        return False
+
+    if not is_paid(profile.get("subscription_status")):
+
+        return False
+
+    warning_sent_at = parse_iso(profile.get("warning_sent_at"))
+
+    return not _already_marked_in_cycle(warning_sent_at, timer_state.last_check_in)
 
 
 
@@ -679,13 +838,14 @@ def send_warning_push(
     deadline: datetime,
     fcm_ctx: dict | None,
     *,
+    now_utc: datetime | None = None,
     remaining_fraction: float = 1.0,
 ) -> bool:
     """Returns True if push was actually delivered to at least one device."""
     if fcm_ctx is None:
         return False
     # Compute human-friendly remaining time (timezone-safe because it's relative)
-    now = datetime.now(timezone.utc)
+    now = now_utc or datetime.now(timezone.utc)
     remaining = deadline - now
     total_hours = max(0, remaining.total_seconds() / 3600)
     total_days = remaining.days
@@ -1287,51 +1447,51 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
     )
 
     for profile in candidates:
-      try:
-        uid = profile["id"]
-        created_at = parse_iso(profile.get("created_at"))
-        last_check_in = parse_iso(profile.get("last_check_in"))
-
-        if created_at is None or last_check_in is None:
-            continue
-
-        # If user ever checked in after account creation, they're real
-        # Allow 60 second tolerance for the initial check-in set at creation
-        if abs((last_check_in - created_at).total_seconds()) > 60:
-            continue
-
-        # If user ever had vault entries processed (destroy or send), they're real
-        if profile.get("had_vault_activity"):
-            continue
-
-        # Check if they ever had any vault entries
-        vault_count = (
-            client.table("vault_entries")
-            .select("id", count="exact")
-            .eq("user_id", uid)
-            .execute()
-        )
-        if (vault_count.count or 0) > 0:
-            continue
-
-        # Check if they have tombstones (had entries that were executed + purged)
-        tombstone_count = (
-            client.table("vault_entry_tombstones")
-            .select("vault_entry_id", count="exact")
-            .eq("user_id", uid)
-            .execute()
-        )
-        if (tombstone_count.count or 0) > 0:
-            continue
-
-        # No activity at all — delete the auth user (cascades to profile + push_devices)
         try:
-            client.auth.admin.delete_user(uid)
-            print(f"Deleted inactive bot account: {uid}")
+            uid = profile["id"]
+            created_at = parse_iso(profile.get("created_at"))
+            last_check_in = parse_iso(profile.get("last_check_in"))
+
+            if created_at is None or last_check_in is None:
+                continue
+
+            # If user ever checked in after account creation, they're real
+            # Allow 60 second tolerance for the initial check-in set at creation
+            if abs((last_check_in - created_at).total_seconds()) > 60:
+                continue
+
+            # If user ever had vault entries processed (destroy or send), they're real
+            if profile.get("had_vault_activity"):
+                continue
+
+            # Check if they ever had any vault entries
+            vault_count = (
+                client.table("vault_entries")
+                .select("id", count="exact")
+                .eq("user_id", uid)
+                .execute()
+            )
+            if (vault_count.count or 0) > 0:
+                continue
+
+            # Check if they have tombstones (had entries that were executed + purged)
+            tombstone_count = (
+                client.table("vault_entry_tombstones")
+                .select("vault_entry_id", count="exact")
+                .eq("user_id", uid)
+                .execute()
+            )
+            if (tombstone_count.count or 0) > 0:
+                continue
+
+            # No activity at all — delete the auth user (cascades to profile + push_devices)
+            try:
+                client.auth.admin.delete_user(uid)
+                print(f"Deleted inactive bot account: {uid}")
+            except Exception as exc:  # noqa: BLE001
+                print(f"Failed to delete bot account {uid}: {exc}")
         except Exception as exc:  # noqa: BLE001
-            print(f"Failed to delete bot account {uid}: {exc}")
-      except Exception as exc:  # noqa: BLE001
-          print(f"Bot cleanup failed for {profile.get('id', '?')}: {exc}")
+            print(f"Bot cleanup failed for {profile.get('id', '?')}: {exc}")
 
 
 def handle_subscription_downgrade(
@@ -1516,6 +1676,7 @@ def main() -> int:
     now = datetime.now(timezone.utc)
 
     fcm_ctx = build_fcm_context(firebase_sa_json)
+    fcm_token_minted_at = now  # track when FCM token was last refreshed
 
     requeue_stale_sending_entries(client, now)
 
@@ -1526,6 +1687,14 @@ def main() -> int:
     processed_entries = 0
 
     for profile_batch in iter_active_profiles(client):
+
+      # Proactively refresh FCM token every 45 min to avoid expiry during long runs
+      if fcm_ctx is not None:
+          elapsed = (datetime.now(timezone.utc) - fcm_token_minted_at).total_seconds()
+          if elapsed > 2700:  # 45 minutes
+              if refresh_fcm_access_token(fcm_ctx):
+                  fcm_token_minted_at = datetime.now(timezone.utc)
+                  print("Proactively refreshed FCM access token")
 
       batch_user_ids = [str(p["id"]) for p in profile_batch if p.get("id")]
 
@@ -1567,23 +1736,15 @@ def main() -> int:
 
           last_check_in = parse_iso(profile.get("last_check_in"))
 
-          timer_days = int(profile.get("timer_days") or 30)
-
           if last_check_in is None:
 
               continue
 
 
 
-          deadline = last_check_in + timedelta(days=timer_days)
+          timer_state = build_timer_state(last_check_in, profile.get("timer_days"), now)
 
-          remaining = deadline - now
-
-          total_seconds = timer_days * 86400
-
-          remaining_seconds = max(remaining.total_seconds(), 0)
-
-          remaining_fraction = remaining_seconds / total_seconds if total_seconds > 0 else 0
+          deadline = timer_state.deadline
 
           active_entries = batch_entries_by_user.get(user_id, [])
 
@@ -1608,7 +1769,7 @@ def main() -> int:
 
           # ── PASS 1: Timer expired → execute protocol ──
 
-          if remaining.total_seconds() <= 0:
+          if timer_state.remaining_seconds <= 0:
 
               if not has_entries:
                   # Empty vault = timer has no effect. Do NOT mark inactive.
@@ -1697,108 +1858,103 @@ def main() -> int:
 
           # ── PASS 2: Push #1 at 66% remaining (ALL users) ──
 
-          if remaining_fraction <= 0.66:
+          if should_send_push_66(profile, timer_state, now):
 
-              push_66_sent = parse_iso(profile.get("push_66_sent_at"))
+              push_sent = False
 
-              already_sent_66 = bool(
+              try:
 
-                  push_66_sent and last_check_in and push_66_sent >= last_check_in
+                  push_sent = send_warning_push(
 
-              )
+                      client,
 
-              if not already_sent_66:
+                      user_id,
 
-                  push_sent = False
+                      sender_name,
 
-                  try:
+                      deadline,
 
-                      push_sent = send_warning_push(
+                      fcm_ctx,
 
-                          client, user_id, sender_name, deadline, fcm_ctx,
-                          remaining_fraction=remaining_fraction,
+                      now_utc=now,
 
-                      )
+                      remaining_fraction=timer_state.remaining_fraction,
 
-                  except Exception as exc:  # noqa: BLE001
+                  )
 
-                      print(f"Push 66% warning failed for user {user_id}: {exc}")
+              except Exception as exc:  # noqa: BLE001
 
-                  if push_sent:
+                  print(f"Push 66% warning failed for user {user_id}: {exc}")
 
-                      client.table("profiles").update(
+              if push_sent:
 
-                          {"push_66_sent_at": now.isoformat()}
+                  client.table("profiles").update(
 
-                      ).eq("id", user_id).execute()
+                      {"push_66_sent_at": now.isoformat()}
+
+                  ).eq("id", user_id).execute()
 
 
 
           # ── PASS 3: Push #2 at 33% remaining (ALL users) ──
 
-          if remaining_fraction <= 0.33:
+          if should_send_push_33(profile, timer_state, now):
 
-              push_33_sent = parse_iso(profile.get("push_33_sent_at"))
+              push_sent = False
 
-              already_sent_33 = bool(
+              try:
 
-                  push_33_sent and last_check_in and push_33_sent >= last_check_in
+                  push_sent = send_warning_push(
 
-              )
+                      client,
 
-              if not already_sent_33:
+                      user_id,
 
-                  push_sent = False
+                      sender_name,
 
-                  try:
+                      deadline,
 
-                      push_sent = send_warning_push(
+                      fcm_ctx,
 
-                          client, user_id, sender_name, deadline, fcm_ctx,
-                          remaining_fraction=remaining_fraction,
+                      now_utc=now,
 
-                      )
+                      remaining_fraction=timer_state.remaining_fraction,
 
-                  except Exception as exc:  # noqa: BLE001
+                  )
 
-                      print(f"Push 33% warning failed for user {user_id}: {exc}")
+              except Exception as exc:  # noqa: BLE001
 
-                  if push_sent:
+                  print(f"Push 33% warning failed for user {user_id}: {exc}")
 
-                      client.table("profiles").update(
+              if push_sent:
 
-                          {"push_33_sent_at": now.isoformat()}
+                  client.table("profiles").update(
 
-                      ).eq("id", user_id).execute()
+                      {"push_33_sent_at": now.isoformat()}
+
+                  ).eq("id", user_id).execute()
 
 
 
           # ── PASS 4: Email at 24h before expiry (PAID users only) ──
 
-          if remaining <= WARNING_WINDOW and is_paid(profile.get("subscription_status")):
+          if should_send_24h_warning_email(profile, timer_state, now):
 
-              warning_sent_at = parse_iso(profile.get("warning_sent_at"))
+              try:
 
-              already_warned = bool(
+                  send_warning_email(
+                      profile,
+                      deadline,
+                      resend_key,
+                      from_email,
+                      remaining_fraction=timer_state.remaining_fraction,
+                  )
 
-                  warning_sent_at and last_check_in and warning_sent_at >= last_check_in
+                  mark_warning_sent(client, user_id, now)
 
-              )
+              except Exception as exc:  # noqa: BLE001
 
-              if not already_warned:
-
-                  try:
-
-                      send_warning_email(
-                          profile, deadline, resend_key, from_email,
-                          remaining_fraction=remaining_fraction,
-                      )
-
-                      mark_warning_sent(client, user_id, now)
-
-                  except Exception as exc:  # noqa: BLE001
-
-                      print(f"Warning email failed for user {user_id}: {exc}")
+                  print(f"Warning email failed for user {user_id}: {exc}")
 
 
 

@@ -6,7 +6,7 @@ A secure, time-locked digital vault. Create encrypted messages and audio recordi
 
 - **Flutter** (Android-first) mobile client
 - **Supabase** — database, auth, storage, Edge Functions
-- **Heartbeat script** (`automation/heartbeat.py`) — daily cron for timer expiry, notifications, subscription enforcement, bot cleanup
+- **Heartbeat script** (`automation/heartbeat.py`) — UTC scheduler (every 15 minutes) for timer expiry, notifications, subscription enforcement, bot cleanup
 - **Viewer** (`viewer/`) — static web page for recipients to decrypt messages client-side
 
 ## Timer Tiers

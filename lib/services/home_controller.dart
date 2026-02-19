@@ -55,9 +55,6 @@ class HomeController extends ChangeNotifier {
 
   DateTime? _graceEndDate;
 
-  bool _notificationsReady = false;
-  String? _lastReminderFingerprint;
-
   bool _hasVaultEntries = false;
   int _vaultEntryCount = 0;
 
@@ -115,10 +112,6 @@ class HomeController extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      await _ensureNotifications();
-
-      if (_isDisposed) return;
-
       var ensured = await _profileService.ensureProfile(user);
 
       if (_isDisposed) return;
@@ -190,8 +183,6 @@ class HomeController extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      await _ensureNotifications();
-
       await _accountService.deleteAccount(_user!.id);
 
       await _notificationService.cancelAll();
@@ -347,35 +338,13 @@ class HomeController extends ChangeNotifier {
     }
   }
 
-  Future<void> _ensureNotifications() async {
-    if (_notificationsReady) return;
-
-    try {
-      await _notificationService.initialize();
-
-      _notificationsReady = true;
-    } catch (_) {
-      _notificationsReady = false;
-    }
-  }
-
   Future<void> _scheduleReminders() async {
     final profile = _profile;
 
     if (profile == null || profile.status.toLowerCase() != 'active') {
-      if (kDebugMode) debugPrint('[NOTIF] Skipped: profile null or not active');
-      _lastReminderFingerprint = null;
-      return;
-    }
-
-    final fingerprint =
-        '${profile.lastCheckIn.toUtc().toIso8601String()}|'
-        '${profile.timerDays}|'
-        '${profile.push66SentAt?.toUtc().toIso8601String() ?? ''}|'
-        '${profile.push33SentAt?.toUtc().toIso8601String() ?? ''}|'
-        '${_hasVaultEntries ? 1 : 0}';
-    if (_lastReminderFingerprint == fingerprint) {
-      if (kDebugMode) debugPrint('[NOTIF] Skipped: schedule unchanged');
+      if (kDebugMode) {
+        debugPrint('[NOTIF] Skipped: profile null or not active');
+      }
       return;
     }
 
@@ -384,29 +353,21 @@ class HomeController extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint('[NOTIF] Vault empty, cancelling notifications');
       }
-      if (_notificationsReady) {
-        try {
-          await _notificationService.cancelAll();
-        } catch (_) {}
-      }
-      _lastReminderFingerprint = fingerprint;
+      try {
+        await _notificationService.cancelAll();
+      } catch (_) {}
       return;
     }
-
-    if (!_notificationsReady) {
-      await _ensureNotifications();
-    }
-
-    if (!_notificationsReady) return;
 
     try {
       if (kDebugMode) {
         debugPrint(
-          '[NOTIF] Scheduling: lastCheckIn=${profile.lastCheckIn}, '
-          'timerDays=${profile.timerDays}, '
-          'push66=${profile.push66SentAt}, push33=${profile.push33SentAt}',
+          '[NOTIF] Server-authoritative reminder flow active. '
+          'Clearing any legacy local reminder notifications.',
         );
       }
+
+      await _notificationService.initialize();
 
       await _notificationService.scheduleCheckInReminders(
         profile.lastCheckIn,
@@ -418,13 +379,9 @@ class HomeController extends ChangeNotifier {
         push33SentAt: profile.push33SentAt,
       );
 
-      _lastReminderFingerprint = fingerprint;
-
       if (kDebugMode) debugPrint('[NOTIF] Reminders scheduled successfully');
     } catch (e) {
       if (kDebugMode) debugPrint('[NOTIF] Schedule failed: $e');
-
-      _notificationsReady = false;
     }
   }
 

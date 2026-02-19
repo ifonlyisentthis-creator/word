@@ -1,9 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-import 'package:timezone/timezone.dart' as tz;
-
-import 'package:timezone/data/latest_all.dart' as tz;
-
 
 
 class NotificationService {
@@ -25,9 +21,6 @@ class NotificationService {
 
 
   Future<void> initialize() async {
-
-    tz.initializeTimeZones();
-
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
 
     const settings = InitializationSettings(android: androidSettings);
@@ -60,79 +53,15 @@ class NotificationService {
 
   }) async {
 
+    // Reminder timing is server-authoritative (UTC) via automation/heartbeat.py.
+
+    // Keep this method as a cleanup shim so legacy scheduled local reminders are
+
+    // removed after app updates.
+
     await _plugin.cancel(id: _reminderId);
 
     await _plugin.cancel(id: _urgentId);
-
-
-
-    final base = lastCheckIn.toLocal();
-
-    final expiry = base.add(Duration(days: timerDays));
-
-
-
-    // Yellow warning at 66% remaining (34% elapsed)
-
-    final yellowDay = (timerDays * 0.34).round().clamp(1, timerDays - 1);
-
-    // Red warning at 33% remaining (67% elapsed)
-
-    final redDay = (timerDays * 0.67).round().clamp(yellowDay + 1, timerDays - 1);
-
-
-
-    // Hybrid: only schedule local if server push was NOT already sent
-
-    // for this check-in cycle (push timestamp must be after lastCheckIn)
-
-    final push66AlreadySent = push66SentAt != null &&
-
-        !push66SentAt.isBefore(lastCheckIn);
-
-    final push33AlreadySent = push33SentAt != null &&
-
-        !push33SentAt.isBefore(lastCheckIn);
-
-
-
-    if (!push66AlreadySent) {
-
-      await _scheduleIfBeforeExpiry(
-
-        id: _reminderId,
-
-        title: 'Reminder',
-
-        body: 'Open Afterword to refresh your check-in timer.',
-
-        scheduledFor: base.add(Duration(days: yellowDay)),
-
-        expiry: expiry,
-
-      );
-
-    }
-
-
-
-    if (!push33AlreadySent) {
-
-      await _scheduleIfBeforeExpiry(
-
-        id: _urgentId,
-
-        title: 'URGENT',
-
-        body: 'Your timer is almost up. Check in now.',
-
-        scheduledFor: base.add(Duration(days: redDay)),
-
-        expiry: expiry,
-
-      );
-
-    }
 
   }
 
@@ -141,64 +70,6 @@ class NotificationService {
   Future<void> cancelAll() async {
 
     await _plugin.cancelAll();
-
-  }
-
-
-
-  Future<void> _scheduleIfBeforeExpiry({
-
-    required int id,
-
-    required String title,
-
-    required String body,
-
-    required DateTime scheduledFor,
-
-    required DateTime expiry,
-
-  }) async {
-
-    if (!scheduledFor.isBefore(expiry)) return;
-
-
-
-    const details = NotificationDetails(
-
-      android: AndroidNotificationDetails(
-
-        'afterword_checkin',
-
-        'Check-in reminders',
-
-        channelDescription: 'Reminders to check in before your timer expires.',
-
-        importance: Importance.high,
-
-        priority: Priority.high,
-
-      ),
-
-    );
-
-
-
-    await _plugin.zonedSchedule(
-
-      id: id,
-
-      title: title,
-
-      body: body,
-
-      scheduledDate: tz.TZDateTime.from(scheduledFor, tz.local),
-
-      notificationDetails: details,
-
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-
-    );
 
   }
 

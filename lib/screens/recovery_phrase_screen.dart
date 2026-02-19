@@ -230,92 +230,100 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          24, 20, 24,
-          MediaQuery.of(context).viewInsets.bottom + 32,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
+      builder: (context) {
+        final mq = MediaQuery.of(context);
+        final bottomPadding =
+            mq.viewInsets.bottom + mq.viewPadding.bottom + 24;
+
+        return SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(24, 20, 24, bottomPadding),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Icon(Icons.key, size: 32, color: Colors.amberAccent),
+                const SizedBox(height: 12),
+                Text('Your Recovery Phrase', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Text(
+                  'Write these words down in order and store them safely. '
+                  'This is the only way to access your vault on a new device.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: Colors.white60, height: 1.5),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List.generate(words.length, (i) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${i + 1}. ${words[i]}',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'monospace',
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: normalizedMnemonic));
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Recovery phrase copied to clipboard'),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Copy to Clipboard'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            const Icon(Icons.key, size: 32, color: Colors.amberAccent),
-            const SizedBox(height: 12),
-            Text('Your Recovery Phrase',
-                style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text(
-              'Write these words down in order and store them safely. '
-              'This is the only way to access your vault on a new device.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: Colors.white60, height: 1.5),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: List.generate(words.length, (i) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${i + 1}. ${words[i]}',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontFamily: 'monospace',
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  );
-                }),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: normalizedMnemonic));
-                  messenger.showSnackBar(
-                    const SnackBar(
-                        content:
-                            Text('Recovery phrase copied to clipboard')),
-                  );
-                },
-                icon: const Icon(Icons.copy),
-                label: const Text('Copy to Clipboard'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Done'),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -325,125 +333,131 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
     final userId = _controller.profile?.id;
     if (userId == null) return;
 
-    final tc = TextEditingController();
+    final normalizedPhrase = await showDialog<String>(
+      context: context,
+      builder: (_) => const _RestorePhraseDialog(),
+    );
+    if (normalizedPhrase == null) return;
+
+    setState(() {
+      _busy = true;
+      _localError = null;
+    });
     try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            final wordCount = tc.text
-                .trim()
-                .split(RegExp(r'\s+'))
-                .where((w) => w.isNotEmpty)
-                .length;
-            final isValid = wordCount == 12;
-            return AlertDialog(
-              title: const Text('Restore Recovery Phrase'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .error
-                            .withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .error
-                              .withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.warning_amber_rounded,
-                              size: 18,
-                              color: Theme.of(context).colorScheme.error),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'This will replace the encryption keys on this device. '
-                              'Only use this to recover YOUR OWN keys from another device. '
-                              'Do not restore a different account\'s phrase.',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color:
-                                        Theme.of(context).colorScheme.error,
-                                    height: 1.4,
-                                  ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Enter your 12-word recovery phrase:'),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: tc,
-                      maxLines: 3,
-                      onChanged: (_) => setDialogState(() {}),
-                      decoration: InputDecoration(
-                        hintText: 'word1 word2 word3 ...',
-                        filled: true,
-                        helperText: '$wordCount / 12 words',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed:
-                      isValid ? () => Navigator.pop(context, true) : null,
-                  child: const Text('Restore'),
-                ),
-              ],
-            );
-          },
-        ),
+      await _keyBackupService.restoreBackup(userId, normalizedPhrase);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keys restored successfully.')),
       );
-
-      if (confirmed != true) return;
-
-      final phrase = tc.text.trim().toLowerCase();
-      setState(() {
-        _busy = true;
-        _localError = null;
-      });
-      try {
-        await _keyBackupService.restoreBackup(userId, phrase);
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Keys restored successfully.')),
-        );
-      } on KeyBackupFailure catch (e) {
-        if (!context.mounted) return;
-        setState(() => _localError = e.message);
-      } catch (e) {
-        if (!context.mounted) return;
-        setState(() => _localError = 'Restore failed: $e');
-      } finally {
-        if (mounted) setState(() => _busy = false);
-      }
+    } on KeyBackupFailure catch (e) {
+      if (!context.mounted) return;
+      setState(() => _localError = e.message);
+    } catch (e) {
+      if (!context.mounted) return;
+      setState(() => _localError = 'Restore failed: $e');
     } finally {
-      tc.dispose();
+      if (mounted) setState(() => _busy = false);
     }
   }
 }
 
 enum _BackupAction { restore, createNew }
+
+class _RestorePhraseDialog extends StatefulWidget {
+  const _RestorePhraseDialog();
+
+  @override
+  State<_RestorePhraseDialog> createState() => _RestorePhraseDialogState();
+}
+
+class _RestorePhraseDialogState extends State<_RestorePhraseDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  int get _wordCount {
+    final normalized = normalizeRecoveryPhrase(_controller.text);
+    if (normalized.isEmpty) return 0;
+    return normalized.split(' ').length;
+  }
+
+  bool get _isValid => _wordCount == 12;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final errorColor = theme.colorScheme.error;
+
+    return AlertDialog(
+      title: const Text('Restore Recovery Phrase'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: errorColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: errorColor.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 18, color: errorColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This will replace the encryption keys on this device. '
+                      'Only use this to recover YOUR OWN keys from another device. '
+                      'Do not restore a different account\'s phrase.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: errorColor,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Enter your 12-word recovery phrase:'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              maxLines: 3,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'word1 word2 word3 ...',
+                filled: true,
+                helperText: '$_wordCount / 12 words',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _isValid
+              ? () => Navigator.of(context).pop(
+                    normalizeRecoveryPhrase(_controller.text),
+                  )
+              : null,
+          child: const Text('Restore'),
+        ),
+      ],
+    );
+  }
+}
 
 class _Card extends StatelessWidget {
   const _Card({required this.child});
