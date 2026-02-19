@@ -1636,18 +1636,6 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                     label: Text(_isSaving ? 'Saving...' : 'Save Entry'),
                   ),
                 ),
-
-                TextButton.icon(
-                  onPressed: _isSaving
-                      ? null
-                      : () {
-                          Navigator.pop(context);
-                        },
-
-                  icon: const Icon(Icons.close),
-
-                  label: const Text('Cancel'),
-                ),
               ],
             ),
           ),
