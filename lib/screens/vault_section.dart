@@ -2156,6 +2156,10 @@ class _SheetContainer extends StatefulWidget {
 }
 
 class _SheetContainerState extends State<_SheetContainer> {
+  // Cache the heavy sheet subtree once so route rebuilds (IME/transition)
+  // do not force rebuilding the entire form on every frame.
+  late final Widget _stableChild;
+
   // Defer building the heavy child until the next frame so the sheet
   // entrance animation isn't competing with first-time widget tree
   // creation + shader compilation. This eliminates the "heavy first
@@ -2165,6 +2169,7 @@ class _SheetContainerState extends State<_SheetContainer> {
   @override
   void initState() {
     super.initState();
+    _stableChild = widget.child;
     // Slight delay so the modal entrance animation can finish before the
     // heavy form subtree mounts. Reduces first-open jank on slower devices.
     Future<void>.delayed(const Duration(milliseconds: 120), () {
@@ -2200,6 +2205,7 @@ class _SheetContainerState extends State<_SheetContainer> {
 
         child: ClipRRect(
           borderRadius: BorderRadius.circular(28),
+          clipBehavior: Clip.hardEdge,
 
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2220,7 +2226,7 @@ class _SheetContainerState extends State<_SheetContainer> {
               Flexible(
                 child: RepaintBoundary(
                   child: _childReady
-                      ? widget.child
+                      ? _stableChild
                       : const Center(
                           child: SizedBox(
                             width: 22,

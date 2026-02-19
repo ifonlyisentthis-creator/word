@@ -95,7 +95,9 @@ class RevenueCatController extends ChangeNotifier {
       final result = await Purchases.logIn(userId);
       _customerInfo = result.customerInfo;
       _lastFailure = null;
-      await _syncSubscriptionStatus(force: true);
+      // Let debounce prevent duplicate sync when configure()->refresh()
+      // already verified moments earlier during startup.
+      await _syncSubscriptionStatus();
     } on PlatformException catch (exception) {
       _lastFailure = _mapFailure(exception);
     } finally {
@@ -213,8 +215,10 @@ class RevenueCatController extends ChangeNotifier {
     // Debounce: skip if already syncing or if last attempt was < 30s ago.
     // force=true bypasses debounce (used after purchase/restore/logIn).
     if (_isSyncing) return;
+
+    final now = DateTime.now();
+
     if (!force) {
-      final now = DateTime.now();
       if (_lastSyncAttempt != null &&
           now.difference(_lastSyncAttempt!).inSeconds < 30) {
         if (kDebugMode) {
@@ -223,8 +227,9 @@ class RevenueCatController extends ChangeNotifier {
         return;
       }
     }
+
     _isSyncing = true;
-    _lastSyncAttempt = DateTime.now();
+
     try {
       final client = Supabase.instance.client;
       final user = client.auth.currentUser;
@@ -232,16 +237,25 @@ class RevenueCatController extends ChangeNotifier {
         if (kDebugMode) debugPrint('[RC-SYNC] No Supabase user, skipping sync');
         return;
       }
+
+      _lastSyncAttempt = now;
+
       if (kDebugMode) {
         debugPrint(
           '[RC-SYNC] Verifying subscription server-side for ${user.id}',
         );
       }
 
-      // Ensure the JWT is fresh before calling the Edge Function.
-      try {
-        await client.auth.refreshSession();
-      } catch (_) {}
+      // Refresh JWT only when close to expiry to avoid unnecessary network work.
+      final expiresAt = client.auth.currentSession?.expiresAt;
+      final nowEpochSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final shouldRefreshJwt =
+          expiresAt == null || (expiresAt - nowEpochSeconds) < 60;
+      if (shouldRefreshJwt) {
+        try {
+          await client.auth.refreshSession();
+        } catch (_) {}
+      }
 
       final res = await client.functions.invoke('verify-subscription');
       if (kDebugMode) debugPrint('[RC-SYNC] Server verified: ${res.data}');
