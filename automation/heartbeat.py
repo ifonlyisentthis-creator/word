@@ -236,7 +236,14 @@ def send_email(api_key: str, from_email: str, to_email: str, subject: str, text:
 
 
 
-def send_warning_email(profile: dict, deadline: datetime, resend_key: str, from_email: str) -> None:
+def send_warning_email(
+    profile: dict,
+    deadline: datetime,
+    resend_key: str,
+    from_email: str,
+    *,
+    remaining_fraction: float = 0.0,
+) -> None:
 
     email = profile.get("email")
 
@@ -246,34 +253,40 @@ def send_warning_email(profile: dict, deadline: datetime, resend_key: str, from_
 
     sender_name = profile.get("sender_name") or "Afterword"
 
-    deadline_text = deadline.strftime("%b %d, %Y")
+    deadline_text = deadline.strftime("%b %d, %Y at %I:%M %p UTC")
 
-    subject = "Afterword warning: check in now"
+    # Contextual urgency based on remaining fraction
+    if remaining_fraction <= 0.10:
+        urgency_line = "Your vault is about to execute."
+        subject = f"URGENT: Afterword timer expires {deadline.strftime('%b %d')}"
+    elif remaining_fraction <= 0.33:
+        urgency_line = "Your timer is running critically low."
+        subject = f"Afterword warning: timer expires {deadline.strftime('%b %d')}"
+    elif remaining_fraction <= 0.66:
+        urgency_line = "Your timer is past the halfway mark."
+        subject = f"Afterword reminder: check in before {deadline.strftime('%b %d')}"
+    else:
+        urgency_line = "This is an automated check-in reminder."
+        subject = "Afterword reminder: check in now"
 
     text = (
-
         f"Hi {sender_name},\n\n"
-
-        f"Your Afterword timer expires on {deadline_text}. Open the app to check in "
-
-        "and keep your vault secure.\n\n"
-
-        "If you are safe, open Afterword today to reset your timer."
-
+        f"{urgency_line}\n\n"
+        f"Your Afterword timer expires on {deadline_text}.\n"
+        "Open the app to check in and keep your vault secure.\n\n"
+        "If you are safe, open Afterword today to reset your timer.\n\n"
+        "— The Afterword Team"
     )
 
     safe_name = html_mod.escape(sender_name)
 
     html = (
-
         f"<p>Hi {safe_name},</p>"
-
+        f"<p>{urgency_line}</p>"
         f"<p>Your Afterword timer expires on <strong>{deadline_text}</strong>. "
-
         "Open the app to check in and keep your vault secure.</p>"
-
         "<p>If you are safe, open Afterword today to reset your timer.</p>"
-
+        "<p style='color:#888;font-size:12px'>— The Afterword Team</p>"
     )
 
     send_email(resend_key, from_email, email, subject, text, html)
@@ -461,16 +474,19 @@ def send_warning_push(
     else:
         time_left = f"~{total_days} days"
 
+    # Format deadline in a human-friendly way
+    deadline_str = deadline.strftime("%b %d, %Y at %I:%M %p UTC")
+
     if remaining_fraction <= 0.10:
-        urgency = f"Only {time_left} left — your vault is about to execute."
+        urgency = f"Only {time_left} left — your vault executes {deadline_str}."
     elif remaining_fraction <= 0.33:
-        urgency = f"{time_left} remaining. Your timer is running low."
+        urgency = f"{time_left} remaining. Timer expires {deadline_str}."
     else:
-        urgency = f"{time_left} remaining on your timer."
+        urgency = f"{time_left} remaining. Deadline: {deadline_str}."
 
     return _send_push_to_user(
         client, user_id, fcm_ctx,
-        title="Afterword reminder",
+        title="Afterword — check in now",
         body=f"Hi {sender_name}, {urgency} Open the app to check in.",
         data={"type": "warning"},
     )
@@ -1455,7 +1471,10 @@ def main() -> int:
 
                 try:
 
-                    send_warning_email(profile, deadline, resend_key, from_email)
+                    send_warning_email(
+                        profile, deadline, resend_key, from_email,
+                        remaining_fraction=remaining_fraction,
+                    )
 
                     mark_warning_sent(client, user_id, now)
 

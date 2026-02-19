@@ -61,13 +61,15 @@ class AppDrawer extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                         colors: [
-                          theme.colorScheme.primary.withValues(alpha: 0.3),
-                          theme.colorScheme.secondary.withValues(alpha: 0.15),
+                          td.accentGlow.withValues(alpha: 0.25),
+                          theme.colorScheme.primary.withValues(alpha: 0.10),
                         ],
                       ),
                       border: Border.all(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                        color: td.accentGlow.withValues(alpha: 0.35),
                         width: 1.5,
                       ),
                     ),
@@ -133,7 +135,7 @@ class AppDrawer extends StatelessWidget {
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: isPro ? theme.colorScheme.primary : Colors.white54,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
+                    letterSpacing: 1.8,
                   ),
                 ),
               ),
@@ -311,17 +313,21 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = context.read<ThemeProvider>().themeData.accentGlow;
     return ListTile(
-      leading: Icon(icon, size: 22, color: Colors.white70),
+      leading: Icon(icon, size: 20, color: accent.withValues(alpha: 0.7)),
       title: Text(
         label,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.white70,
+              letterSpacing: 0.2,
             ),
       ),
       dense: true,
       visualDensity: VisualDensity.compact,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      hoverColor: accent.withValues(alpha: 0.06),
+      splashColor: accent.withValues(alpha: 0.08),
       onTap: onTap,
     );
   }

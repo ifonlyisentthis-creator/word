@@ -130,14 +130,25 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                             Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.all(8),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Colors.white10,
-                                    borderRadius: BorderRadius.circular(12),
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        theme.colorScheme.primary.withValues(alpha: 0.15),
+                                        theme.colorScheme.primary.withValues(alpha: 0.05),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: theme.colorScheme.primary.withValues(alpha: 0.20),
+                                    ),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                       Icons.mark_email_read_outlined,
-                                      size: 18),
+                                      size: 18,
+                                      color: theme.colorScheme.primary),
                                 ),
                                 const SizedBox(width: 12),
                                 Text('Sender Name',

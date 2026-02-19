@@ -193,6 +193,13 @@ class _HistoryGroupCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: td.dividerColor),
+        boxShadow: [
+          BoxShadow(
+            color: td.accentGlow.withValues(alpha: 0.06),
+            blurRadius: 18,
+            spreadRadius: -2,
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
