@@ -372,5 +372,181 @@ class HeartbeatTests(unittest.TestCase):
         self.assertIsNone(client.profiles.updated_payload["selected_soul_fire"])
 
 
+    # ── Security-specific tests ──
+
+    def test_hmac_signature_matches_for_correct_payload(self):
+        key_bytes = b"\x01" * 32
+        payload_enc = "encrypted_payload_data"
+        recipient_enc = "encrypted_recipient"
+        message = f"{payload_enc}|{recipient_enc}"
+
+        sig1 = heartbeat.compute_hmac_signature(message, key_bytes)
+        sig2 = heartbeat.compute_hmac_signature(message, key_bytes)
+
+        self.assertEqual(sig1, sig2, "HMAC must be deterministic")
+
+    def test_hmac_signature_changes_on_tampered_payload(self):
+        key_bytes = b"\x01" * 32
+        original_msg = "encrypted_payload|encrypted_recipient"
+        tampered_msg = "encrypted_payload|TAMPERED_recipient"
+
+        sig_original = heartbeat.compute_hmac_signature(original_msg, key_bytes)
+        sig_tampered = heartbeat.compute_hmac_signature(tampered_msg, key_bytes)
+
+        self.assertNotEqual(sig_original, sig_tampered,
+                            "Tampered payload must produce different HMAC")
+
+    def test_hmac_signature_changes_with_different_key(self):
+        key1 = b"\x01" * 32
+        key2 = b"\x02" * 32
+        message = "payload|recipient"
+
+        sig1 = heartbeat.compute_hmac_signature(message, key1)
+        sig2 = heartbeat.compute_hmac_signature(message, key2)
+
+        self.assertNotEqual(sig1, sig2,
+                            "Different HMAC keys must produce different signatures")
+
+    def test_process_expired_entries_rejects_tampered_hmac(self):
+        """Entry with wrong HMAC signature is deleted, not sent."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {
+                "id": "entry-tampered",
+                "action_type": "send",
+                "title": "Tampered",
+                "payload_encrypted": "payload",
+                "recipient_email_encrypted": "recipient",
+                "data_key_encrypted": "datakey",
+                "hmac_signature": "WRONG_SIGNATURE",
+            }
+        ]
+        profile = {
+            "id": "user-x",
+            "sender_name": "Alice",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "decrypt_with_server_secret", return_value=b"h" * 32),
+            patch.object(heartbeat, "compute_hmac_signature", return_value="CORRECT_SIGNATURE"),
+            patch.object(heartbeat, "delete_entry") as mock_delete,
+            patch.object(heartbeat, "send_unlock_email") as mock_send,
+        ):
+            had_send = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertFalse(had_send, "Tampered entry must not trigger grace period")
+        mock_delete.assert_called_once()
+        mock_send.assert_not_called()
+
+    def test_process_expired_entries_rejects_empty_recipient(self):
+        """Entry with no recipient is deleted, not sent."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {
+                "id": "entry-no-recip",
+                "action_type": "send",
+                "title": "No Recipient",
+                "payload_encrypted": "payload",
+                "recipient_email_encrypted": "",
+                "data_key_encrypted": "dk",
+                "hmac_signature": "sig",
+            }
+        ]
+        profile = {
+            "id": "user-y",
+            "sender_name": "Bob",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "decrypt_with_server_secret", return_value=b"h" * 32),
+            patch.object(heartbeat, "compute_hmac_signature", return_value="sig"),
+            patch.object(heartbeat, "delete_entry") as mock_delete,
+            patch.object(heartbeat, "send_unlock_email") as mock_send,
+        ):
+            had_send = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertFalse(had_send)
+        mock_delete.assert_called_once()
+        mock_send.assert_not_called()
+
+    def test_extract_server_ciphertext_from_envelope(self):
+        envelope = '{"v":1,"server":"server_ct","device":"device_ct"}'
+        result = heartbeat.extract_server_ciphertext(envelope)
+        self.assertEqual(result, "server_ct")
+
+    def test_extract_server_ciphertext_legacy_raw(self):
+        raw = "raw_ciphertext_no_json"
+        result = heartbeat.extract_server_ciphertext(raw)
+        self.assertEqual(result, raw)
+
+    def test_viewer_link_format(self):
+        link = heartbeat.build_viewer_link("https://view.afterword-app.com", "entry-abc")
+        self.assertEqual(link, "https://view.afterword-app.com/?entry=entry-abc")
+
+    def test_viewer_link_strips_trailing_slash(self):
+        link = heartbeat.build_viewer_link("https://view.afterword-app.com/", "e-1")
+        self.assertEqual(link, "https://view.afterword-app.com/?entry=e-1")
+
+    def test_is_paid_recognizes_all_tiers(self):
+        self.assertTrue(heartbeat.is_paid("pro"))
+        self.assertTrue(heartbeat.is_paid("lifetime"))
+        self.assertTrue(heartbeat.is_paid("premium"))
+        self.assertTrue(heartbeat.is_paid("Pro"))
+        self.assertTrue(heartbeat.is_paid("LIFETIME"))
+        self.assertFalse(heartbeat.is_paid("free"))
+        self.assertFalse(heartbeat.is_paid(None))
+        self.assertFalse(heartbeat.is_paid(""))
+
+    def test_normalize_timer_days_edge_cases(self):
+        self.assertEqual(heartbeat._normalize_timer_days(0), 1)
+        self.assertEqual(heartbeat._normalize_timer_days(-5), 1)
+        self.assertEqual(heartbeat._normalize_timer_days(None), 1)
+        self.assertEqual(heartbeat._normalize_timer_days("30"), 30)
+        self.assertEqual(heartbeat._normalize_timer_days(365), 365)
+
+    def test_already_marked_in_cycle(self):
+        lci = datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc)
+        before = datetime(2026, 1, 31, 23, 0, tzinfo=timezone.utc)
+        after = datetime(2026, 2, 2, 0, 0, tzinfo=timezone.utc)
+
+        self.assertFalse(heartbeat._already_marked_in_cycle(None, lci))
+        self.assertFalse(heartbeat._already_marked_in_cycle(before, lci))
+        self.assertTrue(heartbeat._already_marked_in_cycle(after, lci))
+        self.assertTrue(heartbeat._already_marked_in_cycle(lci, lci))
+
+    def test_claim_entry_skipped_means_no_processing(self):
+        """If claim_entry_for_sending returns False, entry is skipped entirely."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [{"id": "e-race", "action_type": "send", "title": "Race"}]
+        profile = {"id": "u", "sender_name": "X", "hmac_key_encrypted": "hk"}
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=False),
+            patch.object(heartbeat, "delete_entry") as mock_del,
+            patch.object(heartbeat, "send_unlock_email") as mock_send,
+        ):
+            had_send = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertFalse(had_send)
+        mock_del.assert_not_called()
+        mock_send.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

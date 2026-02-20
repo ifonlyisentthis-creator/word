@@ -447,17 +447,24 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                                       !controller.isLoading &&
                                       profile != null,
                                   onConfirmed: () async {
-                                    final success = await controller
+                                    final result = await controller
                                         .manualCheckIn();
                                     if (!context.mounted) return;
-                                    if (success) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Signal verified.'),
-                                        ),
-                                      );
+                                    switch (result) {
+                                      case CheckInResult.success:
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(const SnackBar(
+                                          content: Text('Signal Verified.'),
+                                        ));
+                                        break;
+                                      case CheckInResult.cooldown:
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(const SnackBar(
+                                          content: Text('Vault Secure.'),
+                                        ));
+                                        break;
+                                      case CheckInResult.error:
+                                        break;
                                     }
                                   },
                                 ),

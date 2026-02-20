@@ -14,6 +14,18 @@ import 'profile_service.dart';
 
 import 'theme_provider.dart';
 
+/// Result of a manual Soul Fire check-in attempt.
+enum CheckInResult {
+  /// Real Supabase write occurred — timer fully reset.
+  success,
+
+  /// 12-hour cooldown active — DB write suppressed, timer unchanged.
+  cooldown,
+
+  /// Error (network, auth, etc.) — check-in failed.
+  error,
+}
+
 class HomeController extends ChangeNotifier {
   HomeController({
     required ProfileService profileService,
@@ -304,33 +316,42 @@ class HomeController extends ChangeNotifier {
   }
 
   // ── 12-hour write cooldown ──
-  // The Soul Fire animation always plays instantly and "Signal verified" always
-  // shows. The actual Supabase UPDATE is silently skipped when less than
-  // _checkInCooldown has elapsed since the last server-confirmed check-in.
-  // This protects against thousands of unnecessary DB writes from users
-  // spamming the orb for the visual effects.
+  // The Soul Fire animation always plays. The actual Supabase UPDATE is
+  // silently skipped when less than _checkInCooldown has elapsed since the
+  // last server-confirmed check-in. This prevents thousands of unnecessary
+  // DB writes from users spamming the orb.
+  //
+  // UI contract:
+  //   CheckInResult.success  → "Signal Verified" snackbar, timer UI resets
+  //   CheckInResult.cooldown → "Vault Secure"   snackbar, timer UI unchanged
+  //   CheckInResult.error    → error snackbar
+  //
+  // Timer progress bar and text are driven by _profile.lastCheckIn. Since we
+  // do NOT update _profile on cooldown, the timer UI stays truthful.
   //
   // The cooldown source of truth is _profile.lastCheckIn (loaded from the
   // server on login and refreshed after every successful write). An in-memory
   // _lastWriteAt acts as a second layer so even stale profile data can't
   // cause duplicate writes within a single session.
   //
-  // Safety valve: if the timer is expired AND the vault has entries, the write
-  // is always allowed regardless of cooldown to prevent permanent lockout.
+  // The 12-hour restriction applies ONLY to Soul Fire manual presses.
+  // Timer adjustments (updateTimerDays), subscription snapping, and account
+  // deletion all bypass this cooldown entirely.
   static const _checkInCooldown = Duration(hours: 12);
   DateTime? _lastWriteAt;
 
-  Future<bool> manualCheckIn() async {
-    if (_user == null || _isInGracePeriod) return false;
+  Future<CheckInResult> manualCheckIn() async {
+    if (_user == null || _isInGracePeriod) return CheckInResult.error;
 
     final currentUser = Supabase.instance.client.auth.currentUser;
 
-    if (currentUser == null || currentUser.id != _user!.id) return false;
+    if (currentUser == null || currentUser.id != _user!.id) {
+      return CheckInResult.error;
+    }
 
     // ── Cooldown gate ──
     final now = DateTime.now();
     final serverLastCheckIn = _profile?.lastCheckIn;
-    final timerExpired = _profile != null && _profile!.isExpired && _hasVaultEntries;
 
     // Layer 1: server-sourced timestamp
     final serverCooldownOk = serverLastCheckIn == null ||
@@ -340,12 +361,13 @@ class HomeController extends ChangeNotifier {
     final sessionCooldownOk = _lastWriteAt == null ||
         now.difference(_lastWriteAt!) >= _checkInCooldown;
 
-    final needsWrite = timerExpired || (serverCooldownOk && sessionCooldownOk);
+    final needsWrite = serverCooldownOk && sessionCooldownOk;
 
     if (!needsWrite) {
-      // Cooldown active — skip DB write but return true so animation + snackbar
-      // fire normally. The user sees no difference.
-      return true;
+      // Cooldown active — skip DB write. Timer UI stays as-is because
+      // _profile is not touched. Return cooldown so caller can show
+      // "Vault Secure" instead of "Signal Verified".
+      return CheckInResult.cooldown;
     }
 
     _setLoading(true);
@@ -367,13 +389,13 @@ class HomeController extends ChangeNotifier {
 
       await _scheduleReminders();
 
-      return true;
+      return CheckInResult.success;
     } catch (e) {
       debugPrint('manualCheckIn error: $e');
 
       _errorMessage = 'Unable to check in. Please try again.';
 
-      return false;
+      return CheckInResult.error;
     } finally {
       _setLoading(false);
     }
