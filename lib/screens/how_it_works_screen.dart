@@ -83,6 +83,16 @@ class HowItWorksScreen extends StatelessWidget {
                             'Delivered items auto-purge after 30 days.',
                         icon: Icons.send_outlined,
                       ),
+                      _TipCard(
+                        title: 'Check Your Inbox',
+                        body:
+                            'Afterword emails (timer warnings and vault deliveries) '
+                            'may land in your Spam or Promotions folder the first time. '
+                            'If this happens, open the email and tap "Not Spam" or move '
+                            'it to your Inbox. This teaches your email provider that '
+                            'Afterword messages are safe, so future emails arrive normally.',
+                        icon: Icons.mark_email_read_outlined,
+                      ),
                       _StepCard(
                         number: '6',
                         title: 'Protocol Zero',
@@ -168,6 +178,77 @@ class _StepCard extends StatelessWidget {
                     '$number. $title',
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    body,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.white70,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TipCard extends StatelessWidget {
+  const _TipCard({
+    required this.title,
+    required this.body,
+    required this.icon,
+  });
+
+  final String title;
+  final String body;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.amber.withValues(alpha: 0.08),
+              Colors.transparent,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.amber.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Icon(icon, size: 18, color: Colors.amber),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.amber,
                     ),
                   ),
                   const SizedBox(height: 6),
