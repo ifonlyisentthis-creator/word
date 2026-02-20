@@ -502,6 +502,62 @@ def _post_json_with_retries(
 
 
 
+def _format_from_address(from_email: str) -> str:
+    """Ensure from address has a display name for deliverability."""
+    if "<" in from_email:
+        return from_email  # Already formatted as 'Name <email>'
+    return f"Afterword <{from_email}>"
+
+
+def wrap_email_html(body_html: str) -> str:
+    """Wrap bare email body HTML in a proper email document structure.
+
+    Adds DOCTYPE, html/head/body tags, responsive container, and
+    CAN-SPAM compliant footer. Critical for email deliverability —
+    bare <p> tags without structure trigger spam filters.
+    """
+    return (
+        '<!DOCTYPE html>'
+        '<html lang="en" xmlns="http://www.w3.org/1999/xhtml">'
+        '<head>'
+        '<meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+        '<title>Afterword</title>'
+        '</head>'
+        '<body style="margin:0;padding:0;background-color:#f7f7f7;'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
+        'font-size:15px;line-height:1.6;color:#1a1a1a">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="background-color:#f7f7f7">'
+        '<tr><td align="center" style="padding:32px 16px">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:560px;background-color:#ffffff;'
+        'border-radius:8px;overflow:hidden">'
+        # Header bar
+        '<tr><td style="background-color:#0f0f0f;padding:20px 32px">'
+        '<span style="color:#ffffff;font-size:18px;font-weight:600;'
+        'letter-spacing:0.5px">Afterword</span>'
+        '</td></tr>'
+        # Body content
+        '<tr><td style="padding:28px 32px">'
+        f'{body_html}'
+        '</td></tr>'
+        # Footer
+        '<tr><td style="padding:20px 32px;border-top:1px solid #e5e5e5;'
+        'background-color:#fafafa">'
+        '<p style="margin:0;font-size:12px;color:#999999;line-height:1.5">'
+        'This is an automated message from Afterword, a time-locked digital vault app. '
+        'You are receiving this because you have an Afterword account or '
+        'someone designated you as a recipient.</p>'
+        '<p style="margin:8px 0 0;font-size:12px;color:#999999">'
+        'Afterword &middot; afterword-app.com</p>'
+        '</td></tr>'
+        '</table>'
+        '</td></tr></table>'
+        '</body></html>'
+    )
+
+
 def send_email(
     api_key: str,
     from_email: str,
@@ -512,6 +568,20 @@ def send_email(
     *,
     idempotency_key: str | None = None,
 ) -> None:
+
+    formatted_from = _format_from_address(from_email)
+    wrapped_html = wrap_email_html(html)
+
+    payload: dict = {
+        "from": formatted_from,
+        "to": [to_email],
+        "subject": subject,
+        "text": text,
+        "html": wrapped_html,
+        "headers": {
+            "List-Unsubscribe": "<mailto:afterword.app@gmail.com?subject=Unsubscribe>",
+        },
+    }
 
     response = _post_json_with_retries(
 
@@ -525,19 +595,7 @@ def send_email(
 
         },
 
-        payload={
-
-            "from": from_email,
-
-            "to": [to_email],
-
-            "subject": subject,
-
-            "text": text,
-
-            "html": html,
-
-        },
+        payload=payload,
 
         idempotency_key=idempotency_key,
 
@@ -590,18 +648,21 @@ def send_warning_email(
         f"Your Afterword timer expires on {deadline_text}.\n"
         "Open the app to check in and keep your vault secure.\n\n"
         "If you are safe, open Afterword today to reset your timer.\n\n"
-        "— The Afterword Team"
+        "— The Afterword Team\n\n"
+        "Afterword is a time-locked digital vault app. You are receiving this email "
+        "because you have an active Afterword account with vault entries."
     )
 
     safe_name = html_mod.escape(sender_name)
 
     html = (
-        f"<p>Hi {safe_name},</p>"
-        f"<p>{urgency_line}</p>"
-        f"<p>Your Afterword timer expires on <strong>{deadline_text}</strong>. "
-        "Open the app to check in and keep your vault secure.</p>"
-        "<p>If you are safe, open Afterword today to reset your timer.</p>"
-        "<p style='color:#888;font-size:12px'>— The Afterword Team</p>"
+        f'<p style="margin:0 0 16px">Hi {safe_name},</p>'
+        f'<p style="margin:0 0 16px">{urgency_line}</p>'
+        f'<p style="margin:0 0 16px">Your Afterword timer expires on '
+        f'<strong>{deadline_text}</strong>. '
+        'Open the app to check in and keep your vault secure.</p>'
+        '<p style="margin:0 0 24px">If you are safe, open Afterword today to reset your timer.</p>'
+        '<p style="margin:0;color:#666666;font-size:13px">&mdash; The Afterword Team</p>'
     )
 
     idempotency_key = f"warning-{profile.get('id', 'unknown')}-{deadline.date().isoformat()}"
@@ -931,61 +992,67 @@ def send_unlock_email(
     subject = f"Message from {sender_name}"
 
     text = (
-
-        f"{sender_name} left you a secure message using Afterword — "
-
-        "a time-locked digital vault.\n\n"
-
+        f"{sender_name} left you a secure message using Afterword, "
+        "a time-locked digital vault app.\n\n"
         f"Title: {entry_title}\n\n"
-
-        f"Open: {viewer_link}\n\n"
-
+        "To view this message, open the link below and paste your "
+        "security key when prompted.\n\n"
+        f"Viewer: {viewer_link}\n\n"
         f"Security Key: {security_key}\n\n"
-
-        "Paste the security key into the viewer to decrypt the message in "
-
-        "your browser. The key is never sent to our servers.\n\n"
-
-        "Do not share this key — anyone with it can read the message.\n\n"
-
-        "This transmission expires 30 days after delivery.\n\n"
-
-        "If you do not recognize the sender, you may safely ignore this email."
-
+        "How it works:\n"
+        "1. Open the viewer link above in your browser\n"
+        "2. Paste the security key into the key field\n"
+        "3. Your message will be decrypted locally in your browser\n\n"
+        "The security key is never sent to our servers. Do not share "
+        "it — anyone with this key can read the message.\n\n"
+        "This message will be available for 30 days, after which it "
+        "will be permanently and automatically erased.\n\n"
+        "If you do not recognize the sender, you may safely ignore "
+        "this email.\n\n"
+        "— The Afterword Team"
     )
 
     safe_sender = html_mod.escape(sender_name)
-
     safe_title = html_mod.escape(entry_title)
-
     safe_link = html_mod.escape(viewer_link)
 
     html = (
+        f'<p style="margin:0 0 16px"><strong>{safe_sender}</strong> left you a secure '
+        'message using Afterword, a time-locked digital vault app.</p>'
 
-        f"<p><strong>{safe_sender}</strong> left you a secure message using "
+        f'<p style="margin:0 0 8px"><strong>Title:</strong> {safe_title}</p>'
 
-        "Afterword — a time-locked digital vault.</p>"
+        '<table role="presentation" cellpadding="0" cellspacing="0" '
+        'style="margin:20px 0"><tr><td>'
+        f'<a href="{safe_link}" style="display:inline-block;background-color:#0f0f0f;'
+        'color:#ffffff;font-size:15px;font-weight:600;padding:12px 28px;'
+        'border-radius:6px;text-decoration:none" target="_blank">'
+        'Open Secure Message</a>'
+        '</td></tr></table>'
 
-        f"<p><strong>Title:</strong> {safe_title}</p>"
+        '<p style="margin:0 0 8px"><strong>Your Security Key:</strong></p>'
+        '<p style="margin:0 0 16px;background-color:#f4f4f4;padding:12px 16px;'
+        'border-radius:6px;font-family:Consolas,Monaco,Courier New,monospace;'
+        f'font-size:13px;word-break:break-all;line-height:1.5">{security_key}</p>'
 
-        f"<p><a href=\"{safe_link}\" style=\"font-size:16px\">Open the secure message</a></p>"
+        '<p style="margin:0 0 16px"><strong>How to view your message:</strong></p>'
+        '<ol style="margin:0 0 16px;padding-left:20px;color:#333333">'
+        '<li style="margin-bottom:6px">Click the button above to open the secure viewer</li>'
+        '<li style="margin-bottom:6px">Copy and paste the security key into the key field</li>'
+        '<li style="margin-bottom:6px">Your message will be decrypted privately in your browser</li>'
+        '</ol>'
 
-        f"<p><strong>Security Key:</strong><br>"
+        '<p style="margin:0 0 16px;color:#666666;font-size:13px">'
+        '<em>The security key is never sent to our servers. Do not share '
+        'it — anyone with this key can read the message.</em></p>'
 
-        f"<code style=\"background:#f4f4f4;padding:6px 10px;border-radius:4px;font-size:13px;word-break:break-all\">{security_key}</code></p>"
+        '<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0">'
 
-        "<p>Paste the security key into the viewer to decrypt the message "
-
-        "in your browser. The key is never sent to our servers.</p>"
-
-        "<p><em>Do not share this key — anyone with it can read the message.</em></p>"
-
-        "<hr>"
-
-        "<p style=\"color:#888;font-size:12px\">This transmission expires 30 days after delivery. "
-
-        "If you do not recognize the sender, you may safely ignore this email.</p>"
-
+        '<p style="margin:0 0 8px;color:#888888;font-size:12px">'
+        'This message will be available for 30 days after delivery, after which '
+        'it will be permanently and automatically erased.</p>'
+        '<p style="margin:0;color:#888888;font-size:12px">'
+        'If you do not recognize the sender, you may safely ignore this email.</p>'
     )
 
     send_email(
@@ -1623,29 +1690,36 @@ def handle_subscription_downgrade(
             f"Your Afterword subscription has been updated due to a {reason}. "
             "Your account has been reverted to the free tier.\n\n"
             "What this means:\n"
-            "• Your timer has been reset to the default 30 days\n"
-            "• Custom themes and styles have been reset to defaults\n"
-            "• All your existing vault entries are preserved\n"
-            f"{audio_note}\n\n"
+            "- Your timer has been reset to the default 30 days\n"
+            "- Custom themes and styles have been reset to defaults\n"
+            "- All your existing vault entries are preserved\n"
+            f"{'- Audio vault entries have been removed (Lifetime feature)' if was_lifetime and audio_entries else ''}"
+            "\n\n"
             "You can continue using Afterword on the free tier, or "
             "resubscribe at any time to restore premium features.\n\n"
-            "— The Afterword Team"
+            "— The Afterword Team\n\n"
+            "Afterword is a time-locked digital vault app. You are receiving "
+            "this email because you have an Afterword account."
         )
         safe_name = html_mod.escape(sender_name)
+        audio_li = (
+            '<li style="margin-bottom:6px">Audio vault entries have been removed (Lifetime feature)</li>'
+            if was_lifetime and audio_entries else ''
+        )
         html = (
-            f"<p>Hi {safe_name},</p>"
-            f"<p>Your Afterword subscription has been updated due to a {reason}. "
-            "Your account has been reverted to the free tier.</p>"
-            "<p><strong>What this means:</strong></p>"
-            "<ul>"
-            "<li>Your timer has been reset to the default 30 days</li>"
-            "<li>Custom themes and styles have been reset to defaults</li>"
-            "<li>All your existing vault entries are preserved</li>"
-            f"{'<li>Audio vault entries have been removed (Lifetime feature)</li>' if was_lifetime and audio_entries else ''}"
-            "</ul>"
-            "<p>You can continue using Afterword on the free tier, or "
-            "resubscribe at any time to restore premium features.</p>"
-            "<p>— The Afterword Team</p>"
+            f'<p style="margin:0 0 16px">Hi {safe_name},</p>'
+            f'<p style="margin:0 0 16px">Your Afterword subscription has been updated due to a {reason}. '
+            'Your account has been reverted to the free tier.</p>'
+            '<p style="margin:0 0 8px"><strong>What this means:</strong></p>'
+            '<ul style="margin:0 0 16px;padding-left:20px;color:#333333">'
+            '<li style="margin-bottom:6px">Your timer has been reset to the default 30 days</li>'
+            '<li style="margin-bottom:6px">Custom themes and styles have been reset to defaults</li>'
+            '<li style="margin-bottom:6px">All your existing vault entries are preserved</li>'
+            f'{audio_li}'
+            '</ul>'
+            '<p style="margin:0 0 24px">You can continue using Afterword on the free tier, or '
+            'resubscribe at any time to restore premium features.</p>'
+            '<p style="margin:0;color:#666666;font-size:13px">&mdash; The Afterword Team</p>'
         )
         try:
             send_email(
