@@ -290,10 +290,8 @@ BEGIN
     RAISE EXCEPTION 'not authorized';
   END IF;
 
-  -- Remove encrypted audio objects first (best-effort hard delete semantics).
-  DELETE FROM storage.objects
-  WHERE bucket_id = 'vault-audio'
-    AND name LIKE uid::text || '/%';
+  -- Audio storage cleanup is done client-side via Storage API before calling
+  -- this RPC (direct SQL DELETE on storage.objects is blocked by Supabase).
 
   -- Delete auth identity; cascades to profiles/vault_entries/push_devices/tombstones.
   DELETE FROM auth.users WHERE id = uid;
@@ -830,16 +828,12 @@ WITH CHECK (
   )
 );
 
--- Only Lifetime users can delete audio
-CREATE POLICY vault_audio_delete_lifetime ON storage.objects
+-- Any authenticated user can delete their own audio (cleanup, downgrade, account deletion)
+CREATE POLICY vault_audio_delete_own ON storage.objects
 FOR DELETE TO authenticated
 USING (
   bucket_id = 'vault-audio'
   AND (storage.foldername(name))[1] = auth.uid()::text
-  AND EXISTS (
-    SELECT 1 FROM profiles p
-    WHERE p.id = auth.uid() AND p.subscription_status = 'lifetime'
-  )
 );
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
@@ -883,6 +877,9 @@ CREATE INDEX IF NOT EXISTS idx_vault_entries_sent_at ON vault_entries (sent_at) 
 CREATE INDEX IF NOT EXISTS idx_vault_entries_user_created ON vault_entries (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_profiles_active_checkin ON profiles (last_check_in) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices (user_id);
+CREATE INDEX IF NOT EXISTS idx_tombstones_user ON vault_entry_tombstones (user_id);
+CREATE INDEX IF NOT EXISTS idx_profiles_subscription ON profiles (subscription_status) WHERE status = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_push_devices_user_token ON push_devices (user_id, fcm_token);
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SECTION 12 — UNSCHEDULE OLD CRON JOBS                                ║

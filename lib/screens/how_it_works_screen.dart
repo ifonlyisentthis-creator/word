@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/ambient_background.dart';
 
@@ -25,7 +26,7 @@ class HowItWorksScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'How It Works',
+                        'Help & Support',
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -117,6 +118,83 @@ class HowItWorksScreen extends StatelessWidget {
                           'Protocol Zero (erase mode), email warning 24h before expiry.'),
                       _BulletPoint('Lifetime — Everything in Pro, plus encrypted audio vault '
                           '(10 minute bank), timer up to 10 years, all 6 themes and Soul Fire styles.'),
+                      const SizedBox(height: 24),
+                      _SectionTitle('FAQ'),
+                      _BulletPoint('Can Afterword read my messages? — No. All encryption '
+                          'happens on your device. Our servers only store ciphertext.'),
+                      _BulletPoint('What happens if I forget to check in? — Your timer '
+                          'expires and Afterword delivers each vault entry to its '
+                          'designated recipient (or erases it if set to Protocol Zero).'),
+                      _BulletPoint('Can I change my timer after setting it? — Yes. '
+                          'Go to your timer settings card on the home screen.'),
+                      _BulletPoint('Will my recipient need an account? — No. They receive '
+                          'a secure link and key, and decrypt everything in their browser.'),
+                      _BulletPoint('Emails landing in spam? — Check your Spam or Promotions '
+                          'folder and tap "Not Spam" to train your email provider.'),
+                      const SizedBox(height: 24),
+                      _SectionTitle('Contact & Support'),
+                      Builder(builder: (context) {
+                        final theme = Theme.of(context);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: () {
+                              final uri = Uri(
+                                scheme: 'mailto',
+                                path: 'afterword.app@gmail.com',
+                                queryParameters: {
+                                  'subject': 'Afterword Support',
+                                  'body': 'Hi Afterword Team,\n\n',
+                                },
+                              );
+                              launchUrl(uri);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.white12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.mail_outline,
+                                      size: 20,
+                                      color: theme.colorScheme.primary),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Contact Us / Report a Bug',
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'afterword.app@gmail.com',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                            color: Colors.white54,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right,
+                                      size: 20, color: Colors.white38),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),

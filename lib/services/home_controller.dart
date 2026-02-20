@@ -349,6 +349,15 @@ class HomeController extends ChangeNotifier {
       return CheckInResult.error;
     }
 
+    // ── Vault-empty guard ──
+    // When vault has no entries the timer has no practical effect.
+    // Skip the DB write and show "Vault Secure" instead of
+    // "Signal Verified" so the user isn't misled into thinking a
+    // real reset occurred.
+    if (!_hasVaultEntries) {
+      return CheckInResult.cooldown;
+    }
+
     // ── Cooldown gate ──
     final now = DateTime.now();
     final serverLastCheckIn = _profile?.lastCheckIn;

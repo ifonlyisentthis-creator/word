@@ -8,8 +8,9 @@
 --
 -- What this adds:
 --   - public.delete_my_account() SECURITY DEFINER RPC
---   - Deletes user's vault-audio storage objects
 --   - Deletes auth.users row (which cascades to profiles/vault_entries/etc.)
+--   NOTE: Audio storage cleanup is done client-side via the Storage API
+--         before calling this RPC (direct SQL on storage.objects is blocked).
 --   - Grants EXECUTE to authenticated only
 --
 -- Safe to re-run.
@@ -28,10 +29,6 @@ BEGIN
   IF uid IS NULL THEN
     RAISE EXCEPTION 'not authorized';
   END IF;
-
-  DELETE FROM storage.objects
-  WHERE bucket_id = 'vault-audio'
-    AND name LIKE uid::text || '/%';
 
   DELETE FROM auth.users WHERE id = uid;
 
