@@ -62,6 +62,8 @@ HTTP_RETRY_DELAYS_SECONDS = (1, 3, 8)
 
 STALE_SENDING_LOCK_MINUTES = 30
 
+MAX_RUNTIME_SECONDS = 5.5 * 3600  # 5h30m — exit gracefully before GH Actions 6h limit
+
 
 def fetch_all_rows(query_builder) -> list[dict]:
     """Paginate through a Supabase query to fetch all matching rows.
@@ -1344,57 +1346,55 @@ def cleanup_sent_entries(client) -> None:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    sent_entries = fetch_all_rows(
+    # Paginate sent entries to avoid loading millions into memory
+    user_ids: set[str] = set()
+    sender_names: dict[str, str] = {}
+
+    for batch in iter_rows(
         client.table("vault_entries")
         .select("id,user_id,audio_file_path,sent_at")
         .eq("status", "sent")
         .lt("sent_at", cutoff)
-    )
+        .order("id"),
+    ):
+        # Batch-fetch sender_names for any new user_ids in this batch
+        new_uids = {str(e["user_id"]) for e in batch} - set(sender_names.keys())
+        if new_uids:
+            try:
+                profiles_resp = (
+                    client.table("profiles")
+                    .select("id,sender_name")
+                    .in_("id", list(new_uids))
+                    .execute()
+                )
+                for p in (profiles_resp.data or []):
+                    sender_names[str(p["id"])] = p.get("sender_name") or "Afterword"
+            except Exception:  # noqa: BLE001
+                pass
+            for uid in new_uids:
+                sender_names.setdefault(uid, "Afterword")
 
-    if not sent_entries:
-        return
+        for entry in batch:
+            user_ids.add(str(entry["user_id"]))
 
-    # Collect user_ids so we can fetch sender_names for tombstones
-    user_ids = {e["user_id"] for e in sent_entries}
+            # Create tombstone BEFORE deleting (preserves History tab data)
+            try:
+                client.table("vault_entry_tombstones").insert({
+                    "vault_entry_id": entry["id"],
+                    "user_id": entry["user_id"],
+                    "sender_name": sender_names.get(str(entry["user_id"]), "Afterword"),
+                    "sent_at": entry.get("sent_at"),
+                    "expired_at": now_iso,
+                }).execute()
+            except Exception:  # noqa: BLE001
+                # Tombstone insert may fail on duplicate PK if already exists — safe to skip
+                pass
 
-    # Fetch sender_names for tombstone records
-    sender_names: dict[str, str] = {}
-    for uid in user_ids:
-        try:
-            profile_row = (
-                client.table("profiles")
-                .select("sender_name")
-                .eq("id", uid)
-                .maybeSingle()
-                .execute()
-            )
-            if profile_row.data:
-                sender_names[uid] = profile_row.data.get("sender_name") or "Afterword"
-            else:
-                sender_names[uid] = "Afterword"
-        except Exception:  # noqa: BLE001
-            sender_names[uid] = "Afterword"
-
-    # Create tombstones BEFORE deleting (preserves History tab data)
-    for entry in sent_entries:
-        try:
-            client.table("vault_entry_tombstones").insert({
-                "vault_entry_id": entry["id"],
-                "user_id": entry["user_id"],
-                "sender_name": sender_names.get(entry["user_id"], "Afterword"),
-                "sent_at": entry.get("sent_at"),
-                "expired_at": now_iso,
-            }).execute()
-        except Exception:  # noqa: BLE001
-            # Tombstone insert may fail on duplicate PK if already exists — safe to skip
-            pass
-
-    # Now delete the entries (storage files + DB rows)
-    for entry in sent_entries:
-        try:
-            delete_entry(client, entry)
-        except Exception:  # noqa: BLE001
-            print(f"Failed to delete sent entry {entry.get('id', '?')}")
+            # Delete entry (storage files + DB row)
+            try:
+                delete_entry(client, entry)
+            except Exception:  # noqa: BLE001
+                print(f"Failed to delete sent entry {entry.get('id', '?')}")
 
     # Reset users with zero remaining entries to fresh active state
     for uid in user_ids:
@@ -1438,60 +1438,71 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
     """
     cutoff = (now - timedelta(days=90)).isoformat()
 
-    # Find candidate profiles: created > 90 days ago, never checked in after creation
-    candidates = fetch_all_rows(
-        client.table("profiles")
-        .select("id,email,created_at,last_check_in,had_vault_activity")
-        .eq("status", "active")
-        .lt("created_at", cutoff)
-    )
+    # Keyset-paginate candidate profiles to avoid loading millions into memory
+    last_seen_id: str | None = None
+    while True:
+        query = (
+            client.table("profiles")
+            .select("id,email,created_at,last_check_in,had_vault_activity")
+            .eq("status", "active")
+            .lt("created_at", cutoff)
+            .order("id")
+            .limit(PROFILE_BATCH_SIZE)
+        )
+        if last_seen_id is not None:
+            query = query.gt("id", last_seen_id)
+        response = query.execute()
+        candidates = response.data or []
+        if not candidates:
+            break
+        last_seen_id = str(candidates[-1]["id"])
 
-    for profile in candidates:
-        try:
-            uid = profile["id"]
-            created_at = parse_iso(profile.get("created_at"))
-            last_check_in = parse_iso(profile.get("last_check_in"))
-
-            if created_at is None or last_check_in is None:
-                continue
-
-            # If user ever checked in after account creation, they're real
-            # Allow 60 second tolerance for the initial check-in set at creation
-            if abs((last_check_in - created_at).total_seconds()) > 60:
-                continue
-
-            # If user ever had vault entries processed (destroy or send), they're real
-            if profile.get("had_vault_activity"):
-                continue
-
-            # Check if they ever had any vault entries
-            vault_count = (
-                client.table("vault_entries")
-                .select("id", count="exact")
-                .eq("user_id", uid)
-                .execute()
-            )
-            if (vault_count.count or 0) > 0:
-                continue
-
-            # Check if they have tombstones (had entries that were executed + purged)
-            tombstone_count = (
-                client.table("vault_entry_tombstones")
-                .select("vault_entry_id", count="exact")
-                .eq("user_id", uid)
-                .execute()
-            )
-            if (tombstone_count.count or 0) > 0:
-                continue
-
-            # No activity at all — delete the auth user (cascades to profile + push_devices)
+        for profile in candidates:
             try:
-                client.auth.admin.delete_user(uid)
-                print(f"Deleted inactive bot account: {uid}")
+                uid = profile["id"]
+                created_at = parse_iso(profile.get("created_at"))
+                last_check_in = parse_iso(profile.get("last_check_in"))
+
+                if created_at is None or last_check_in is None:
+                    continue
+
+                # If user ever checked in after account creation, they're real
+                # Allow 60 second tolerance for the initial check-in set at creation
+                if abs((last_check_in - created_at).total_seconds()) > 60:
+                    continue
+
+                # If user ever had vault entries processed (destroy or send), they're real
+                if profile.get("had_vault_activity"):
+                    continue
+
+                # Check if they ever had any vault entries
+                vault_count = (
+                    client.table("vault_entries")
+                    .select("id", count="exact")
+                    .eq("user_id", uid)
+                    .execute()
+                )
+                if (vault_count.count or 0) > 0:
+                    continue
+
+                # Check if they have tombstones (had entries that were executed + purged)
+                tombstone_count = (
+                    client.table("vault_entry_tombstones")
+                    .select("vault_entry_id", count="exact")
+                    .eq("user_id", uid)
+                    .execute()
+                )
+                if (tombstone_count.count or 0) > 0:
+                    continue
+
+                # No activity at all — delete the auth user (cascades to profile + push_devices)
+                try:
+                    client.auth.admin.delete_user(uid)
+                    print(f"Deleted inactive bot account: {uid}")
+                except Exception as exc:  # noqa: BLE001
+                    print(f"Failed to delete bot account {uid}: {exc}")
             except Exception as exc:  # noqa: BLE001
-                print(f"Failed to delete bot account {uid}: {exc}")
-        except Exception as exc:  # noqa: BLE001
-            print(f"Bot cleanup failed for {profile.get('id', '?')}: {exc}")
+                print(f"Bot cleanup failed for {profile.get('id', '?')}: {exc}")
 
 
 def handle_subscription_downgrade(
@@ -1686,12 +1697,21 @@ def main() -> int:
 
     processed_entries = 0
 
+    start_time = time.monotonic()
+
     for profile_batch in iter_active_profiles(client):
+
+      # Runtime guard: exit gracefully before GH Actions kills the job
+      elapsed = time.monotonic() - start_time
+      if elapsed > MAX_RUNTIME_SECONDS:
+          print(f"Runtime limit reached ({elapsed:.0f}s). Exiting gracefully — "
+                f"remaining users will be processed next run.")
+          break
 
       # Proactively refresh FCM token every 45 min to avoid expiry during long runs
       if fcm_ctx is not None:
-          elapsed = (datetime.now(timezone.utc) - fcm_token_minted_at).total_seconds()
-          if elapsed > 2700:  # 45 minutes
+          fcm_elapsed = (datetime.now(timezone.utc) - fcm_token_minted_at).total_seconds()
+          if fcm_elapsed > 2700:  # 45 minutes
               if refresh_fcm_access_token(fcm_ctx):
                   fcm_token_minted_at = datetime.now(timezone.utc)
                   print("Proactively refreshed FCM access token")
