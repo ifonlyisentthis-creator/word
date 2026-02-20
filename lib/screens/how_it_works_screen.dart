@@ -85,11 +85,11 @@ class HowItWorksScreen extends StatelessWidget {
                       ),
                       _StepCard(
                         number: '6',
-                        title: 'Or Erase Forever',
+                        title: 'Protocol Zero',
                         body:
                             'Pro and Lifetime users can set any item to "Erase" mode. '
-                            'When the timer expires, the data is permanently and irreversibly removed. '
-                            'No emails sent. No trace left. Protocol Zero.',
+                            'When the timer expires, the data is permanently removed from our servers '
+                            'instead of being delivered. No emails sent. Complete data erasure.',
                         icon: Icons.delete_forever_outlined,
                       ),
                       const SizedBox(height: 24),

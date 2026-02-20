@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/auth_controller.dart';
 import '../services/home_controller.dart';
@@ -259,6 +260,45 @@ class AppDrawer extends StatelessWidget {
                       Navigator.push(
                         context,
                         PremiumPageRoute(page: const TermsScreen()),
+                      );
+                    },
+                  ),
+                  const Divider(color: Colors.white12, indent: 20, endIndent: 20),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, top: 8, bottom: 4),
+                    child: Text(
+                      'HELP & SUPPORT',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: Colors.white30,
+                        letterSpacing: 1.4,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  _DrawerItem(
+                    icon: Icons.mail_outline,
+                    label: 'Contact Us / Report Bug',
+                    onTap: () {
+                      Navigator.pop(context);
+                      final uri = Uri(
+                        scheme: 'mailto',
+                        path: 'afterword.app@gmail.com',
+                        queryParameters: {
+                          'subject': 'Afterword Support',
+                          'body': 'Hi Afterword Team,\n\n',
+                        },
+                      );
+                      launchUrl(uri);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.help_outline,
+                    label: 'FAQ & Help',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        PremiumPageRoute(page: const HowItWorksScreen()),
                       );
                     },
                   ),

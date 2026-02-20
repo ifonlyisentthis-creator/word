@@ -35,9 +35,10 @@ class AccountService {
       await _client.from('push_devices').delete().eq('user_id', userId);
       await _client.from('profiles').delete().eq('id', userId);
     } finally {
-      await _deviceSecretService.clearHmacKey(userId: userId);
-      await _deviceSecretService.clearDeviceWrappingKey(userId: userId);
-      await _deviceSecretService.clearMnemonic(userId: userId);
+      // Best-effort local cleanup — must never mask a successful server deletion.
+      try { await _deviceSecretService.clearHmacKey(userId: userId); } catch (_) {}
+      try { await _deviceSecretService.clearDeviceWrappingKey(userId: userId); } catch (_) {}
+      try { await _deviceSecretService.clearMnemonic(userId: userId); } catch (_) {}
     }
   }
 }

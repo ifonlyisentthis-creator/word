@@ -185,14 +185,15 @@ class HomeController extends ChangeNotifier {
     try {
       await _accountService.deleteAccount(_user!.id);
 
-      await _notificationService.cancelAll();
+      try { await _notificationService.cancelAll(); } catch (_) {}
 
       _profile = null;
 
       _errorMessage = null;
 
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('deleteAccount error: $e');
       _errorMessage = 'Unable to delete your account.';
 
       return false;
@@ -302,6 +303,23 @@ class HomeController extends ChangeNotifier {
     }
   }
 
+  // ── 12-hour write cooldown ──
+  // The Soul Fire animation always plays instantly and "Signal verified" always
+  // shows. The actual Supabase UPDATE is silently skipped when less than
+  // _checkInCooldown has elapsed since the last server-confirmed check-in.
+  // This protects against thousands of unnecessary DB writes from users
+  // spamming the orb for the visual effects.
+  //
+  // The cooldown source of truth is _profile.lastCheckIn (loaded from the
+  // server on login and refreshed after every successful write). An in-memory
+  // _lastWriteAt acts as a second layer so even stale profile data can't
+  // cause duplicate writes within a single session.
+  //
+  // Safety valve: if the timer is expired AND the vault has entries, the write
+  // is always allowed regardless of cooldown to prevent permanent lockout.
+  static const _checkInCooldown = Duration(hours: 12);
+  DateTime? _lastWriteAt;
+
   Future<bool> manualCheckIn() async {
     if (_user == null || _isInGracePeriod) return false;
 
@@ -309,10 +327,33 @@ class HomeController extends ChangeNotifier {
 
     if (currentUser == null || currentUser.id != _user!.id) return false;
 
+    // ── Cooldown gate ──
+    final now = DateTime.now();
+    final serverLastCheckIn = _profile?.lastCheckIn;
+    final timerExpired = _profile != null && _profile!.isExpired && _hasVaultEntries;
+
+    // Layer 1: server-sourced timestamp
+    final serverCooldownOk = serverLastCheckIn == null ||
+        now.difference(serverLastCheckIn.toLocal()) >= _checkInCooldown;
+
+    // Layer 2: in-memory session guard
+    final sessionCooldownOk = _lastWriteAt == null ||
+        now.difference(_lastWriteAt!) >= _checkInCooldown;
+
+    final needsWrite = timerExpired || (serverCooldownOk && sessionCooldownOk);
+
+    if (!needsWrite) {
+      // Cooldown active — skip DB write but return true so animation + snackbar
+      // fire normally. The user sees no difference.
+      return true;
+    }
+
     _setLoading(true);
 
     try {
       _profile = await _profileService.updateCheckIn(_user!.id);
+
+      _lastWriteAt = DateTime.now();
 
       _errorMessage = null;
 

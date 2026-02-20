@@ -1,0 +1,195 @@
+================================================================================
+  AFTERWORD — STORE LISTING, PROMOTIONAL TEXT & LAUNCH MATERIALS
+  Generated: February 2026
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. GOOGLE PLAY STORE LISTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+APP NAME:
+  Afterword — Secure Time-Locked Vault
+
+SHORT DESCRIPTION (80 characters max):
+  Encrypt messages. Set a timer. Deliver them when the time comes.
+
+FULL DESCRIPTION:
+
+Afterword is a secure, time-locked digital vault for the words you may never say — but want someone to receive someday.
+
+Write encrypted messages, record private audio, and assign a trusted recipient for each one. Set a check-in timer. As long as you keep checking in, your vault stays sealed. If the timer ever expires, Afterword delivers your entries exactly as you intended.
+
+HOW IT WORKS
+1. Create encrypted vault entries — text or audio
+2. Set a check-in timer (30 days free, up to 10 years with Lifetime)
+3. Assign a recipient for each entry
+4. Check in regularly to keep your vault locked
+5. If the timer expires, entries are securely delivered via email
+6. Or choose Protocol Zero to permanently erase entries instead
+
+SECURITY FIRST
+- End-to-end encryption — your content is encrypted on your device before upload
+- Zero-knowledge architecture — we never see your plaintext content
+- Integrity seals prevent tampering with recipient addresses
+- Recipients decrypt messages in their browser using a private key
+- No analytics, no trackers, no advertising
+
+FEATURES
+- Encrypted text and audio vault entries
+- Customizable check-in timer
+- Push notification reminders at key intervals
+- Beautiful themes and animated Soul Fire check-in orb
+- Recovery phrase backup for your encryption keys
+- Automatic 30-day cleanup of delivered entries
+- Protocol Zero: permanent data erasure mode (Pro)
+- Audio vault with encrypted recording (Lifetime)
+
+PLANS
+- Free: 3 text entries, 30-day timer, 3 themes, push reminders
+- Pro: Unlimited text, custom timer (7–365 days), Protocol Zero, email alerts, all themes
+- Lifetime: Everything in Pro + encrypted audio vault, timer up to 10 years, permanent access
+
+Your vault. Your words. Your terms.
+
+CATEGORY: Tools / Productivity
+CONTENT RATING: Everyone
+TAGS: encryption, vault, secure messaging, privacy, timer, time capsule
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2. APPLE APP STORE LISTING (if needed later)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SUBTITLE (30 chars):
+  Encrypted Time-Locked Vault
+
+PROMOTIONAL TEXT (170 chars):
+  Encrypt your most important words. Set a timer. If you stop checking in, Afterword delivers them securely — or erases them forever. Your vault, your terms.
+
+KEYWORDS (100 chars):
+  encrypted vault, time capsule, secure messages, privacy, timer, protocol zero, audio vault, backup
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  3. SOCIAL MEDIA — REDDIT POST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TITLE:
+  I built Afterword — a time-locked encrypted vault for messages you want delivered if something happens to you
+
+BODY:
+
+Hey everyone,
+
+I built Afterword, and I'm excited to share it with you.
+
+It's a secure, time-locked digital vault. You write encrypted messages (or record audio), assign a recipient, and set a check-in timer. As long as you keep checking in, everything stays sealed. If you ever stop checking in and the timer runs out, your entries get securely delivered to whoever you chose.
+
+Think of it as a personal time capsule with a dead man's switch — except everything is end-to-end encrypted, and we literally cannot read your content.
+
+Some things that make it different:
+- All encryption happens on your device before anything touches a server
+- Recipients get a secure browser link + private key to decrypt — no app needed
+- You can also set entries to "Protocol Zero" which permanently erases them instead of sending
+- Audio vault for voice messages (Lifetime plan)
+- Beautiful animated Soul Fire check-in orb
+- Recovery phrase backup so you never lose your keys
+
+It's free to use with 3 text entries and a 30-day timer. Pro and Lifetime unlock more.
+
+Available on Google Play: [LINK]
+
+I'd love to hear your thoughts, feedback, or questions. Happy to answer anything about the architecture or security model.
+
+SUBREDDITS TO POST IN:
+  r/androidapps
+  r/privacytoolsIO
+  r/privacy
+  r/SideProject
+  r/InternetIsBeautiful
+  r/selfhosted (if relevant)
+  r/encryption
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  4. SHARE WITH FRIENDS — TEXT / DM / WHATSAPP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SHORT (for DMs):
+  Hey! I built an app called Afterword — it's a time-locked encrypted vault for messages. You write something, set a timer, and if you stop checking in, it delivers your message to whoever you choose. All end-to-end encrypted. Check it out: [LINK]
+
+MEDIUM (for group chats):
+  Just launched Afterword on Google Play! It's a secure vault where you can store encrypted messages and audio, set a check-in timer, and assign recipients. If you ever stop checking in, your entries get delivered automatically. Think of it as a personal time capsule — fully encrypted, private, and beautiful. Would love your feedback: [LINK]
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  5. TWITTER / X POST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Just launched Afterword — a time-locked encrypted vault for the words you may never say.
+
+Write messages. Set a timer. Keep checking in to keep them sealed. Stop checking in, and they get delivered.
+
+End-to-end encrypted. Zero-knowledge. Beautiful.
+
+[LINK] #privacy #encryption #android #indiedev
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  6. PRODUCT HUNT (if launching there)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TAGLINE:
+  A time-locked encrypted vault for the words you may never say.
+
+DESCRIPTION:
+  Afterword lets you write encrypted messages, record private audio, and assign a trusted recipient. Set a check-in timer — if it ever runs out, your vault delivers everything automatically. All content is end-to-end encrypted on your device. We never see your plaintext. Beautiful UI with animated Soul Fire check-in, multiple themes, and a recovery phrase for your keys.
+
+TOPICS: Privacy, Encryption, Productivity, Android
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  7. EMAIL TO FRIENDS / FAMILY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Subject: I built something — would love your feedback
+
+Hey [Name],
+
+I've been working on an app called Afterword and it just went live on Google Play.
+
+It's a secure, time-locked vault. You write encrypted messages or record audio, assign a recipient, and set a check-in timer. As long as you keep checking in, everything stays locked. If you stop checking in and the timer runs out, your entries get delivered to whoever you chose — all end-to-end encrypted.
+
+I'd really appreciate if you could download it, try it out, and let me know what you think. Even a quick review on the Play Store would mean a lot.
+
+Download: [LINK]
+
+Thanks!
+[Your Name]
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  8. PLAY STORE DEVELOPER NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CONTACT EMAIL: afterword.app@gmail.com
+PRIVACY POLICY URL: [Your hosted privacy policy URL]
+CONTENT RATING QUESTIONNAIRE:
+  - Violence: No
+  - Sexual content: No
+  - Language: No
+  - Controlled substance: No
+  - User-generated content: Yes (encrypted, not visible to us)
+  - Personal info shared with third parties: No
+  - Ads: No
+
+DATA SAFETY SECTION:
+  - Data collected: Email address (authentication), encrypted vault data
+  - Data shared: No data shared with third parties
+  - Security: Data encrypted in transit, data encrypted at rest
+  - Deletion: Users can delete their account and all data from within the app
+
+================================================================================
+  END OF LISTING MATERIALS
+================================================================================
