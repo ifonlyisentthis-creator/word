@@ -357,6 +357,19 @@ class VaultService {
         .from('profiles')
         .update({'hmac_key_encrypted': encrypted})
         .eq('id', userId);
+
+    // SAFETY: Verify the write actually persisted. If this is null,
+    // the heartbeat will be unable to send entries to beneficiaries.
+    final verify = await _client
+        .from('profiles')
+        .select('hmac_key_encrypted')
+        .eq('id', userId)
+        .maybeSingle();
+    if (verify == null || verify['hmac_key_encrypted'] == null) {
+      throw const VaultFailure(
+        'Failed to store encryption key. Please try again.',
+      );
+    }
   }
 
   Future<String> _encryptMetadataText(

@@ -249,7 +249,7 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "mark_entry_sent", return_value=True) as mock_mark_sent,
             patch.object(heartbeat, "send_executed_push", return_value=True),
         ):
-            had_send = heartbeat.process_expired_entries(
+            had_send, input_send_count = heartbeat.process_expired_entries(
                 client=client,
                 profile=profile,
                 entries=entries,
@@ -262,6 +262,7 @@ class HeartbeatTests(unittest.TestCase):
             )
 
         self.assertTrue(had_send)
+        self.assertEqual(input_send_count, 1)
         mock_send_unlock_email.assert_called_once()
         mock_mark_sent.assert_called_once_with(client, "entry-1", now)
 
@@ -285,7 +286,7 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "delete_entry") as mock_delete_entry,
             patch.object(heartbeat, "send_executed_push", return_value=True),
         ):
-            had_send = heartbeat.process_expired_entries(
+            had_send, input_send_count = heartbeat.process_expired_entries(
                 client=object(),
                 profile=profile,
                 entries=entries,
@@ -298,6 +299,7 @@ class HeartbeatTests(unittest.TestCase):
             )
 
         self.assertFalse(had_send)
+        self.assertEqual(input_send_count, 0)
         mock_delete_entry.assert_called_once()
 
     def test_send_email_passes_idempotency_key(self):
@@ -408,7 +410,7 @@ class HeartbeatTests(unittest.TestCase):
                             "Different HMAC keys must produce different signatures")
 
     def test_process_expired_entries_rejects_tampered_hmac(self):
-        """Entry with wrong HMAC signature is deleted, not sent."""
+        """Entry with wrong HMAC signature is preserved (not deleted), not sent."""
         now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
         entries = [
             {
@@ -431,21 +433,24 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
             patch.object(heartbeat, "decrypt_with_server_secret", return_value=b"h" * 32),
             patch.object(heartbeat, "compute_hmac_signature", return_value="CORRECT_SIGNATURE"),
+            patch.object(heartbeat, "release_entry_lock") as mock_release,
             patch.object(heartbeat, "delete_entry") as mock_delete,
             patch.object(heartbeat, "send_unlock_email") as mock_send,
         ):
-            had_send = heartbeat.process_expired_entries(
+            had_send, input_send_count = heartbeat.process_expired_entries(
                 client=object(), profile=profile, entries=entries,
                 server_secret="s", resend_key="rk", from_email="f@x.com",
                 viewer_base_url="https://v.x", fcm_ctx=None, now=now,
             )
 
         self.assertFalse(had_send, "Tampered entry must not trigger grace period")
-        mock_delete.assert_called_once()
+        self.assertEqual(input_send_count, 1)
+        mock_delete.assert_not_called()  # CRITICAL: send entries must NEVER be deleted
+        mock_release.assert_called_once()  # Lock released for retry
         mock_send.assert_not_called()
 
     def test_process_expired_entries_rejects_empty_recipient(self):
-        """Entry with no recipient is deleted, not sent."""
+        """Entry with no recipient is preserved (not deleted), not sent."""
         now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
         entries = [
             {
@@ -468,17 +473,20 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
             patch.object(heartbeat, "decrypt_with_server_secret", return_value=b"h" * 32),
             patch.object(heartbeat, "compute_hmac_signature", return_value="sig"),
+            patch.object(heartbeat, "release_entry_lock") as mock_release,
             patch.object(heartbeat, "delete_entry") as mock_delete,
             patch.object(heartbeat, "send_unlock_email") as mock_send,
         ):
-            had_send = heartbeat.process_expired_entries(
+            had_send, input_send_count = heartbeat.process_expired_entries(
                 client=object(), profile=profile, entries=entries,
                 server_secret="s", resend_key="rk", from_email="f@x.com",
                 viewer_base_url="https://v.x", fcm_ctx=None, now=now,
             )
 
         self.assertFalse(had_send)
-        mock_delete.assert_called_once()
+        self.assertEqual(input_send_count, 1)
+        mock_delete.assert_not_called()  # CRITICAL: send entries must NEVER be deleted
+        mock_release.assert_called_once()  # Lock released for retry
         mock_send.assert_not_called()
 
     def test_extract_server_ciphertext_from_envelope(self):
@@ -537,14 +545,144 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "delete_entry") as mock_del,
             patch.object(heartbeat, "send_unlock_email") as mock_send,
         ):
-            had_send = heartbeat.process_expired_entries(
+            had_send, input_send_count = heartbeat.process_expired_entries(
                 client=object(), profile=profile, entries=entries,
                 server_secret="s", resend_key="rk", from_email="f@x.com",
                 viewer_base_url="https://v.x", fcm_ctx=None, now=now,
             )
 
         self.assertFalse(had_send)
+        self.assertEqual(input_send_count, 1)
         mock_del.assert_not_called()
+        mock_send.assert_not_called()
+
+
+    # ── CRITICAL: Hybrid send+destroy scenario tests ──
+
+    def test_hybrid_send_destroy_null_hmac_preserves_send_entries(self):
+        """THE BUG: 6 send + 3 destroy entries, hmac_key_encrypted is NULL.
+        Destroy entries should be deleted. Send entries must be PRESERVED (not deleted).
+        had_send must be False, input_send_count must be 6."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {"id": f"send-{i}", "action_type": "send", "title": f"Send {i}",
+             "payload_encrypted": "p", "recipient_email_encrypted": "r",
+             "data_key_encrypted": "dk", "hmac_signature": "sig"}
+            for i in range(6)
+        ] + [
+            {"id": f"destroy-{i}", "action_type": "destroy", "title": f"Destroy {i}"}
+            for i in range(3)
+        ]
+        profile = {
+            "id": "user-hybrid",
+            "sender_name": "Alice",
+            "hmac_key_encrypted": None,  # <-- THE BUG TRIGGER
+        }
+        deleted_ids = []
+        released_ids = []
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "delete_entry",
+                         side_effect=lambda _c, e: deleted_ids.append(e["id"])),
+            patch.object(heartbeat, "release_entry_lock",
+                         side_effect=lambda _c, eid: released_ids.append(eid)),
+            patch.object(heartbeat, "send_unlock_email") as mock_send,
+            patch.object(heartbeat, "send_executed_push", return_value=True),
+        ):
+            had_send, input_send_count = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertFalse(had_send)
+        self.assertEqual(input_send_count, 6)
+        # Destroy entries ARE deleted (correct behavior)
+        self.assertEqual(sorted(deleted_ids), ["destroy-0", "destroy-1", "destroy-2"])
+        # Send entries are RELEASED (preserved for retry), NOT deleted
+        self.assertEqual(sorted(released_ids),
+                         [f"send-{i}" for i in range(6)])
+        mock_send.assert_not_called()
+
+    def test_hybrid_send_destroy_successful_sends_with_destroys(self):
+        """Mixed vault: 2 send + 1 destroy. Sends succeed, destroy deleted.
+        had_send=True, input_send_count=2."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {"id": "s1", "action_type": "send", "title": "Send 1",
+             "payload_encrypted": "p1", "recipient_email_encrypted": "r1",
+             "data_key_encrypted": "dk1", "hmac_signature": "sig1"},
+            {"id": "s2", "action_type": "send", "title": "Send 2",
+             "payload_encrypted": "p2", "recipient_email_encrypted": "r2",
+             "data_key_encrypted": "dk2", "hmac_signature": "sig2"},
+            {"id": "d1", "action_type": "destroy", "title": "Destroy 1"},
+        ]
+        profile = {
+            "id": "user-mixed",
+            "sender_name": "Bob",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+        deleted_ids = []
+        sent_ids = []
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "extract_server_ciphertext", side_effect=lambda v: v),
+            patch.object(heartbeat, "decrypt_with_server_secret",
+                         side_effect=[b"h" * 32, b"ben@x.com", b"k" * 32,
+                                      b"ben2@x.com", b"k" * 32]),
+            patch.object(heartbeat, "compute_hmac_signature",
+                         side_effect=lambda msg, key: {
+                             "p1|r1": "sig1", "p2|r2": "sig2",
+                         }.get(msg, "nomatch")),
+            patch.object(heartbeat, "send_unlock_email",
+                         side_effect=lambda *a, **kw: sent_ids.append(True)),
+            patch.object(heartbeat, "mark_entry_sent", return_value=True),
+            patch.object(heartbeat, "delete_entry",
+                         side_effect=lambda _c, e: deleted_ids.append(e["id"])),
+            patch.object(heartbeat, "send_executed_push", return_value=True),
+        ):
+            had_send, input_send_count = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertTrue(had_send)
+        self.assertEqual(input_send_count, 2)
+        self.assertEqual(deleted_ids, ["d1"])  # Only destroy entry deleted
+        self.assertEqual(len(sent_ids), 2)  # Both send entries emailed
+
+    def test_null_hmac_key_sends_zero_preserves_all(self):
+        """When hmac_key_encrypted is None, ALL send entries must be preserved."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {"id": f"e-{i}", "action_type": "send", "title": f"Entry {i}",
+             "payload_encrypted": "p", "recipient_email_encrypted": "r",
+             "data_key_encrypted": "dk", "hmac_signature": "sig"}
+            for i in range(3)
+        ]
+        profile = {"id": "u-null", "sender_name": "X", "hmac_key_encrypted": None}
+        released_ids = []
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "release_entry_lock",
+                         side_effect=lambda _c, eid: released_ids.append(eid)),
+            patch.object(heartbeat, "delete_entry") as mock_delete,
+            patch.object(heartbeat, "send_unlock_email") as mock_send,
+        ):
+            had_send, input_send_count = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertFalse(had_send)
+        self.assertEqual(input_send_count, 3)
+        mock_delete.assert_not_called()  # ZERO deletions
+        self.assertEqual(sorted(released_ids), ["e-0", "e-1", "e-2"])
         mock_send.assert_not_called()
 
 

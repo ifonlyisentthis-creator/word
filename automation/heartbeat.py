@@ -1201,13 +1201,22 @@ def process_expired_entries(
 
     now: datetime,
 
-) -> bool:
-    """Process expired vault entries. Returns True if any 'send' entries were
-    processed (grace period needed), False if all entries were destroy-only."""
+) -> tuple[bool, int]:
+    """Process expired vault entries.
+
+    Returns (had_send, input_send_count):
+      - had_send: True if any 'send' entries were successfully emailed
+      - input_send_count: number of send-type entries in the input
+    """
 
     had_send = False
+    input_send_count = sum(
+        1 for e in entries
+        if (e.get("action_type") or "send").lower() != "destroy"
+    )
 
     sender_name = profile.get("sender_name") or "Afterword"
+    user_id = profile.get("id", "?")
 
     hmac_key_encrypted = profile.get("hmac_key_encrypted")
 
@@ -1221,8 +1230,10 @@ def process_expired_entries(
 
         except Exception as exc:  # noqa: BLE001
 
-            print(f"Failed to decrypt HMAC key for user {profile.get('id', '?')}: {exc}")
+            print(f"CRITICAL: Failed to decrypt HMAC key for user {user_id}: {exc}")
 
+    elif input_send_count > 0:
+        print(f"CRITICAL: User {user_id} has {input_send_count} send entries but hmac_key_encrypted is NULL in profile")
 
 
     for entry in entries:
@@ -1261,10 +1272,13 @@ def process_expired_entries(
 
 
 
+            # ── SEND entry validation ──
+            # SAFETY: NEVER delete a send entry on validation failure.
+            # Release the lock so it stays in the DB for retry next cycle.
+
             if hmac_key_bytes is None:
-
-                delete_entry(client, entry)
-
+                print(f"CRITICAL: Skipping send entry {entry_id} — HMAC key unavailable for user {user_id}")
+                release_entry_lock(client, entry_id)
                 continue
 
 
@@ -1276,17 +1290,15 @@ def process_expired_entries(
             expected_signature = compute_hmac_signature(signature_message, hmac_key_bytes)
 
             if expected_signature != entry.get("hmac_signature"):
-
-                delete_entry(client, entry)
-
+                print(f"CRITICAL: HMAC mismatch for send entry {entry_id} user {user_id} — entry preserved for investigation")
+                release_entry_lock(client, entry_id)
                 continue
 
 
 
             if not recipient_encrypted:
-
-                delete_entry(client, entry)
-
+                print(f"CRITICAL: Empty recipient for send entry {entry_id} user {user_id} — entry preserved")
+                release_entry_lock(client, entry_id)
                 continue
 
 
@@ -1302,9 +1314,8 @@ def process_expired_entries(
             data_key_encrypted = entry.get("data_key_encrypted")
 
             if not data_key_encrypted:
-
-                delete_entry(client, entry)
-
+                print(f"CRITICAL: Missing data_key_encrypted for send entry {entry_id} user {user_id} — entry preserved")
+                release_entry_lock(client, entry_id)
                 continue
 
 
@@ -1403,7 +1414,7 @@ def process_expired_entries(
 
             print(f"Failed to process entry {entry_id}: {exc}")
 
-    return had_send
+    return had_send, input_send_count
 
 
 
@@ -1874,7 +1885,7 @@ def main() -> int:
                   # User stays active; timer just sits expired until they add entries.
                   continue
 
-              had_send = process_expired_entries(
+              had_send, input_send_count = process_expired_entries(
 
                   client,
 
@@ -1928,8 +1939,18 @@ def main() -> int:
                       "last_entry_at": None,
                   }).eq("id", user_id).execute()
                   print(f"User {user_id}: protocol executed, grace period started")
+              elif input_send_count > 0:
+                  # SAFETY INVARIANT: There were send entries in the input but
+                  # none were successfully sent AND none are pending in DB.
+                  # This means they were lost (catastrophic bug). Do NOT reset
+                  # to fresh — keep active so the issue is visible.
+                  print(
+                      f"CRITICAL: User {user_id}: {input_send_count} send entries existed "
+                      f"but 0 were sent and 0 are pending. Data may have been lost. "
+                      f"Keeping active for investigation — NOT resetting."
+                  )
               else:
-                  # Destroy-only → no grace needed, reset to fresh immediately
+                  # Truly destroy-only → no grace needed, reset to fresh immediately
                   client.table("profiles").update({
                       "status": "active",
                       "timer_days": 30,
