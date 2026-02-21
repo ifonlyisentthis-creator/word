@@ -1674,8 +1674,12 @@ def handle_subscription_downgrade(
         if audio_entries:
             print(f"Deleted {len(audio_entries)} audio entries for downgraded lifetime user {uid}")
 
-    # 3. Send notification email
-    if email:
+    # 3. Send notification email ONLY for genuine downgrades.
+    # Strong indicators: timer > 30 (impossible without pro) or audio entries
+    # (impossible without lifetime). Theme/soul_fire alone are weak signals
+    # that can arise from bugs or testing — silently reset, no email.
+    is_genuine_downgrade = has_custom_timer or has_audio
+    if email and is_genuine_downgrade:
         reason = "refund or expiration"
         audio_note = ""
         if was_lifetime and audio_entries:

@@ -505,6 +505,11 @@ class HomeController extends ChangeNotifier {
     notifyListeners();
     // If vault status changed, reschedule (or cancel) notifications
     if (_hasVaultEntries != hadEntries) {
+      // Vault went empty→non-empty: server trigger resets last_check_in.
+      // Re-fetch profile so timer UI shows the fresh start.
+      if (_hasVaultEntries && !hadEntries) {
+        await refreshProfile();
+      }
       await _scheduleReminders();
     }
   }

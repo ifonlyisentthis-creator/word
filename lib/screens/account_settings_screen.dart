@@ -99,7 +99,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Account settings are disabled during the grace period.',
+                            'Settings are locked during the grace period. You can still delete your account below.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.error,
                               height: 1.4,
@@ -112,7 +112,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // Sender Name + Danger Zone — all disabled during grace
+                // Sender Name — disabled during grace
                 IgnorePointer(
                 ignoring: controller.isInGracePeriod,
                 child: AnimatedOpacity(
@@ -206,9 +206,15 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                       ),
                     ),
 
+                  ],
+                ),
+                ),
+                ),
+
                     const SizedBox(height: 24),
 
-                    // Danger Zone
+                    // Danger Zone — always accessible, even during grace period.
+                    // Deleting your account is a user right.
                     _Card(
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -303,11 +309,6 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                         ),
                       ),
                     ),
-                  ],
-                ),
-                ),
-                ),
-
                 if (_localError != null) ...[
                   const SizedBox(height: 16),
                   Container(

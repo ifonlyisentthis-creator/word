@@ -298,8 +298,9 @@ class VaultController extends ChangeNotifier {
     notifyListeners();
   }
 
+  static final RegExp _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   static bool _isValidEmail(String email) {
-    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
+    return _emailRegex.hasMatch(email);
   }
 
   bool _isRateLimited() {

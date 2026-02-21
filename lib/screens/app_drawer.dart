@@ -285,7 +285,9 @@ class AppDrawer extends StatelessWidget {
               label: 'Sign Out',
               onTap: () {
                 final rc = context.read<RevenueCatController>();
+                final tp = context.read<ThemeProvider>();
                 Navigator.pop(context);
+                tp.reset();
                 authController.prepareSignOut();
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   await rc.logOut();

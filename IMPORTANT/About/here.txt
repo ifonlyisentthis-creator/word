@@ -193,3 +193,555 @@ DATA SAFETY SECTION:
 ================================================================================
   END OF LISTING MATERIALS
 ================================================================================
+
+
+
+================================================================================
+================================================================================
+  A-Z PLAY STORE LAUNCH GUIDE — COMPLETE STEP-BY-STEP
+  Generated: February 2026
+================================================================================
+================================================================================
+
+This guide covers EVERY step to go from development to production on Google Play,
+including RevenueCat, code changes, APK generation, store setup, testers, and launch.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHASE 1 — CODE & CONFIGURATION CHANGES (BEFORE BUILDING)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.1  REVENUECAT: SWITCH FROM SANDBOX TO PRODUCTION
+────────────────────────────────────────────────────
+  a) Go to https://app.revenuecat.com → Your project → API Keys
+  b) Copy the PRODUCTION Google Play API key (starts with "goog_...")
+     - NOT the sandbox/test key
+  c) In your GitHub repository, go to Settings → Secrets and variables → Actions
+  d) Update these secrets:
+     - REVENUECAT_GOOGLE_API_KEY → paste the PRODUCTION key
+  e) In your code, the RevenueCat API key is passed at build time via
+     --dart-define. Check your build command / CI workflow:
+
+     File: .github/workflows/ (your build workflow)
+     Look for: --dart-define=REVENUECAT_API_KEY=...
+
+     Make sure this uses the PRODUCTION key, not the test/sandbox key.
+
+  f) In the app code, RevenueCat is configured in:
+     File: lib/main.dart → _deferredInit() method
+     Line: Purchases.configure(PurchasesConfiguration(rcApiKey)...)
+
+     The key comes from: const rcApiKey = String.fromEnvironment('REVENUECAT_API_KEY');
+     This is set at BUILD TIME via --dart-define. No code change needed —
+     just make sure your build command passes the production key.
+
+1.2  REVENUECAT DASHBOARD SETUP (on app.revenuecat.com)
+────────────────────────────────────────────────────────
+  a) Go to your project → Google Play Store section
+  b) Upload your Google Play Service Account JSON key:
+     - Go to Google Cloud Console → IAM & Admin → Service Accounts
+     - Find the service account for your Play Console
+     - Create a JSON key → download it
+     - Upload to RevenueCat under Google Play Store → Service Credentials
+  c) Create Products (if not already done):
+     - Go to RevenueCat → Products
+     - Add products matching your Play Console in-app products:
+       • afterword_pro_monthly  → $1.99/month
+       • afterword_pro_yearly   → $19.99/year
+       • afterword_lifetime     → $99.99 one-time
+  d) Create Offerings:
+     - Go to RevenueCat → Offerings → "default"
+     - Add packages:
+       • $rc_monthly → afterword_pro_monthly
+       • $rc_annual  → afterword_pro_yearly
+       • $rc_lifetime → afterword_lifetime
+  e) Create Entitlements:
+     - "pro" entitlement → attach all 3 products
+  f) Enable Google Play Real-Time Developer Notifications (RTDN):
+     - In Play Console → Monetize → Monetization setup → Real-time notifications
+     - Set topic to your Google Cloud Pub/Sub topic
+     - In RevenueCat → Google Play Store → enter the same Pub/Sub topic
+
+1.3  SUPABASE: VERIFY PRODUCTION ENVIRONMENT
+────────────────────────────────────────────
+  a) Ensure your Supabase project is the PRODUCTION project (not a dev instance)
+  b) In GitHub Secrets, verify:
+     - SUPABASE_URL → your production Supabase URL
+     - SUPABASE_ANON_KEY → your production anon key
+  c) In the app code, Supabase is configured in:
+     File: lib/main.dart → main() function
+     The URL and anon key come from --dart-define at build time.
+  d) Run all pending SQL migrations on your PRODUCTION Supabase:
+     - v40_checkin_cooldown_guard.sql
+     - v41_reset_timer_on_first_entry.sql
+     (Check IMPORTANT/All SQL I have ran so far in sequence.txt for the full list)
+
+1.4  FIREBASE: VERIFY PRODUCTION CONFIGURATION
+──────────────────────────────────────────────
+  a) Ensure google-services.json in android/app/ is from your PRODUCTION Firebase project
+  b) In GitHub Secrets, verify:
+     - FIREBASE_SERVICE_ACCOUNT_JSON → production Firebase SA for heartbeat push
+  c) FCM is configured automatically via google-services.json — no code changes needed
+
+1.5  RESEND (EMAIL SERVICE): VERIFY PRODUCTION
+──────────────────────────────────────────────
+  a) In GitHub Secrets, verify:
+     - RESEND_API_KEY → production Resend API key
+     - RESEND_FROM_EMAIL → afterword.app@gmail.com (or your verified domain)
+  b) Make sure your domain is verified in Resend dashboard for deliverability
+
+1.6  APP VERSION & BUILD NUMBER
+──────────────────────────────
+  a) Open pubspec.yaml
+  b) Set version to your launch version:
+     version: 1.0.0+1
+     Format: MAJOR.MINOR.PATCH+BUILD_NUMBER
+  c) Each upload to Play Store needs a UNIQUE, HIGHER build number
+     e.g., 1.0.0+1, then 1.0.1+2, etc.
+
+1.7  APP SIGNING KEY (CRITICAL — DO THIS ONCE, KEEP FOREVER)
+────────────────────────────────────────────────────────────
+  a) Generate a keystore (if you haven't already):
+
+     keytool -genkey -v -keystore afterword-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias afterword
+
+     - Remember the password — you CANNOT change it later
+     - Store the .jks file somewhere SAFE (backup to cloud)
+     - NEVER commit it to git
+
+  b) Create android/key.properties:
+
+     storePassword=YOUR_STORE_PASSWORD
+     keyPassword=YOUR_KEY_PASSWORD
+     keyAlias=afterword
+     storeFile=../../afterword-release.jks
+
+     (path is relative to android/app/)
+     Add key.properties to .gitignore
+
+  c) Configure android/app/build.gradle to use the keystore:
+     Your build.gradle should already have a signingConfigs section.
+     If not, add:
+
+     def keystoreProperties = new Properties()
+     def keystorePropertiesFile = rootProject.file('key.properties')
+     if (keystorePropertiesFile.exists()) {
+         keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+     }
+
+     android {
+         signingConfigs {
+             release {
+                 keyAlias keystoreProperties['keyAlias']
+                 keyPassword keystoreProperties['keyPassword']
+                 storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+                 storePassword keystoreProperties['storePassword']
+             }
+         }
+         buildTypes {
+             release {
+                 signingConfig signingConfigs.release
+             }
+         }
+     }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHASE 2 — BUILD THE RELEASE APK / AAB
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2.1  CLEAN BUILD
+────────────────
+  flutter clean
+  flutter pub get
+
+2.2  BUILD RELEASE AAB (App Bundle — required by Play Store)
+────────────────────────────────────────────────────────────
+  flutter build appbundle --release \
+    --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
+    --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY \
+    --dart-define=REVENUECAT_API_KEY=goog_YOUR_PRODUCTION_KEY \
+    --dart-define=GOOGLE_WEB_CLIENT_ID=YOUR_GOOGLE_WEB_CLIENT_ID
+
+  Output: build/app/outputs/bundle/release/app-release.aab
+
+2.3  BUILD RELEASE APK (for direct distribution / testing)
+─────────────────────────────────────────────────────────
+  flutter build apk --release \
+    --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
+    --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY \
+    --dart-define=REVENUECAT_API_KEY=goog_YOUR_PRODUCTION_KEY \
+    --dart-define=GOOGLE_WEB_CLIENT_ID=YOUR_GOOGLE_WEB_CLIENT_ID
+
+  Output: build/app/outputs/flutter-apk/app-release.apk
+
+2.4  TEST THE RELEASE BUILD LOCALLY
+───────────────────────────────────
+  - Install on a physical device: flutter install --release
+  - Test sign-in, vault creation, Soul Fire check-in, theme changes
+  - Test subscription purchase flow (use test card in sandbox)
+  - Verify push notifications work
+  - Verify the app doesn't crash on startup
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHASE 3 — GOOGLE PLAY CONSOLE SETUP (from scratch)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3.1  CREATE A DEVELOPER ACCOUNT
+──────────────────────────────
+  a) Go to https://play.google.com/console
+  b) Sign in with your Google account (the one you want as publisher)
+  c) Pay the one-time $25 registration fee
+  d) Complete identity verification (takes 1-3 business days):
+     - Personal or organization account
+     - For personal: government ID
+     - For organization: DUNS number
+  e) Fill out developer profile:
+     - Developer name: Your name or "Afterword"
+     - Contact email: afterword.app@gmail.com
+     - Website: https://afterword-app.com
+     - Phone number: your phone
+
+3.2  CREATE THE APP
+──────────────────
+  a) Play Console → All apps → Create app
+  b) App name: Afterword — Secure Time-Locked Vault
+  c) Default language: English (United States)
+  d) App or Game: App
+  e) Free or Paid: Free (with in-app purchases)
+  f) Declarations:
+     - Developer Program Policies: Accept
+     - US export laws: Accept
+
+3.3  SET UP STORE LISTING
+────────────────────────
+  a) Go to: Grow → Store presence → Main store listing
+  b) Fill in:
+     - App name: Afterword — Secure Time-Locked Vault
+     - Short description: Encrypt messages. Set a timer. Deliver them when the time comes.
+     - Full description: (use Section 1 from above)
+  c) Graphics:
+     - App icon: 512x512 PNG (use your existing icon from assets/)
+     - Feature graphic: 1024x500 PNG (create in Canva/Figma — dark theme with
+       the Soul Fire orb and "Afterword" text)
+     - Screenshots: At least 2, recommended 8
+       • Phone: 1080x1920 or 1440x2560
+       • Take screenshots of: Home screen with Soul Fire, Vault with entries,
+         Customization screen, Timer view, Entry editor
+     - Video (optional): 30-second YouTube video showing the app
+
+3.4  CONTENT RATING
+──────────────────
+  a) Go to: Policy → App content → Content rating
+  b) Start questionnaire → IARC
+  c) Answer all questions (see Section 8 above for answers)
+  d) You'll get: Everyone / PEGI 3
+
+3.5  TARGET AUDIENCE & CONTENT
+─────────────────────────────
+  a) Go to: Policy → App content → Target audience and content
+  b) Target age group: 18+ (this is a "dead man's switch" app, mature use case)
+  c) NOT an app primarily designed for children → select accordingly
+
+3.6  DATA SAFETY
+───────────────
+  a) Go to: Policy → App content → Data safety
+  b) Fill out the form:
+     - Does your app collect or share data? YES
+     - Data types collected:
+       • Email address (for authentication) — Required, not shared
+       • App interactions (vault entries) — Required, not shared, encrypted
+     - Security practices:
+       • Data encrypted in transit: YES
+       • Data encrypted at rest: YES (AES-256-GCM)
+       • Users can request data deletion: YES
+     - Data NOT shared with third parties: CONFIRM
+
+3.7  ADS DECLARATION
+───────────────────
+  a) Go to: Policy → App content → Ads
+  b) Contains ads: NO
+
+3.8  PRIVACY POLICY
+──────────────────
+  a) You MUST have a privacy policy URL
+  b) Host it at: https://afterword-app.com/privacy (or add a /privacy route)
+  c) Go to: Policy → App content → Privacy policy
+  d) Enter the URL
+  e) The privacy policy should cover:
+     - What data is collected (email, encrypted vault data)
+     - How data is stored (encrypted, Supabase)
+     - Third parties (Supabase for storage, Resend for email, RevenueCat for billing)
+     - User rights (delete account, export data)
+     - Contact email: afterword.app@gmail.com
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHASE 4 — IN-APP PURCHASES SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4.1  UPLOAD AN INITIAL AAB (required before creating products)
+─────────────────────────────────────────────────────────────
+  a) Go to: Release → Testing → Internal testing
+  b) Create new release → Upload your app-release.aab
+  c) Name the release: "1.0.0 (1)"
+  d) Save (don't publish yet)
+  e) This step is needed to unlock the "In-app products" section
+
+4.2  CREATE SUBSCRIPTIONS
+────────────────────────
+  a) Go to: Monetize → Products → Subscriptions
+  b) Create subscription:
+
+     Product 1: afterword_pro_monthly
+     - Name: Afterword Pro (Monthly)
+     - Description: Unlimited text entries, Protocol Zero, custom timer, email alerts
+     - Price: $1.99/month
+     - Grace period: 7 days
+     - Billing: Monthly
+
+     Product 2: afterword_pro_yearly
+     - Name: Afterword Pro (Yearly)
+     - Description: Everything in Pro, billed annually
+     - Price: $19.99/year
+     - Grace period: 7 days
+     - Billing: Yearly
+
+  c) Go to: Monetize → Products → In-app products
+  d) Create in-app product:
+
+     Product 3: afterword_lifetime
+     - Name: Afterword Lifetime
+     - Description: Everything in Pro forever + audio vault + extended timer
+     - Price: $99.99
+     - Type: Non-consumable (one-time purchase)
+
+  e) Activate all products (click Activate for each)
+
+4.3  LINK PRODUCTS IN REVENUECAT
+───────────────────────────────
+  a) Go to RevenueCat dashboard → Products
+  b) Verify each product maps to the correct Play Store product ID:
+     - afterword_pro_monthly
+     - afterword_pro_yearly
+     - afterword_lifetime
+  c) Verify the "default" offering has all 3 packages
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHASE 5 — TESTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5.1  INTERNAL TESTING (You + trusted testers, up to 100 people)
+──────────────────────────────────────────────────────────────
+  a) Go to: Release → Testing → Internal testing
+  b) Create an email list: "Internal Testers"
+  c) Add tester emails (your email, friends' emails)
+  d) Create release → upload your AAB → roll out
+  e) Share the opt-in link with testers:
+     It looks like: https://play.google.com/apps/internaltest/...
+  f) Testers must:
+     1. Open the link and accept the invitation
+     2. Then install from the Play Store
+  g) Internal testing purchases use TEST CARDS — no real money charged
+
+5.2  CLOSED TESTING (Up to 2000 testers, needed for production)
+──────────────────────────────────────────────────────────────
+  a) Go to: Release → Testing → Closed testing
+  b) Create track: "Alpha" or "Beta"
+  c) Add tester email list
+  d) Upload AAB → roll out
+  e) Google requires 20+ testers who have opted in for 14+ days
+     before you can request production access
+
+5.3  WHAT TO SEND TESTERS
+────────────────────────
+  Send them this:
+
+  ---
+  Subject: Help me test Afterword before launch!
+
+  Hey [Name],
+
+  I need your help testing my app before it goes live on the Play Store.
+
+  WHAT IS AFTERWORD?
+  Afterword is a secure, time-locked digital vault. You write encrypted
+  messages, set a check-in timer, and assign a recipient. If you ever
+  stop checking in and the timer expires, your entries are automatically
+  delivered to your chosen recipients. Think of it as a personal time
+  capsule with a dead man's switch.
+
+  USE CASES TO TRY:
+  1. Create an account (Google sign-in)
+  2. Add a vault entry — write a short message, set action to "Send",
+     enter a recipient email (use your own email to test delivery)
+  3. Tap and hold the Soul Fire orb on the home screen to check in
+  4. Try different themes in the Themes & Soul Fire menu
+  5. Go to Recovery Phrase to back up your encryption keys
+  6. Delete the entry, then create a new one (timer should restart fresh)
+  7. Try the subscription flow — purchases are FREE during testing
+
+  HOW TO JOIN:
+  1. Click this link: [INTERNAL/CLOSED TESTING LINK]
+  2. Accept the test invitation
+  3. Install from the Play Store
+
+  Please let me know:
+  - Any crashes or errors
+  - Anything confusing in the UI
+  - Does the timer make sense?
+  - Does the encryption feel trustworthy?
+
+  Thanks so much!
+  ---
+
+5.4  OPEN TESTING (Optional, unlimited testers)
+──────────────────────────────────────────────
+  a) Go to: Release → Testing → Open testing
+  b) Same process as closed, but anyone can join
+  c) Useful for collecting reviews before production launch
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHASE 6 — PRODUCTION LAUNCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+6.1  PRE-LAUNCH CHECKLIST
+────────────────────────
+  [ ] All SQL migrations run on production Supabase
+  [ ] RevenueCat uses PRODUCTION Google API key
+  [ ] Firebase uses PRODUCTION google-services.json
+  [ ] Resend uses PRODUCTION API key
+  [ ] GitHub Actions heartbeat workflow uses production secrets
+  [ ] Keystore is backed up safely
+  [ ] App version is set correctly in pubspec.yaml
+  [ ] Privacy policy is hosted and linked
+  [ ] All store listing fields are complete
+  [ ] Content rating questionnaire is done
+  [ ] Data safety form is complete
+  [ ] At least 20 testers have been active for 14+ days (if required)
+  [ ] Release APK tested on real device
+  [ ] Subscriptions tested with test cards
+
+6.2  REQUEST PRODUCTION ACCESS
+─────────────────────────────
+  a) Go to: Release → Production
+  b) If Google requires the 14-day testing period:
+     - Wait until the requirement is met
+     - You'll see a green checkmark when ready
+  c) Create release → upload your AAB
+  d) Release name: "1.0.0"
+  e) Release notes: "Initial release"
+  f) Review → Start rollout to Production
+  g) Choose rollout percentage:
+     - Start with 20% for safety (staged rollout)
+     - Increase to 100% after a few days if no issues
+
+6.3  REVIEW TIMELINE
+───────────────────
+  - First-time reviews take 3-7 business days
+  - Subsequent updates are usually reviewed within 1-3 days
+  - You'll get an email when the review is complete
+  - Common rejection reasons:
+    • Missing privacy policy
+    • Incorrect data safety disclosures
+    • Content rating mismatch
+    • Broken subscription flow
+
+6.4  POST-LAUNCH
+───────────────
+  a) Monitor crash reports: Play Console → Quality → Android vitals
+  b) Monitor reviews: Play Console → Ratings and reviews
+  c) Monitor revenue: RevenueCat dashboard
+  d) Monitor heartbeat: GitHub Actions → heartbeat workflow runs
+  e) Respond to reviews within 24 hours
+  f) Plan first update with any feedback
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHASE 7 — REVENUECAT FINAL CONFIGURATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+7.1  WEBHOOK FOR SUBSCRIPTION SYNC
+──────────────────────────────────
+  a) In RevenueCat → Project Settings → Webhooks
+  b) Add webhook URL:
+     https://YOUR_SUPABASE_PROJECT.supabase.co/functions/v1/sync-subscription
+  c) Authorization header: Bearer YOUR_SUPABASE_ANON_KEY
+  d) Events to send: All subscription events
+     (INITIAL_PURCHASE, RENEWAL, CANCELLATION, EXPIRATION, etc.)
+  e) This ensures subscription_status stays in sync server-side
+
+7.2  TRANSFER FROM SANDBOX TO PRODUCTION (RevenueCat)
+────────────────────────────────────────────────────
+  a) In RevenueCat → Project Settings
+  b) Under "App" section for Google Play:
+     - Verify the package name matches: com.yourcompany.afterword
+     - Verify the Service Account JSON is uploaded
+  c) No "mode switch" needed — RevenueCat automatically uses production
+     when the app is downloaded from the real Play Store
+  d) Sandbox purchases only work during testing tracks
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHASE 8 — FRIEND / TESTER USE-CASE SCENARIOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Share these scenarios with friends who are testing the app:
+
+SCENARIO 1: "The Love Letter"
+  You want to write a heartfelt message to your partner that they'll only
+  receive if something happens to you. Create a vault entry with action
+  "Send", enter their email as recipient, write your message. Check in
+  every few weeks to keep it sealed.
+
+SCENARIO 2: "The Business Succession Plan"
+  You have passwords, account details, or instructions for your business
+  partner. Create vault entries for each piece of information, set the
+  recipient to your partner's email. If you become incapacitated, they
+  receive everything they need to keep things running.
+
+SCENARIO 3: "Protocol Zero — Destroy Everything"
+  You have private notes, journals, or secrets you want permanently
+  erased if you're gone. Create entries with action "Protocol Zero".
+  When the timer expires, everything is cryptographically destroyed —
+  no one ever sees it.
+
+SCENARIO 4: "The Time Capsule"
+  Write messages to your future self or loved ones. Set a long timer
+  (Lifetime plan: up to 10 years). Stop checking in when you're ready
+  for the messages to be delivered.
+
+SCENARIO 5: "Voice From Beyond"
+  Record an audio message (Lifetime plan) for someone special. Your
+  voice, encrypted and time-locked, delivered only when the time comes.
+
+FULL APP EXPLANATION FOR FRIENDS:
+  Afterword is a time-locked vault. You write encrypted messages, record
+  audio, or store notes. Each entry has a recipient and an action (send
+  or destroy). There's a check-in timer — as long as you hold the Soul
+  Fire orb regularly, your vault stays sealed. If you stop checking in
+  and the timer expires, Afterword automatically executes your protocol:
+  sending entries to recipients or permanently erasing them. Everything
+  is end-to-end encrypted — even the app developers cannot read your
+  content. Recipients get a secure browser link and a private key to
+  decrypt their message. The key is never sent to any server.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  QUICK REFERENCE: FILES TO CHECK BEFORE PRODUCTION BUILD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  pubspec.yaml               → version number
+  android/app/build.gradle   → signing config, applicationId, minSdk
+  android/app/google-services.json → PRODUCTION Firebase config
+  android/key.properties     → keystore path and passwords (NOT in git)
+  lib/main.dart              → dart-define keys (set at build time)
+  .github/workflows/         → secrets for CI/CD
+  GitHub Secrets              → all production keys/URLs
+
+================================================================================
+  END OF PLAY STORE LAUNCH GUIDE
+================================================================================

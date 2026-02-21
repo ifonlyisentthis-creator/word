@@ -754,8 +754,9 @@ a {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  flex-wrap: wrap;
   color: var(--muted);
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
 }
 
 .footer__meta {
@@ -769,6 +770,11 @@ a {
   display: flex;
   gap: 18px;
   flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.footer__links a:hover {
+  color: var(--text);
 }
 
 .reveal {

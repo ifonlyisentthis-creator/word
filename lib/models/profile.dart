@@ -44,7 +44,9 @@ class Profile {
           : 'Afterword',
       status: (map['status'] as String?) ?? 'active',
       subscriptionStatus: (map['subscription_status'] as String?) ?? 'free',
-      lastCheckIn: DateTime.parse(map['last_check_in'] as String),
+      lastCheckIn: map['last_check_in'] != null
+          ? DateTime.parse(map['last_check_in'] as String)
+          : DateTime.now().toUtc(),
       timerDays: (map['timer_days'] as num?)?.toInt() ?? 30,
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'] as String)
