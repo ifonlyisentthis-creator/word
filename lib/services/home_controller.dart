@@ -241,7 +241,10 @@ class HomeController extends ChangeNotifier {
 
       _errorMessage = null;
 
-      if (changed) notifyListeners();
+      if (changed) {
+        _themeProvider.syncFromProfile(profile);
+        notifyListeners();
+      }
     } catch (_) {
       // Silent background refresh — no error shown
     }
@@ -389,7 +392,18 @@ class HomeController extends ChangeNotifier {
     _setLoading(true);
 
     try {
+      final previousCheckIn = _profile?.lastCheckIn;
+
       _profile = await _profileService.updateCheckIn(_user!.id);
+
+      // Detect server-side cooldown no-op: if the returned lastCheckIn is
+      // identical to what we had before, the server's 12-hour guard blocked
+      // the write. Treat this as a cooldown so the UI stays truthful.
+      if (previousCheckIn != null &&
+          _profile!.lastCheckIn.isAtSameMomentAs(previousCheckIn)) {
+        _lastWriteAt = DateTime.now(); // prevent further attempts this session
+        return CheckInResult.cooldown;
+      }
 
       _lastWriteAt = DateTime.now();
 
