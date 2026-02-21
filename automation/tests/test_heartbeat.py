@@ -106,6 +106,10 @@ class _DummyResponse:
         self.status_code = status_code
         self.text = text
 
+    def json(self):
+        import json as _json
+        return _json.loads(self.text)
+
 
 class _ProfilesQuery:
     def __init__(self) -> None:
@@ -916,6 +920,100 @@ class HeartbeatTests(unittest.TestCase):
         # All 3 locks released after batch failure
         self.assertEqual(sorted(released_ids), ["s-0", "s-1", "s-2"])
         mock_mark.assert_not_called()
+
+
+    def test_send_batch_emails_chunks_over_100(self):
+        """send_batch_emails splits >100 payloads into multiple chunk requests."""
+        call_payloads = []
+
+        def _mock_post(url, *, headers, payload, idempotency_key=None, timeout=30):
+            call_payloads.append((len(payload), idempotency_key))
+            return _DummyResponse(200, '{"data": []}')
+
+        with patch.object(heartbeat, "_post_json_with_retries", side_effect=_mock_post):
+            heartbeat.send_batch_emails("key", [{"mock": i} for i in range(250)],
+                                        idempotency_key="batch-test")
+
+        # Should be 3 chunks: 100 + 100 + 50
+        self.assertEqual(len(call_payloads), 3)
+        self.assertEqual(call_payloads[0][0], 100)
+        self.assertEqual(call_payloads[1][0], 100)
+        self.assertEqual(call_payloads[2][0], 50)
+        # Idempotency keys should have chunk suffixes
+        self.assertEqual(call_payloads[0][1], "batch-test-0")
+        self.assertEqual(call_payloads[1][1], "batch-test-1")
+        self.assertEqual(call_payloads[2][1], "batch-test-2")
+
+    def test_send_batch_emails_no_suffix_under_100(self):
+        """send_batch_emails uses original key (no suffix) when <=100 payloads."""
+        call_keys = []
+
+        def _mock_post(url, *, headers, payload, idempotency_key=None, timeout=30):
+            call_keys.append(idempotency_key)
+            return _DummyResponse(200, '{"data": []}')
+
+        with patch.object(heartbeat, "_post_json_with_retries", side_effect=_mock_post):
+            heartbeat.send_batch_emails("key", [{"mock": i} for i in range(50)],
+                                        idempotency_key="batch-small")
+
+        self.assertEqual(len(call_keys), 1)
+        self.assertEqual(call_keys[0], "batch-small")  # No suffix
+
+    def test_reset_expired_grace_profiles(self):
+        """Inactive profiles with expired grace and zero entries are reset."""
+        reset_uids = []
+        profile_select_calls = {"n": 0}
+
+        class _MockQuery:
+            """Chainable mock for both profiles and vault_entries queries."""
+            def __init__(self, *, return_data=None, return_count=0):
+                self._data = return_data or []
+                self._count = return_count
+            def select(self, *a, **kw): return self
+            def eq(self, *a, **kw): return self
+            def lt(self, *a, **kw): return self
+            def gt(self, *a, **kw): return self
+            def order(self, *a, **kw): return self
+            def limit(self, *a, **kw): return self
+            def update(self, payload):
+                self._update_payload = payload
+                return self
+            def execute(self):
+                return types.SimpleNamespace(data=self._data, count=self._count)
+
+        class _GraceClient:
+            def table(self_inner, name):
+                if name == "profiles":
+                    profile_select_calls["n"] += 1
+                    if profile_select_calls["n"] == 1:
+                        # First profiles query: return one inactive profile
+                        q = _MockQuery(return_data=[{"id": "grace-user-1"}])
+                    else:
+                        # Second profiles query (pagination done) or update
+                        q = _MockQuery(return_data=[])
+                    # Wrap update to track which UIDs are reset
+                    orig_update = q.update
+                    def _track_update(payload):
+                        class _UChain:
+                            def eq(self2, col, val):
+                                reset_uids.append(val)
+                                return self2
+                            def execute(self2):
+                                return types.SimpleNamespace(data=[], count=0)
+                        return _UChain()
+                    q.update = _track_update
+                    return q
+                if name == "vault_entries":
+                    return _MockQuery(return_data=[], return_count=0)
+                raise AssertionError(f"Unexpected table: {name}")
+
+        heartbeat._reset_expired_grace_profiles(
+            _GraceClient(),
+            "2026-01-01T00:00:00+00:00",
+            "2026-02-22T00:00:00+00:00",
+        )
+
+        self.assertIn("grace-user-1", reset_uids)
 
 
 if __name__ == "__main__":

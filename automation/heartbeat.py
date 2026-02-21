@@ -1093,35 +1093,60 @@ def send_unlock_email(
         raise RuntimeError(f"Resend error: {response.status_code} {response.text}")
 
 
+RESEND_BATCH_LIMIT = 100
+
+
 def send_batch_emails(
     api_key: str,
     payloads: list[dict],
     *,
     idempotency_key: str | None = None,
 ) -> list[dict]:
-    """Send up to 100 emails via the Resend batch endpoint (one API request).
+    """Send emails via the Resend batch endpoint, chunking if >100.
 
-    Returns a list of ``{"id": "..."}`` dicts on success.
-    Raises RuntimeError on API error.
+    Resend limits batch requests to 100 emails each.  This function
+    automatically splits larger lists into sequential chunk requests,
+    appending a chunk index to the idempotency key for uniqueness.
+
+    Returns a flat list of ``{"id": "..."}`` dicts on success.
+    Raises RuntimeError on the first chunk that fails (already-sent
+    chunks are NOT rolled back — those emails are delivered).
     """
     if not payloads:
         return []
 
-    response = _post_json_with_retries(
-        "https://api.resend.com/emails/batch",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        payload=payloads,
-        idempotency_key=idempotency_key,
-    )
+    all_results: list[dict] = []
+    for chunk_idx in range(0, len(payloads), RESEND_BATCH_LIMIT):
+        chunk = payloads[chunk_idx : chunk_idx + RESEND_BATCH_LIMIT]
+        chunk_key = None
+        if idempotency_key:
+            chunk_key = (
+                idempotency_key
+                if len(payloads) <= RESEND_BATCH_LIMIT
+                else f"{idempotency_key}-{chunk_idx // RESEND_BATCH_LIMIT}"
+            )
 
-    if response.status_code >= 400:
-        raise RuntimeError(f"Resend batch error: {response.status_code} {response.text}")
+        response = _post_json_with_retries(
+            "https://api.resend.com/emails/batch",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            payload=chunk,
+            idempotency_key=chunk_key,
+        )
 
-    data = response.json()
-    return data.get("data", data) if isinstance(data, dict) else data
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Resend batch error (chunk {chunk_idx // RESEND_BATCH_LIMIT}): "
+                f"{response.status_code} {response.text}"
+            )
+
+        data = response.json()
+        chunk_results = data.get("data", data) if isinstance(data, dict) else data
+        all_results.extend(chunk_results if isinstance(chunk_results, list) else [])
+
+    return all_results
 
 
 
@@ -1494,6 +1519,59 @@ def cleanup_sent_entries(client) -> None:
                 print(f"User {uid}: grace period ended, account reset to fresh state")
         except Exception:  # noqa: BLE001
             print(f"Failed to check/reset user {uid}")
+
+    # ── Sweep: reset inactive profiles whose grace period expired ──
+    # Handles edge case where all sent entries were already cleaned up
+    # (or never existed) but the profile is still stuck as 'inactive'.
+    _reset_expired_grace_profiles(client, cutoff, now_iso)
+
+
+def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
+    """Find inactive profiles with expired grace and reset them to active."""
+    last_seen_id: str | None = None
+    while True:
+        query = (
+            client.table("profiles")
+            .select("id")
+            .eq("status", "inactive")
+            .lt("protocol_executed_at", cutoff)
+            .order("id")
+            .limit(200)
+        )
+        if last_seen_id is not None:
+            query = query.gt("id", last_seen_id)
+        response = query.execute()
+        batch = response.data or []
+        if not batch:
+            break
+        last_seen_id = str(batch[-1]["id"])
+
+        for profile in batch:
+            uid = str(profile["id"])
+            try:
+                # Only reset if user has zero remaining vault entries
+                remaining = (
+                    client.table("vault_entries")
+                    .select("id", count="exact")
+                    .eq("user_id", uid)
+                    .execute()
+                )
+                if (remaining.count or 0) > 0:
+                    continue
+
+                client.table("profiles").update({
+                    "status": "active",
+                    "timer_days": 30,
+                    "last_check_in": now_iso,
+                    "protocol_executed_at": None,
+                    "warning_sent_at": None,
+                    "push_66_sent_at": None,
+                    "push_33_sent_at": None,
+                    "last_entry_at": None,
+                }).eq("id", uid).execute()
+                print(f"User {uid}: expired grace period reset (no remaining entries)")
+            except Exception:  # noqa: BLE001
+                print(f"Failed to reset expired grace profile {uid}")
 
 
 def cleanup_bot_accounts(client, now: datetime) -> None:
