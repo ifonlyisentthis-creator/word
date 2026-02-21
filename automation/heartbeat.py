@@ -1527,12 +1527,20 @@ def cleanup_sent_entries(client) -> None:
 
 
 def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
-    """Find inactive profiles with expired grace and reset them to active."""
+    """Find inactive profiles with expired grace and reset them to active.
+
+    Two scenarios:
+      A) Zero vault entries → full reset to fresh active state.
+      B) Unprocessed (active/sending) entries still exist → set profile back
+         to 'active' with an already-expired timer so the main loop picks
+         them up next cycle and processes them.  This handles the edge case
+         where process_expired_entries partially failed.
+    """
     last_seen_id: str | None = None
     while True:
         query = (
             client.table("profiles")
-            .select("id")
+            .select("id,timer_days")
             .eq("status", "inactive")
             .lt("protocol_executed_at", cutoff)
             .order("id")
@@ -1549,27 +1557,47 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
         for profile in batch:
             uid = str(profile["id"])
             try:
-                # Only reset if user has zero remaining vault entries
-                remaining = (
+                # Count unprocessed entries (active or sending)
+                unprocessed = (
                     client.table("vault_entries")
                     .select("id", count="exact")
                     .eq("user_id", uid)
+                    .in_("status", ["active", "sending"])
                     .execute()
                 )
-                if (remaining.count or 0) > 0:
-                    continue
+                unprocessed_count = unprocessed.count or 0
 
-                client.table("profiles").update({
-                    "status": "active",
-                    "timer_days": 30,
-                    "last_check_in": now_iso,
-                    "protocol_executed_at": None,
-                    "warning_sent_at": None,
-                    "push_66_sent_at": None,
-                    "push_33_sent_at": None,
-                    "last_entry_at": None,
-                }).eq("id", uid).execute()
-                print(f"User {uid}: expired grace period reset (no remaining entries)")
+                if unprocessed_count > 0:
+                    # Scenario B: re-activate with expired timer for retry
+                    timer_days = profile.get("timer_days") or 30
+                    expired_check_in = (
+                        datetime.now(timezone.utc) - timedelta(days=timer_days + 1)
+                    ).isoformat()
+                    client.table("profiles").update({
+                        "status": "active",
+                        "last_check_in": expired_check_in,
+                        "protocol_executed_at": None,
+                        "warning_sent_at": None,
+                        "push_66_sent_at": None,
+                        "push_33_sent_at": None,
+                    }).eq("id", uid).execute()
+                    print(
+                        f"User {uid}: grace expired but {unprocessed_count} unprocessed "
+                        f"entries remain — re-activated with expired timer for retry"
+                    )
+                else:
+                    # Scenario A: zero unprocessed entries → full fresh reset
+                    client.table("profiles").update({
+                        "status": "active",
+                        "timer_days": 30,
+                        "last_check_in": now_iso,
+                        "protocol_executed_at": None,
+                        "warning_sent_at": None,
+                        "push_66_sent_at": None,
+                        "push_33_sent_at": None,
+                        "last_entry_at": None,
+                    }).eq("id", uid).execute()
+                    print(f"User {uid}: expired grace period reset (no remaining entries)")
             except Exception:  # noqa: BLE001
                 print(f"Failed to reset expired grace profile {uid}")
 

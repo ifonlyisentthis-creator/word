@@ -959,9 +959,10 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(len(call_keys), 1)
         self.assertEqual(call_keys[0], "batch-small")  # No suffix
 
-    def test_reset_expired_grace_profiles(self):
-        """Inactive profiles with expired grace and zero entries are reset."""
+    def test_reset_expired_grace_profiles_no_entries(self):
+        """Scenario A: Inactive profile with zero entries is fully reset."""
         reset_uids = []
+        update_payloads = []
         profile_select_calls = {"n": 0}
 
         class _MockQuery:
@@ -971,6 +972,7 @@ class HeartbeatTests(unittest.TestCase):
                 self._count = return_count
             def select(self, *a, **kw): return self
             def eq(self, *a, **kw): return self
+            def in_(self, *a, **kw): return self
             def lt(self, *a, **kw): return self
             def gt(self, *a, **kw): return self
             def order(self, *a, **kw): return self
@@ -986,14 +988,11 @@ class HeartbeatTests(unittest.TestCase):
                 if name == "profiles":
                     profile_select_calls["n"] += 1
                     if profile_select_calls["n"] == 1:
-                        # First profiles query: return one inactive profile
-                        q = _MockQuery(return_data=[{"id": "grace-user-1"}])
+                        q = _MockQuery(return_data=[{"id": "grace-user-1", "timer_days": 30}])
                     else:
-                        # Second profiles query (pagination done) or update
                         q = _MockQuery(return_data=[])
-                    # Wrap update to track which UIDs are reset
-                    orig_update = q.update
                     def _track_update(payload):
+                        update_payloads.append(payload)
                         class _UChain:
                             def eq(self2, col, val):
                                 reset_uids.append(val)
@@ -1014,6 +1013,72 @@ class HeartbeatTests(unittest.TestCase):
         )
 
         self.assertIn("grace-user-1", reset_uids)
+        # Scenario A: full reset sets last_check_in to now_iso
+        self.assertEqual(update_payloads[0]["last_check_in"], "2026-02-22T00:00:00+00:00")
+        self.assertEqual(update_payloads[0]["timer_days"], 30)
+
+    def test_reset_expired_grace_profiles_with_unprocessed_entries(self):
+        """Scenario B: Inactive profile with active entries is re-activated with expired timer."""
+        reset_uids = []
+        update_payloads = []
+        profile_select_calls = {"n": 0}
+
+        class _MockQuery:
+            def __init__(self, *, return_data=None, return_count=0):
+                self._data = return_data or []
+                self._count = return_count
+            def select(self, *a, **kw): return self
+            def eq(self, *a, **kw): return self
+            def in_(self, *a, **kw): return self
+            def lt(self, *a, **kw): return self
+            def gt(self, *a, **kw): return self
+            def order(self, *a, **kw): return self
+            def limit(self, *a, **kw): return self
+            def update(self, payload):
+                self._update_payload = payload
+                return self
+            def execute(self):
+                return types.SimpleNamespace(data=self._data, count=self._count)
+
+        class _GraceClient:
+            def table(self_inner, name):
+                if name == "profiles":
+                    profile_select_calls["n"] += 1
+                    if profile_select_calls["n"] == 1:
+                        q = _MockQuery(return_data=[{"id": "grace-user-2", "timer_days": 30}])
+                    else:
+                        q = _MockQuery(return_data=[])
+                    def _track_update(payload):
+                        update_payloads.append(payload)
+                        class _UChain:
+                            def eq(self2, col, val):
+                                reset_uids.append(val)
+                                return self2
+                            def execute(self2):
+                                return types.SimpleNamespace(data=[], count=0)
+                        return _UChain()
+                    q.update = _track_update
+                    return q
+                if name == "vault_entries":
+                    # 2 unprocessed active entries
+                    return _MockQuery(return_data=[], return_count=2)
+                raise AssertionError(f"Unexpected table: {name}")
+
+        heartbeat._reset_expired_grace_profiles(
+            _GraceClient(),
+            "2026-01-01T00:00:00+00:00",
+            "2026-02-22T00:00:00+00:00",
+        )
+
+        self.assertIn("grace-user-2", reset_uids)
+        # Scenario B: re-activated with expired timer, NOT a full reset
+        self.assertEqual(update_payloads[0]["status"], "active")
+        self.assertIsNone(update_payloads[0]["protocol_executed_at"])
+        # timer_days should NOT be reset — keep original
+        self.assertNotIn("timer_days", update_payloads[0])
+        # last_check_in should be in the past (expired)
+        check_in = datetime.fromisoformat(update_payloads[0]["last_check_in"])
+        self.assertTrue(check_in < datetime.now(timezone.utc) - timedelta(days=30))
 
 
 if __name__ == "__main__":
