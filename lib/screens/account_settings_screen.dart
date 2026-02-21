@@ -354,64 +354,66 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           final isMatch = tc.text.trim().toUpperCase() == 'DELETE';
           return AlertDialog(
             title: const Text('Delete account?'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'This permanently deletes your profile and all vault data, including audio. This cannot be undone.',
-                ),
-                if (isPaidUser) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .error
-                          .withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'This permanently deletes your profile and all vault data, including audio. This cannot be undone.',
+                  ),
+                  if (isPaidUser) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
                         color: Theme.of(context)
                             .colorScheme
                             .error
-                            .withValues(alpha: 0.3),
+                            .withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .error
+                              .withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.error),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              isLifetime
+                                  ? 'Your Lifetime subscription will be permanently lost. You will need to re-purchase if you create a new account.'
+                                  : 'Your Pro subscription will be lost. You will need to re-subscribe if you create a new account.',
+                              style:
+                                  Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: Theme.of(context).colorScheme.error,
+                                        height: 1.4,
+                                      ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded,
-                            size: 16,
-                            color: Theme.of(context).colorScheme.error),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            isLifetime
-                                ? 'Your Lifetime subscription will be permanently lost. You will need to re-purchase if you create a new account.'
-                                : 'Your Pro subscription will be lost. You will need to re-subscribe if you create a new account.',
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Theme.of(context).colorScheme.error,
-                                      height: 1.4,
-                                    ),
-                          ),
-                        ),
-                      ],
+                  ],
+                  const SizedBox(height: 12),
+                  const Text('Type DELETE to confirm.'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: tc,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      hintText: 'DELETE',
+                      filled: true,
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                const Text('Type DELETE to confirm.'),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: tc,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText: 'DELETE',
-                    filled: true,
-                  ),
-                ),
-              ],
+              ),
             ),
             actions: [
               TextButton(
