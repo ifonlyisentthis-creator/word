@@ -686,5 +686,176 @@ class HeartbeatTests(unittest.TestCase):
         mock_send.assert_not_called()
 
 
+    def test_email_validation_regex(self):
+        """Basic email validation catches obviously invalid addresses."""
+        self.assertTrue(heartbeat._EMAIL_RE.match("user@example.com"))
+        self.assertTrue(heartbeat._EMAIL_RE.match("a+b@sub.domain.org"))
+        self.assertIsNone(heartbeat._EMAIL_RE.match(""))
+        self.assertIsNone(heartbeat._EMAIL_RE.match("no-at-sign"))
+        self.assertIsNone(heartbeat._EMAIL_RE.match("@no-local.com"))
+        self.assertIsNone(heartbeat._EMAIL_RE.match("spaces in@email.com"))
+
+    def test_recipient_decryption_failure_preserves_entry(self):
+        """If recipient email decryption throws, entry is preserved, not deleted."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {
+                "id": "entry-dec-fail",
+                "action_type": "send",
+                "title": "Decrypt Fail",
+                "payload_encrypted": "payload",
+                "recipient_email_encrypted": "corrupt-envelope",
+                "data_key_encrypted": "dk",
+                "hmac_signature": "sig",
+            }
+        ]
+        profile = {
+            "id": "user-dec",
+            "sender_name": "Alice",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+
+        call_count = {"decrypt": 0}
+
+        def _decrypt_side_effect(encoded, secret):
+            call_count["decrypt"] += 1
+            if call_count["decrypt"] == 1:
+                return b"h" * 32  # HMAC key
+            raise ValueError("Corrupt ciphertext")
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "extract_server_ciphertext", side_effect=lambda v: v),
+            patch.object(heartbeat, "decrypt_with_server_secret",
+                         side_effect=_decrypt_side_effect),
+            patch.object(heartbeat, "compute_hmac_signature", return_value="sig"),
+            patch.object(heartbeat, "release_entry_lock") as mock_release,
+            patch.object(heartbeat, "delete_entry") as mock_delete,
+            patch.object(heartbeat, "send_unlock_email") as mock_send,
+        ):
+            had_send, input_send_count = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertFalse(had_send)
+        self.assertEqual(input_send_count, 1)
+        mock_delete.assert_not_called()
+        mock_release.assert_called_once()
+        mock_send.assert_not_called()
+
+    def test_data_key_decryption_failure_preserves_entry(self):
+        """If data key decryption throws, entry is preserved, not deleted."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {
+                "id": "entry-dk-fail",
+                "action_type": "send",
+                "title": "DK Fail",
+                "payload_encrypted": "payload",
+                "recipient_email_encrypted": "enc-recipient",
+                "data_key_encrypted": "corrupt-dk",
+                "hmac_signature": "sig",
+            }
+        ]
+        profile = {
+            "id": "user-dk",
+            "sender_name": "Alice",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+
+        call_count = {"decrypt": 0}
+
+        def _decrypt_side_effect(encoded, secret):
+            call_count["decrypt"] += 1
+            if call_count["decrypt"] == 1:
+                return b"h" * 32  # HMAC key
+            if call_count["decrypt"] == 2:
+                return b"user@example.com"  # recipient email
+            raise ValueError("Corrupt data key")
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "extract_server_ciphertext", side_effect=lambda v: v),
+            patch.object(heartbeat, "decrypt_with_server_secret",
+                         side_effect=_decrypt_side_effect),
+            patch.object(heartbeat, "compute_hmac_signature", return_value="sig"),
+            patch.object(heartbeat, "release_entry_lock") as mock_release,
+            patch.object(heartbeat, "delete_entry") as mock_delete,
+            patch.object(heartbeat, "send_unlock_email") as mock_send,
+        ):
+            had_send, input_send_count = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertFalse(had_send)
+        self.assertEqual(input_send_count, 1)
+        mock_delete.assert_not_called()
+        mock_release.assert_called_once()
+        mock_send.assert_not_called()
+
+    def test_multiple_send_entries_all_sent_different_recipients(self):
+        """4 send entries with 2 different emails — ALL must be sent."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {"id": f"s-{i}", "action_type": "send", "title": f"Entry {i}",
+             "payload_encrypted": f"p{i}", "recipient_email_encrypted": f"r{i}",
+             "data_key_encrypted": f"dk{i}", "hmac_signature": f"sig{i}"}
+            for i in range(4)
+        ]
+        profile = {
+            "id": "user-multi",
+            "sender_name": "Alice",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+        sent_to = []
+        emails = ["a@x.com", "a@x.com", "b@y.com", "b@y.com"]
+
+        call_count = {"decrypt": 0}
+
+        def _decrypt_side_effect(encoded, secret):
+            call_count["decrypt"] += 1
+            if call_count["decrypt"] == 1:
+                return b"h" * 32  # HMAC key
+            # Pattern: recipient, data_key, recipient, data_key, ...
+            idx = call_count["decrypt"] - 2
+            if idx % 2 == 0:
+                email_idx = idx // 2
+                return emails[email_idx].encode("utf-8")
+            return b"k" * 32  # data key
+
+        def _track_send(*args, **kwargs):
+            sent_to.append(args[0])  # recipient_email
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "extract_server_ciphertext", side_effect=lambda v: v),
+            patch.object(heartbeat, "decrypt_with_server_secret",
+                         side_effect=_decrypt_side_effect),
+            patch.object(heartbeat, "compute_hmac_signature",
+                         side_effect=lambda msg, key: {
+                             f"p{i}|r{i}": f"sig{i}" for i in range(4)
+                         }.get(msg, "nomatch")),
+            patch.object(heartbeat, "send_unlock_email", side_effect=_track_send),
+            patch.object(heartbeat, "mark_entry_sent", return_value=True),
+            patch.object(heartbeat, "send_executed_push", return_value=True),
+            patch.object(heartbeat.time, "sleep") as mock_sleep,
+        ):
+            had_send, input_send_count = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertTrue(had_send)
+        self.assertEqual(input_send_count, 4)
+        self.assertEqual(sent_to, ["a@x.com", "a@x.com", "b@y.com", "b@y.com"])
+        # Inter-send delay called for entries 2, 3, 4 (after first send)
+        self.assertEqual(mock_sleep.call_count, 3)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,6 +12,8 @@ import os
 
 import random
 
+import re
+
 import sys
 
 import time
@@ -61,6 +63,11 @@ REQUEST_TIMEOUT_SECONDS = 30
 HTTP_RETRY_DELAYS_SECONDS = (1, 3, 8)
 
 STALE_SENDING_LOCK_MINUTES = 30
+
+# Minimum seconds between consecutive email sends to avoid Resend rate limits.
+INTER_SEND_DELAY_SECONDS = 1.0
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 MAX_RUNTIME_SECONDS = 5.5 * 3600  # 5h30m — exit gracefully before GH Actions 6h limit
 
@@ -1303,14 +1310,23 @@ def process_expired_entries(
 
 
 
-            recipient_ciphertext = extract_server_ciphertext(recipient_encrypted)
+            # ── Step 1: Decrypt recipient email ──
+            try:
+                recipient_ciphertext = extract_server_ciphertext(recipient_encrypted)
+                recipient_email = decrypt_with_server_secret(
+                    recipient_ciphertext, server_secret
+                ).decode("utf-8").strip()
+            except Exception as dec_exc:  # noqa: BLE001
+                print(f"CRITICAL: Failed to decrypt recipient for send entry {entry_id} user {user_id}: {dec_exc}")
+                release_entry_lock(client, entry_id)
+                continue
 
-            recipient_email = decrypt_with_server_secret(
+            if not _EMAIL_RE.match(recipient_email):
+                print(f"CRITICAL: Invalid recipient email format for send entry {entry_id} user {user_id}: '{recipient_email}' — entry preserved")
+                release_entry_lock(client, entry_id)
+                continue
 
-                recipient_ciphertext, server_secret
-
-            ).decode("utf-8")
-
+            # ── Step 2: Decrypt data key ──
             data_key_encrypted = entry.get("data_key_encrypted")
 
             if not data_key_encrypted:
@@ -1318,17 +1334,23 @@ def process_expired_entries(
                 release_entry_lock(client, entry_id)
                 continue
 
-
-
-            data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
-
-            data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
+            try:
+                data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
+                data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
+            except Exception as dk_exc:  # noqa: BLE001
+                print(f"CRITICAL: Failed to decrypt data_key for send entry {entry_id} user {user_id}: {dk_exc}")
+                release_entry_lock(client, entry_id)
+                continue
 
             security_key = base64.b64encode(data_key_bytes).decode("utf-8")
 
             viewer_link = build_viewer_link(viewer_base_url, entry_id)
 
             entry_title = entry.get("title") or "Untitled"
+
+            # ── Step 3: Send email (with rate-limit delay) ──
+            if had_send:
+                time.sleep(INTER_SEND_DELAY_SECONDS)
 
             send_unlock_email(
 
@@ -1352,15 +1374,11 @@ def process_expired_entries(
 
             unlock_email_sent = True
 
-
-
             had_send = True
 
             if not mark_entry_sent(client, entry_id, now):
 
                 raise RuntimeError("Failed to mark entry as sent")
-
-
 
             try:
 
@@ -1412,7 +1430,7 @@ def process_expired_entries(
             except Exception:  # noqa: BLE001
                 pass
 
-            print(f"Failed to process entry {entry_id}: {exc}")
+            print(f"SEND FAILED entry {entry_id} user {user_id}: {type(exc).__name__}: {exc}")
 
     return had_send, input_send_count
 
