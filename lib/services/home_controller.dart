@@ -370,7 +370,14 @@ class HomeController extends ChangeNotifier {
     final sessionCooldownOk = _lastWriteAt == null ||
         now.difference(_lastWriteAt!) >= _checkInCooldown;
 
-    final needsWrite = serverCooldownOk && sessionCooldownOk;
+    // First press in a session always goes through. This prevents false
+    // cooldown on fresh accounts whose last_check_in was auto-set by the
+    // DB default at profile creation (within the 12h window).  After the
+    // first write _lastWriteAt is set, so subsequent presses respect both
+    // cooldown layers normally.
+    final firstPressInSession = _lastWriteAt == null;
+    final needsWrite = firstPressInSession ||
+        (serverCooldownOk && sessionCooldownOk);
 
     if (!needsWrite) {
       // Cooldown active — skip DB write. Timer UI stays as-is because

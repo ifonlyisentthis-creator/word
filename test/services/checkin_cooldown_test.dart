@@ -7,7 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// *pure decision logic* here in isolation.
 ///
 /// The gate logic is:
-///   needsWrite = serverCooldownOk && sessionCooldownOk
+///   firstPressInSession = lastWriteAt == null
+///   needsWrite = firstPressInSession || (serverCooldownOk && sessionCooldownOk)
 ///
 ///   serverCooldownOk = lastCheckIn == null
 ///       || now - lastCheckIn >= 12 hours
@@ -38,7 +39,9 @@ String checkInGate({
   final sessionCooldownOk = sessionLastWriteAt == null ||
       now.difference(sessionLastWriteAt) >= _cooldown;
 
-  final needsWrite = serverCooldownOk && sessionCooldownOk;
+  final firstPressInSession = sessionLastWriteAt == null;
+  final needsWrite = firstPressInSession ||
+      (serverCooldownOk && sessionCooldownOk);
 
   return needsWrite ? 'success' : 'cooldown';
 }
@@ -62,11 +65,19 @@ void main() {
       );
     });
 
-    test('server check-in recent (< 12h) → cooldown', () {
+    test('server check-in recent (< 12h) but already wrote this session → cooldown', () {
       final fiveHoursAgo = now.subtract(const Duration(hours: 5));
       expect(
         checkInGate(now: now, serverLastCheckIn: fiveHoursAgo, sessionLastWriteAt: fiveHoursAgo),
         'cooldown',
+      );
+    });
+
+    test('server check-in recent (< 12h) but first press in session → success (fresh account fix)', () {
+      final fiveMinutesAgo = now.subtract(const Duration(minutes: 5));
+      expect(
+        checkInGate(now: now, serverLastCheckIn: fiveMinutesAgo, sessionLastWriteAt: null),
+        'success',
       );
     });
 

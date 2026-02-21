@@ -11,6 +11,7 @@ import '../widgets/premium_page_route.dart';
 import 'account_settings_screen.dart';
 import 'customization_screen.dart';
 import 'history_screen.dart';
+import 'faq_help_screen.dart';
 import 'how_it_works_screen.dart';
 import 'my_vault_page.dart';
 import 'privacy_policy_screen.dart';
@@ -175,13 +176,24 @@ class AppDrawer extends StatelessWidget {
                     },
                   ),
                   _DrawerItem(
-                    icon: Icons.help_outline,
-                    label: 'Help & Support',
+                    icon: Icons.info_outline,
+                    label: 'How It Works',
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
                         PremiumPageRoute(page: const HowItWorksScreen()),
+                      );
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.help_outline,
+                    label: 'FAQ & Help',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        PremiumPageRoute(page: const FaqHelpScreen()),
                       );
                     },
                   ),
@@ -273,9 +285,7 @@ class AppDrawer extends StatelessWidget {
               label: 'Sign Out',
               onTap: () {
                 final rc = context.read<RevenueCatController>();
-                final tp = context.read<ThemeProvider>();
                 Navigator.pop(context);
-                tp.reset();
                 authController.prepareSignOut();
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   await rc.logOut();
