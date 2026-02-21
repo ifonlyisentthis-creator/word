@@ -64,9 +64,6 @@ HTTP_RETRY_DELAYS_SECONDS = (1, 3, 8)
 
 STALE_SENDING_LOCK_MINUTES = 30
 
-# Minimum seconds between consecutive email sends to avoid Resend rate limits.
-INTER_SEND_DELAY_SECONDS = 1.0
-
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 MAX_RUNTIME_SECONDS = 5.5 * 3600  # 5h30m — exit gracefully before GH Actions 6h limit
@@ -976,26 +973,20 @@ def send_executed_push(
 
 
 
-def send_unlock_email(
-
+def build_unlock_email_payload(
     recipient_email: str,
-
     entry_id: str,
-
     sender_name: str,
-
     entry_title: str,
-
     viewer_link: str,
-
     security_key: str,
-
-    resend_key: str,
-
     from_email: str,
+) -> dict:
+    """Build the Resend email payload dict for a single unlock email.
 
-) -> None:
-
+    Returns a dict suitable for both the single send and batch endpoints.
+    """
+    formatted_from = _format_from_address(from_email)
     subject = f"Message from {sender_name}"
 
     text = (
@@ -1023,7 +1014,7 @@ def send_unlock_email(
     safe_title = html_mod.escape(entry_title)
     safe_link = html_mod.escape(viewer_link)
 
-    html = (
+    body_html = (
         f'<p style="margin:0 0 16px"><strong>{safe_sender}</strong> left you a secure '
         'message using Afterword, a time-locked digital vault app.</p>'
 
@@ -1062,15 +1053,75 @@ def send_unlock_email(
         'If you do not recognize the sender, you may safely ignore this email.</p>'
     )
 
-    send_email(
-        resend_key,
-        from_email,
-        recipient_email,
-        subject,
-        text,
-        html,
+    return {
+        "from": formatted_from,
+        "to": [recipient_email],
+        "subject": subject,
+        "text": text,
+        "html": wrap_email_html(body_html),
+        "headers": {
+            "List-Unsubscribe": "<mailto:afterword.app@gmail.com?subject=Unsubscribe>",
+        },
+    }
+
+
+def send_unlock_email(
+    recipient_email: str,
+    entry_id: str,
+    sender_name: str,
+    entry_title: str,
+    viewer_link: str,
+    security_key: str,
+    resend_key: str,
+    from_email: str,
+) -> None:
+    """Send a single unlock email.  Kept for backward compatibility / simple cases."""
+    payload = build_unlock_email_payload(
+        recipient_email, entry_id, sender_name, entry_title,
+        viewer_link, security_key, from_email,
+    )
+    response = _post_json_with_retries(
+        "https://api.resend.com/emails",
+        headers={
+            "Authorization": f"Bearer {resend_key}",
+            "Content-Type": "application/json",
+        },
+        payload=payload,
         idempotency_key=f"unlock-{entry_id}",
     )
+    if response.status_code >= 400:
+        raise RuntimeError(f"Resend error: {response.status_code} {response.text}")
+
+
+def send_batch_emails(
+    api_key: str,
+    payloads: list[dict],
+    *,
+    idempotency_key: str | None = None,
+) -> list[dict]:
+    """Send up to 100 emails via the Resend batch endpoint (one API request).
+
+    Returns a list of ``{"id": "..."}`` dicts on success.
+    Raises RuntimeError on API error.
+    """
+    if not payloads:
+        return []
+
+    response = _post_json_with_retries(
+        "https://api.resend.com/emails/batch",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        payload=payloads,
+        idempotency_key=idempotency_key,
+    )
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"Resend batch error: {response.status_code} {response.text}")
+
+    data = response.json()
+    return data.get("data", data) if isinstance(data, dict) else data
 
 
 
@@ -1189,33 +1240,27 @@ def requeue_stale_sending_entries(client, now: datetime) -> int:
 
 
 def process_expired_entries(
-
     client,
-
     profile: dict,
-
     entries: list[dict],
-
     server_secret: str,
-
     resend_key: str,
-
     from_email: str,
-
     viewer_base_url: str,
-
     fcm_ctx: dict | None,
-
     now: datetime,
-
 ) -> tuple[bool, int]:
-    """Process expired vault entries.
+    """Process expired vault entries using batch email sending.
+
+    Three-phase approach for send entries:
+      Phase 1 – Validate & prepare: claim lock, HMAC check, decrypt, build payload
+      Phase 2 – Batch send: one Resend API call for ALL emails (avoids rate limits)
+      Phase 3 – Finalise: mark entries as sent, send push notifications
 
     Returns (had_send, input_send_count):
       - had_send: True if any 'send' entries were successfully emailed
       - input_send_count: number of send-type entries in the input
     """
-
     had_send = False
     input_send_count = sum(
         1 for e in entries
@@ -1226,58 +1271,38 @@ def process_expired_entries(
     user_id = profile.get("id", "?")
 
     hmac_key_encrypted = profile.get("hmac_key_encrypted")
-
     hmac_key_bytes = None
-
     if hmac_key_encrypted:
-
         try:
-
             hmac_key_bytes = decrypt_with_server_secret(hmac_key_encrypted, server_secret)
-
         except Exception as exc:  # noqa: BLE001
-
             print(f"CRITICAL: Failed to decrypt HMAC key for user {user_id}: {exc}")
-
     elif input_send_count > 0:
         print(f"CRITICAL: User {user_id} has {input_send_count} send entries but hmac_key_encrypted is NULL in profile")
 
+    # ── Phase 1: Process destroy entries immediately, prepare send entries ──
+    # Each prepared send is (entry_id, entry_title, email_payload_dict)
+    prepared_sends: list[tuple[str, str, dict]] = []
 
     for entry in entries:
-
         entry_id = entry.get("id", "unknown")
-
-        unlock_email_sent = False
-
         try:
-
             if not claim_entry_for_sending(client, entry_id):
-
                 continue
 
             action = (entry.get("action_type") or "send").lower()
 
             if action == "destroy":
-
                 entry_title = entry.get("title") or "Untitled"
-
                 try:
                     send_executed_push(
-                        client,
-                        profile["id"],
-                        entry_id,
-                        entry_title,
-                        fcm_ctx,
-                        action="destroy",
+                        client, profile["id"], entry_id, entry_title,
+                        fcm_ctx, action="destroy",
                     )
                 except Exception:  # noqa: BLE001
                     pass
-
                 delete_entry(client, entry)
-
                 continue
-
-
 
             # ── SEND entry validation ──
             # SAFETY: NEVER delete a send entry on validation failure.
@@ -1288,12 +1313,8 @@ def process_expired_entries(
                 release_entry_lock(client, entry_id)
                 continue
 
-
-
             recipient_encrypted = entry.get("recipient_email_encrypted") or ""
-
             signature_message = f"{entry.get('payload_encrypted')}|{recipient_encrypted}"
-
             expected_signature = compute_hmac_signature(signature_message, hmac_key_bytes)
 
             if expected_signature != entry.get("hmac_signature"):
@@ -1301,16 +1322,12 @@ def process_expired_entries(
                 release_entry_lock(client, entry_id)
                 continue
 
-
-
             if not recipient_encrypted:
                 print(f"CRITICAL: Empty recipient for send entry {entry_id} user {user_id} — entry preserved")
                 release_entry_lock(client, entry_id)
                 continue
 
-
-
-            # ── Step 1: Decrypt recipient email ──
+            # Step 1: Decrypt recipient email
             try:
                 recipient_ciphertext = extract_server_ciphertext(recipient_encrypted)
                 recipient_email = decrypt_with_server_secret(
@@ -1326,9 +1343,8 @@ def process_expired_entries(
                 release_entry_lock(client, entry_id)
                 continue
 
-            # ── Step 2: Decrypt data key ──
+            # Step 2: Decrypt data key
             data_key_encrypted = entry.get("data_key_encrypted")
-
             if not data_key_encrypted:
                 print(f"CRITICAL: Missing data_key_encrypted for send entry {entry_id} user {user_id} — entry preserved")
                 release_entry_lock(client, entry_id)
@@ -1343,94 +1359,57 @@ def process_expired_entries(
                 continue
 
             security_key = base64.b64encode(data_key_bytes).decode("utf-8")
-
             viewer_link = build_viewer_link(viewer_base_url, entry_id)
-
             entry_title = entry.get("title") or "Untitled"
 
-            # ── Step 3: Send email (with rate-limit delay) ──
-            if had_send:
-                time.sleep(INTER_SEND_DELAY_SECONDS)
-
-            send_unlock_email(
-
-                recipient_email,
-
-                entry_id,
-
-                sender_name,
-
-                entry_title,
-
-                viewer_link,
-
-                security_key,
-
-                resend_key,
-
-                from_email,
-
+            email_payload = build_unlock_email_payload(
+                recipient_email, entry_id, sender_name, entry_title,
+                viewer_link, security_key, from_email,
             )
-
-            unlock_email_sent = True
-
-            had_send = True
-
-            if not mark_entry_sent(client, entry_id, now):
-
-                raise RuntimeError("Failed to mark entry as sent")
-
-            try:
-
-                send_executed_push(
-
-                    client,
-
-                    profile["id"],
-
-                    entry_id,
-
-                    entry_title,
-
-                    fcm_ctx,
-
-                )
-
-            except Exception as exc:  # noqa: BLE001
-
-                print(f"Push executed failed for entry {entry_id}: {exc}")
+            prepared_sends.append((entry_id, entry_title, email_payload))
 
         except Exception as exc:  # noqa: BLE001
-
-            if unlock_email_sent:
-
-                try:
-
-                    if mark_entry_sent(client, entry_id, now):
-
-                        print(
-
-                            f"Recovered post-email sent state for entry {entry_id}"
-
-                        )
-
-                        continue
-
-                except Exception as mark_exc:  # noqa: BLE001
-
-                    print(
-
-                        f"Failed to recover sent state for entry {entry_id}: {mark_exc}"
-
-                    )
-
-            # Release the sending lock so the entry can be retried next cycle
             try:
                 release_entry_lock(client, entry_id)
             except Exception:  # noqa: BLE001
                 pass
+            print(f"SEND FAILED (prepare) entry {entry_id} user {user_id}: {type(exc).__name__}: {exc}")
 
-            print(f"SEND FAILED entry {entry_id} user {user_id}: {type(exc).__name__}: {exc}")
+    # ── Phase 2: Batch-send all prepared emails in a single API call ──
+    if prepared_sends:
+        batch_payloads = [p for _, _, p in prepared_sends]
+        batch_entry_ids = [eid for eid, _, _ in prepared_sends]
+        batch_idem_key = f"unlock-batch-{user_id}-{int(now.timestamp())}"
+
+        try:
+            print(f"User {user_id}: sending batch of {len(batch_payloads)} emails")
+            send_batch_emails(resend_key, batch_payloads, idempotency_key=batch_idem_key)
+
+            # ── Phase 3: Mark all entries as sent + push notifications ──
+            for entry_id, entry_title, _ in prepared_sends:
+                try:
+                    if not mark_entry_sent(client, entry_id, now):
+                        print(f"WARNING: mark_entry_sent returned False for {entry_id}, retrying")
+                        mark_entry_sent(client, entry_id, now)
+                except Exception as mark_exc:  # noqa: BLE001
+                    print(f"Failed to mark entry {entry_id} as sent: {mark_exc}")
+                had_send = True
+                try:
+                    send_executed_push(
+                        client, profile["id"], entry_id, entry_title, fcm_ctx,
+                    )
+                except Exception as push_exc:  # noqa: BLE001
+                    print(f"Push executed failed for entry {entry_id}: {push_exc}")
+
+        except Exception as batch_exc:  # noqa: BLE001
+            print(f"BATCH SEND FAILED for user {user_id} ({len(batch_payloads)} emails): "
+                  f"{type(batch_exc).__name__}: {batch_exc}")
+            # Release all locks so entries can be retried next cycle
+            for eid in batch_entry_ids:
+                try:
+                    release_entry_lock(client, eid)
+                except Exception:  # noqa: BLE001
+                    pass
 
     return had_send, input_send_count
 
