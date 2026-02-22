@@ -1328,6 +1328,15 @@ def heal_inconsistent_profiles(client, now: datetime) -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"Guard 2 (orphaned inactive) failed: {exc}")
 
+    # Guard 3: Expired grace periods — reset at startup (belt-and-suspenders,
+    # also runs at end of cleanup_sent_entries but this guarantees it runs
+    # even if cleanup_sent_entries itself fails).
+    try:
+        grace_cutoff = (now - timedelta(days=30)).isoformat()
+        _reset_expired_grace_profiles(client, grace_cutoff, now_iso)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Guard 3 (expired grace reset) failed: {exc}")
+
 
 def process_expired_entries(
     client,
@@ -1653,6 +1662,8 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
          them up next cycle and processes them.  This handles the edge case
          where process_expired_entries partially failed.
     """
+    print(f"_reset_expired_grace_profiles: scanning (cutoff={cutoff})")
+    reset_count = 0
     last_seen_id: str | None = None
     while True:
         query = (
@@ -1669,6 +1680,7 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
         batch = response.data or []
         if not batch:
             break
+        print(f"_reset_expired_grace_profiles: found {len(batch)} expired grace profiles")
         last_seen_id = str(batch[-1]["id"])
 
         for profile in batch:
@@ -1698,6 +1710,7 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
                         "push_66_sent_at": None,
                         "push_33_sent_at": None,
                     }).eq("id", uid).execute()
+                    reset_count += 1
                     print(
                         f"User {uid}: grace expired but {unprocessed_count} unprocessed "
                         f"entries remain — re-activated with expired timer for retry"
@@ -1715,8 +1728,13 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
                         "last_entry_at": None,
                     }).eq("id", uid).execute()
                     print(f"User {uid}: expired grace period reset (no remaining entries)")
-            except Exception:  # noqa: BLE001
-                print(f"Failed to reset expired grace profile {uid}")
+                reset_count += 1
+            except Exception as exc:  # noqa: BLE001
+                print(f"Failed to reset expired grace profile {uid}: {type(exc).__name__}: {exc}")
+    if reset_count:
+        print(f"_reset_expired_grace_profiles: reset {reset_count} profiles")
+    else:
+        print("_reset_expired_grace_profiles: no expired grace profiles found")
 
 
 def cleanup_bot_accounts(client, now: datetime) -> None:
