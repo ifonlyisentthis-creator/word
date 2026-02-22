@@ -977,6 +977,7 @@ class HeartbeatTests(unittest.TestCase):
             def eq(self, *a, **kw): return self
             def in_(self, *a, **kw): return self
             def lt(self, *a, **kw): return self
+            def lte(self, *a, **kw): return self
             def gt(self, *a, **kw): return self
             def order(self, *a, **kw): return self
             def limit(self, *a, **kw): return self
@@ -1034,6 +1035,7 @@ class HeartbeatTests(unittest.TestCase):
             def eq(self, *a, **kw): return self
             def in_(self, *a, **kw): return self
             def lt(self, *a, **kw): return self
+            def lte(self, *a, **kw): return self
             def gt(self, *a, **kw): return self
             def order(self, *a, **kw): return self
             def limit(self, *a, **kw): return self
@@ -1082,6 +1084,75 @@ class HeartbeatTests(unittest.TestCase):
         # last_check_in should be in the past (expired)
         check_in = datetime.fromisoformat(update_payloads[0]["last_check_in"])
         self.assertTrue(check_in < datetime.now(timezone.utc) - timedelta(days=30))
+
+    def test_reset_expired_grace_profiles_keeps_inactive_when_sent_entries_remain(self):
+        """Do not reset to active if expired grace profile still has sent entries."""
+        update_payloads = []
+        profile_select_calls = {"n": 0}
+
+        class _ProfileQuery:
+            def __init__(self, *, return_data=None):
+                self._data = return_data or []
+
+            def select(self, *a, **kw): return self
+            def eq(self, *a, **kw): return self
+            def lte(self, *a, **kw): return self
+            def gt(self, *a, **kw): return self
+            def order(self, *a, **kw): return self
+            def limit(self, *a, **kw): return self
+
+            def update(self, payload):
+                update_payloads.append(payload)
+
+                class _UChain:
+                    def eq(self2, *_a, **_kw):
+                        return self2
+
+                    def execute(self2):
+                        return types.SimpleNamespace(data=[], count=0)
+
+                return _UChain()
+
+            def execute(self):
+                return types.SimpleNamespace(data=self._data, count=len(self._data))
+
+        class _VaultQuery:
+            def __init__(self):
+                self._is_unprocessed_query = False
+
+            def select(self, *a, **kw): return self
+            def eq(self, *a, **kw): return self
+
+            def in_(self, *_a, **_kw):
+                # Query with status IN (active, sending) => unprocessed count
+                self._is_unprocessed_query = True
+                return self
+
+            def execute(self):
+                if self._is_unprocessed_query:
+                    return types.SimpleNamespace(data=[], count=0)
+                # Remaining entries count (includes sent entries)
+                return types.SimpleNamespace(data=[], count=2)
+
+        class _GraceClient:
+            def table(self_inner, name):
+                if name == "profiles":
+                    profile_select_calls["n"] += 1
+                    if profile_select_calls["n"] == 1:
+                        return _ProfileQuery(return_data=[{"id": "grace-user-3", "timer_days": 30}])
+                    return _ProfileQuery(return_data=[])
+                if name == "vault_entries":
+                    return _VaultQuery()
+                raise AssertionError(f"Unexpected table: {name}")
+
+        heartbeat._reset_expired_grace_profiles(
+            _GraceClient(),
+            "2026-01-01T00:00:00+00:00",
+            "2026-02-22T00:00:00+00:00",
+        )
+
+        # No reset/re-activation should happen in this state.
+        self.assertEqual(update_payloads, [])
 
 
 if __name__ == "__main__":

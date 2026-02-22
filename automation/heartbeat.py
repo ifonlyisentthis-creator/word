@@ -1617,7 +1617,7 @@ def cleanup_sent_entries(client) -> None:
             client.table("vault_entries")
             .select("id,user_id,audio_file_path,sent_at")
             .eq("status", "sent")
-            .lt("sent_at", cutoff)
+            .lte("sent_at", cutoff)
             .order("id")
             .limit(PAGE_SIZE)
         )
@@ -1733,7 +1733,7 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
             client.table("profiles")
             .select("id,timer_days")
             .eq("status", "inactive")
-            .lt("protocol_executed_at", cutoff)
+            .lte("protocol_executed_at", cutoff)
             .order("id")
             .limit(200)
         )
@@ -1778,18 +1778,34 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
                         f"entries remain — re-activated with expired timer for retry"
                     )
                 else:
-                    # Scenario A: zero unprocessed entries → full fresh reset
-                    client.table("profiles").update({
-                        "status": "active",
-                        "timer_days": 30,
-                        "last_check_in": now_iso,
-                        "protocol_executed_at": None,
-                        "warning_sent_at": None,
-                        "push_66_sent_at": None,
-                        "push_33_sent_at": None,
-                        "last_entry_at": None,
-                    }).eq("id", uid).execute()
-                    print(f"User {uid}: expired grace period reset (no remaining entries)")
+                    # Scenario A: only reset when there are truly zero entries.
+                    # If sent entries still exist (e.g., retention window not met),
+                    # keep profile inactive until cleanup_sent_entries can remove them.
+                    remaining = (
+                        client.table("vault_entries")
+                        .select("id", count="exact")
+                        .eq("user_id", uid)
+                        .execute()
+                    )
+                    remaining_count = remaining.count or 0
+                    if remaining_count == 0:
+                        client.table("profiles").update({
+                            "status": "active",
+                            "timer_days": 30,
+                            "last_check_in": now_iso,
+                            "protocol_executed_at": None,
+                            "warning_sent_at": None,
+                            "push_66_sent_at": None,
+                            "push_33_sent_at": None,
+                            "last_entry_at": None,
+                        }).eq("id", uid).execute()
+                        print(f"User {uid}: expired grace period reset (no remaining entries)")
+                    else:
+                        print(
+                            f"User {uid}: grace expired but {remaining_count} entries remain "
+                            "(likely sent retention window) — keeping inactive"
+                        )
+                        continue
                 reset_count += 1
             except Exception as exc:  # noqa: BLE001
                 print(f"Failed to reset expired grace profile {uid}: {type(exc).__name__}: {exc}")
