@@ -68,6 +68,17 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 MAX_RUNTIME_SECONDS = 5.5 * 3600  # 5h30m — exit gracefully before GH Actions 6h limit
 
+RESEND_INTER_CHUNK_DELAY = 0.15  # seconds between batch chunks to respect rate limits
+
+_HTTP_SESSION: requests.Session | None = None
+
+
+def _get_http_session() -> requests.Session:
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        _HTTP_SESSION = requests.Session()
+    return _HTTP_SESSION
+
 
 def fetch_all_rows(query_builder) -> list[dict]:
     """Paginate through a Supabase query to fetch all matching rows.
@@ -442,7 +453,7 @@ def _post_json_with_retries(
 
         try:
 
-            response = requests.post(
+            response = _get_http_session().post(
 
                 url,
 
@@ -1156,6 +1167,10 @@ def send_batch_emails(
         chunk_results = data.get("data", data) if isinstance(data, dict) else data
         all_results.extend(chunk_results if isinstance(chunk_results, list) else [])
 
+        # Throttle between chunks to respect Resend rate limits
+        if chunk_idx + RESEND_BATCH_LIMIT < len(payloads):
+            time.sleep(RESEND_INTER_CHUNK_DELAY)
+
     return all_results
 
 
@@ -1283,36 +1298,58 @@ def heal_inconsistent_profiles(client, now: datetime) -> None:
     """
     now_iso = now.isoformat()
 
-    # Guard 1: Active profiles with stale protocol_executed_at
+    # Guard 1: Active profiles with stale protocol_executed_at (keyset-paginated)
     try:
-        stale = (
-            client.table("profiles")
-            .select("id", count="exact")
-            .eq("status", "active")
-            .not_.is_("protocol_executed_at", "null")
-            .execute()
-        )
-        if stale.data:
-            for row in stale.data:
+        healed_1 = 0
+        last_id_g1: str | None = None
+        while True:
+            q1 = (
+                client.table("profiles")
+                .select("id")
+                .eq("status", "active")
+                .not_.is_("protocol_executed_at", "null")
+                .order("id")
+                .limit(PROFILE_BATCH_SIZE)
+            )
+            if last_id_g1 is not None:
+                q1 = q1.gt("id", last_id_g1)
+            resp1 = q1.execute()
+            rows1 = resp1.data or []
+            if not rows1:
+                break
+            last_id_g1 = str(rows1[-1]["id"])
+            for row in rows1:
                 uid = str(row["id"])
                 client.table("profiles").update({
                     "protocol_executed_at": None,
                 }).eq("id", uid).eq("status", "active").execute()
-            print(f"Healed {len(stale.data)} active profiles with stale protocol_executed_at")
+                healed_1 += 1
+        if healed_1:
+            print(f"Healed {healed_1} active profiles with stale protocol_executed_at")
     except Exception as exc:  # noqa: BLE001
         print(f"Guard 1 (stale protocol_executed_at) failed: {exc}")
 
-    # Guard 2: Inactive profiles with NULL protocol_executed_at (orphaned)
+    # Guard 2: Inactive profiles with NULL protocol_executed_at (keyset-paginated)
     try:
-        orphaned = (
-            client.table("profiles")
-            .select("id", count="exact")
-            .eq("status", "inactive")
-            .is_("protocol_executed_at", "null")
-            .execute()
-        )
-        if orphaned.data:
-            for row in orphaned.data:
+        healed_2 = 0
+        last_id_g2: str | None = None
+        while True:
+            q2 = (
+                client.table("profiles")
+                .select("id")
+                .eq("status", "inactive")
+                .is_("protocol_executed_at", "null")
+                .order("id")
+                .limit(PROFILE_BATCH_SIZE)
+            )
+            if last_id_g2 is not None:
+                q2 = q2.gt("id", last_id_g2)
+            resp2 = q2.execute()
+            rows2 = resp2.data or []
+            if not rows2:
+                break
+            last_id_g2 = str(rows2[-1]["id"])
+            for row in rows2:
                 uid = str(row["id"])
                 client.table("profiles").update({
                     "status": "active",
@@ -1324,7 +1361,9 @@ def heal_inconsistent_profiles(client, now: datetime) -> None:
                     "push_33_sent_at": None,
                     "last_entry_at": None,
                 }).eq("id", uid).execute()
-            print(f"Healed {len(orphaned.data)} orphaned inactive profiles (no protocol_executed_at)")
+                healed_2 += 1
+        if healed_2:
+            print(f"Healed {healed_2} orphaned inactive profiles (no protocol_executed_at)")
     except Exception as exc:  # noqa: BLE001
         print(f"Guard 2 (orphaned inactive) failed: {exc}")
 
@@ -1563,18 +1602,33 @@ def cleanup_sent_entries(client) -> None:
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     now_iso = datetime.now(timezone.utc).isoformat()
+    print(f"cleanup_sent_entries: scanning for sent entries older than {cutoff}")
 
     # Paginate sent entries to avoid loading millions into memory
     user_ids: set[str] = set()
     sender_names: dict[str, str] = {}
+    total_found = 0
+    total_deleted = 0
+    total_tombstoned = 0
 
-    for batch in iter_rows(
-        client.table("vault_entries")
-        .select("id,user_id,audio_file_path,sent_at")
-        .eq("status", "sent")
-        .lt("sent_at", cutoff)
-        .order("id"),
-    ):
+    last_cleanup_id: str | None = None
+    while True:
+        cleanup_q = (
+            client.table("vault_entries")
+            .select("id,user_id,audio_file_path,sent_at")
+            .eq("status", "sent")
+            .lt("sent_at", cutoff)
+            .order("id")
+            .limit(PAGE_SIZE)
+        )
+        if last_cleanup_id is not None:
+            cleanup_q = cleanup_q.gt("id", last_cleanup_id)
+        cleanup_resp = cleanup_q.execute()
+        batch = cleanup_resp.data or []
+        if not batch:
+            break
+        last_cleanup_id = str(batch[-1]["id"])
+
         # Batch-fetch sender_names for any new user_ids in this batch
         new_uids = {str(e["user_id"]) for e in batch} - set(sender_names.keys())
         if new_uids:
@@ -1592,6 +1646,8 @@ def cleanup_sent_entries(client) -> None:
             for uid in new_uids:
                 sender_names.setdefault(uid, "Afterword")
 
+        total_found += len(batch)
+        print(f"cleanup_sent_entries: processing batch of {len(batch)} sent entries")
         for entry in batch:
             user_ids.add(str(entry["user_id"]))
 
@@ -1608,6 +1664,7 @@ def cleanup_sent_entries(client) -> None:
                     "expired_at": now_iso,
                 }).execute()
                 tombstone_ok = True
+                total_tombstoned += 1
             except Exception as tomb_exc:  # noqa: BLE001
                 # Duplicate PK (already exists) is safe — history is preserved
                 if "duplicate" in str(tomb_exc).lower() or "23505" in str(tomb_exc):
@@ -1619,8 +1676,9 @@ def cleanup_sent_entries(client) -> None:
             if tombstone_ok:
                 try:
                     delete_entry(client, entry)
-                except Exception:  # noqa: BLE001
-                    print(f"Failed to delete sent entry {entry.get('id', '?')}")
+                    total_deleted += 1
+                except Exception as del_exc:  # noqa: BLE001
+                    print(f"Failed to delete sent entry {entry.get('id', '?')}: {del_exc}")
 
     # Reset users with zero remaining entries to fresh active state
     for uid in user_ids:
@@ -1645,6 +1703,11 @@ def cleanup_sent_entries(client) -> None:
                 print(f"User {uid}: grace period ended, account reset to fresh state")
         except Exception:  # noqa: BLE001
             print(f"Failed to check/reset user {uid}")
+
+    print(
+        f"cleanup_sent_entries: done — "
+        f"found={total_found} tombstoned={total_tombstoned} deleted={total_deleted}"
+    )
 
     # ── Sweep: reset inactive profiles whose grace period expired ──
     # Handles edge case where all sent entries were already cleaned up
@@ -1710,7 +1773,6 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
                         "push_66_sent_at": None,
                         "push_33_sent_at": None,
                     }).eq("id", uid).execute()
-                    reset_count += 1
                     print(
                         f"User {uid}: grace expired but {unprocessed_count} unprocessed "
                         f"entries remain — re-activated with expired timer for retry"
