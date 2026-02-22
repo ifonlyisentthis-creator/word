@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AFTERWORD — TEST SCENARIO SQL SCRIPTS
 -- ============================================================================
--- Replace YOUR_USER_ID with your actual profile UUID before running.
+-- Replace 9141d3aa-f0a1-4343-8403-aa52067661b7 with your actual profile UUID before running.
 -- Run each scenario independently. After each, run heartbeat and observe.
 -- ============================================================================
 
@@ -16,7 +16,7 @@ SET last_check_in     = now() - (timer_days || ' days')::interval - interval '1 
     warning_sent_at   = NULL,
     push_66_sent_at   = NULL,
     push_33_sent_at   = NULL
-WHERE id = 'YOUR_USER_ID';
+WHERE id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SCENARIO 2: GRACE PERIOD EXPIRED — 0 MINUTES REMAINING               ║
@@ -29,7 +29,7 @@ WHERE id = 'YOUR_USER_ID';
 UPDATE vault_entries
 SET status  = 'sent',
     sent_at = now() - interval '31 days'
-WHERE user_id = 'YOUR_USER_ID';
+WHERE user_id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- Step 2: Set profile to expired grace period
 UPDATE profiles
@@ -38,7 +38,7 @@ SET status               = 'inactive',
     warning_sent_at      = NULL,
     push_66_sent_at      = NULL,
     push_33_sent_at      = NULL
-WHERE id = 'YOUR_USER_ID';
+WHERE id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SCENARIO 3: GRACE PERIOD ACTIVE — 15 DAYS REMAINING                  ║
@@ -50,7 +50,7 @@ WHERE id = 'YOUR_USER_ID';
 UPDATE vault_entries
 SET status  = 'sent',
     sent_at = now() - interval '15 days'
-WHERE user_id = 'YOUR_USER_ID';
+WHERE user_id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- Step 2: Set profile to active grace (15 days in)
 UPDATE profiles
@@ -59,7 +59,7 @@ SET status               = 'inactive',
     warning_sent_at      = NULL,
     push_66_sent_at      = NULL,
     push_33_sent_at      = NULL
-WHERE id = 'YOUR_USER_ID';
+WHERE id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SCENARIO 4: ORPHANED INACTIVE — NO protocol_executed_at              ║
@@ -74,7 +74,7 @@ SET status               = 'inactive',
     warning_sent_at      = NULL,
     push_66_sent_at      = NULL,
     push_33_sent_at      = NULL
-WHERE id = 'YOUR_USER_ID';
+WHERE id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SCENARIO 5: STALE ACTIVE — protocol_executed_at set but active       ║
@@ -86,7 +86,7 @@ WHERE id = 'YOUR_USER_ID';
 UPDATE profiles
 SET status               = 'active',
     protocol_executed_at  = now() - interval '5 days'
-WHERE id = 'YOUR_USER_ID';
+WHERE id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SCENARIO 6: GRACE EXPIRED WITH UNPROCESSED ENTRIES                   ║
@@ -100,7 +100,7 @@ WHERE id = 'YOUR_USER_ID';
 UPDATE vault_entries
 SET status  = 'active',
     sent_at = NULL
-WHERE user_id = 'YOUR_USER_ID';
+WHERE user_id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- Step 2: Set profile to expired grace
 UPDATE profiles
@@ -109,7 +109,7 @@ SET status               = 'inactive',
     warning_sent_at      = NULL,
     push_66_sent_at      = NULL,
     push_33_sent_at      = NULL
-WHERE id = 'YOUR_USER_ID';
+WHERE id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SCENARIO 7: PUSH NOTIFICATION AT 66% REMAINING                       ║
@@ -121,7 +121,7 @@ SET last_check_in     = now() - (timer_days * 0.4 || ' days')::interval,
     warning_sent_at   = NULL,
     push_66_sent_at   = NULL,
     push_33_sent_at   = NULL
-WHERE id = 'YOUR_USER_ID';
+WHERE id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SCENARIO 8: PUSH NOTIFICATION AT 33% REMAINING                       ║
@@ -133,7 +133,7 @@ SET last_check_in     = now() - (timer_days * 0.72 || ' days')::interval,
     warning_sent_at   = NULL,
     push_66_sent_at   = now() - interval '1 day',  -- 66% already sent
     push_33_sent_at   = NULL
-WHERE id = 'YOUR_USER_ID';
+WHERE id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SCENARIO 9: STALE SENDING LOCK                                       ║
@@ -144,7 +144,7 @@ WHERE id = 'YOUR_USER_ID';
 UPDATE vault_entries
 SET status     = 'sending',
     updated_at = now() - interval '45 minutes'
-WHERE user_id = 'YOUR_USER_ID'
+WHERE user_id = '9141d3aa-f0a1-4343-8403-aa52067661b7'
   AND status = 'active'
 LIMIT 1;
 
@@ -157,7 +157,7 @@ LIMIT 1;
 UPDATE vault_entries
 SET status  = 'active',
     sent_at = NULL
-WHERE user_id = 'YOUR_USER_ID';
+WHERE user_id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- Reset profile to fresh active
 UPDATE profiles
@@ -169,8 +169,8 @@ SET status               = 'active',
     push_66_sent_at      = NULL,
     push_33_sent_at      = NULL,
     last_entry_at        = NULL
-WHERE id = 'YOUR_USER_ID';
+WHERE id = '9141d3aa-f0a1-4343-8403-aa52067661b7';
 
 -- Delete any tombstones from previous tests
 DELETE FROM vault_entry_tombstones
-WHERE user_id = 'YOUR_USER_ID';
+WHERE user_id = '9141d3aa-f0a1-4343-8403-aa52067661b7';

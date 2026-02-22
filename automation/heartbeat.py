@@ -525,54 +525,27 @@ def _format_from_address(from_email: str) -> str:
 
 
 def wrap_email_html(body_html: str) -> str:
-    """Wrap bare email body HTML in a proper email document structure.
+    """Wrap bare email body HTML in a minimal, personal-looking structure.
 
-    Adds DOCTYPE, html/head/body tags, responsive container, and
-    CAN-SPAM compliant footer. Critical for email deliverability —
-    bare <p> tags without structure trigger spam filters.
+    Avoids marketing patterns that trigger Gmail Promotions tab:
+    - No coloured header bar or heavy table nesting
+    - No large CTA buttons (use plain links instead)
+    - Minimal styling, resembles a personal email
+    - Tiny footer for CAN-SPAM compliance only
     """
     return (
         '<!DOCTYPE html>'
-        '<html lang="en" xmlns="http://www.w3.org/1999/xhtml">'
-        '<head>'
-        '<meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
-        '<title>Afterword</title>'
-        '</head>'
-        '<body style="margin:0;padding:0;background-color:#f7f7f7;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
-        'font-size:15px;line-height:1.6;color:#1a1a1a">'
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="background-color:#f7f7f7">'
-        '<tr><td align="center" style="padding:32px 16px">'
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="max-width:560px;background-color:#ffffff;'
-        'border-radius:8px;overflow:hidden">'
-        # Header bar
-        '<tr><td style="background-color:#0f0f0f;padding:20px 32px">'
-        '<span style="color:#ffffff;font-size:18px;font-weight:600;'
-        'letter-spacing:0.5px">Afterword</span>'
-        '</td></tr>'
-        # Body content
-        '<tr><td style="padding:28px 32px">'
+        '<html lang="en">'
+        '<head><meta charset="utf-8"></head>'
+        '<body style="font-family:sans-serif;font-size:15px;line-height:1.6;'
+        'color:#1a1a1a;max-width:560px;margin:0 auto;padding:24px">'
         f'{body_html}'
-        '</td></tr>'
-        # Footer
-        '<tr><td style="padding:20px 32px;border-top:1px solid #e5e5e5;'
-        'background-color:#fafafa">'
-        '<p style="margin:0;font-size:12px;color:#999999;line-height:1.5">'
-        'This is an automated message from Afterword, a time-locked digital vault app. '
-        'You are receiving this because you have an Afterword account or '
-        'someone designated you as a recipient.</p>'
-        '<p style="margin:8px 0 0;font-size:12px;color:#999999">'
-        'Afterword &middot; afterword-app.com</p>'
-        '<p style="margin:8px 0 0;font-size:11px;color:#bbbbbb">'
+        '<p style="margin:32px 0 0;font-size:11px;color:#999999;'
+        'border-top:1px solid #eee;padding-top:12px">'
+        'Afterword &middot; afterword-app.com<br>'
         '<a href="mailto:afterword.app@gmail.com?subject=Unsubscribe" '
-        'style="color:#bbbbbb;text-decoration:underline">Unsubscribe</a>'
+        'style="color:#999999">Unsubscribe</a>'
         '</p>'
-        '</td></tr>'
-        '</table>'
-        '</td></tr></table>'
         '</body></html>'
     )
 
@@ -1037,38 +1010,29 @@ def build_unlock_email_payload(
         f'<p style="margin:0 0 16px"><strong>{safe_sender}</strong> left you a secure '
         'message using Afterword, a time-locked digital vault app.</p>'
 
-        f'<p style="margin:0 0 8px"><strong>Title:</strong> {safe_title}</p>'
+        f'<p style="margin:0 0 16px"><strong>Title:</strong> {safe_title}</p>'
 
-        '<table role="presentation" cellpadding="0" cellspacing="0" '
-        'style="margin:20px 0"><tr><td>'
-        f'<a href="{safe_link}" style="display:inline-block;background-color:#0f0f0f;'
-        'color:#ffffff;font-size:15px;font-weight:600;padding:12px 28px;'
-        'border-radius:6px;text-decoration:none" target="_blank">'
-        'Open Secure Message</a>'
-        '</td></tr></table>'
+        '<p style="margin:0 0 16px">Open your secure message here:<br>'
+        f'<a href="{safe_link}" target="_blank">{safe_link}</a></p>'
 
         '<p style="margin:0 0 8px"><strong>Your Security Key:</strong></p>'
-        '<p style="margin:0 0 16px;background-color:#f4f4f4;padding:12px 16px;'
-        'border-radius:6px;font-family:Consolas,Monaco,Courier New,monospace;'
-        f'font-size:13px;word-break:break-all;line-height:1.5">{security_key}</p>'
+        '<p style="margin:0 0 16px;font-family:monospace;'
+        f'font-size:13px;word-break:break-all">{security_key}</p>'
 
         '<p style="margin:0 0 16px"><strong>How to view your message:</strong></p>'
-        '<ol style="margin:0 0 16px;padding-left:20px;color:#333333">'
-        '<li style="margin-bottom:6px">Click the button above to open the secure viewer</li>'
-        '<li style="margin-bottom:6px">Copy and paste the security key into the key field</li>'
-        '<li style="margin-bottom:6px">Your message will be decrypted privately in your browser</li>'
+        '<ol style="margin:0 0 16px;padding-left:20px">'
+        '<li>Click the link above to open the secure viewer</li>'
+        '<li>Paste the security key into the key field</li>'
+        '<li>Your message will be decrypted privately in your browser</li>'
         '</ol>'
 
-        '<p style="margin:0 0 16px;color:#666666;font-size:13px">'
+        '<p style="margin:0 0 16px;color:#666;font-size:13px">'
         '<em>The security key is never sent to our servers. Do not share '
         'it — anyone with this key can read the message.</em></p>'
 
-        '<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0">'
-
-        '<p style="margin:0 0 8px;color:#888888;font-size:12px">'
-        'This message will be available for 30 days after delivery, after which '
-        'it will be permanently and automatically erased.</p>'
-        '<p style="margin:0;color:#888888;font-size:12px">'
+        '<p style="margin:0;color:#888;font-size:12px">'
+        'This message will be available for 30 days, after which it '
+        'will be permanently erased. '
         'If you do not recognize the sender, you may safely ignore this email.</p>'
     )
 
@@ -1711,7 +1675,23 @@ def cleanup_sent_entries(client) -> None:
                             except Exception as del_exc:  # noqa: BLE001
                                 print(f"Failed to delete sent entry {entry.get('id', '?')}: {del_exc}")
 
-                # Reset profile to fresh active state
+                # SAFETY GUARD: Only reset profile if ALL entries were actually removed.
+                # If tombstone/delete failed for any entry, keep inactive for retry.
+                remaining_check = (
+                    client.table("vault_entries")
+                    .select("id", count="exact")
+                    .eq("user_id", uid)
+                    .execute()
+                )
+                remaining_count = remaining_check.count or 0
+                if remaining_count > 0:
+                    print(
+                        f"User {uid}: grace expired but {remaining_count} entries "
+                        f"still remain after cleanup — keeping inactive for retry"
+                    )
+                    continue
+
+                # All entries removed — reset profile to fresh active state
                 client.table("profiles").update({
                     "status": "active",
                     "timer_days": 30,
@@ -2029,6 +2009,9 @@ def main() -> int:
     start_time = time.monotonic()
 
     for profile_batch in iter_active_profiles(client):
+
+      # Refresh `now` each batch so timestamps stay accurate during multi-hour runs
+      now = datetime.now(timezone.utc)
 
       # Runtime guard: exit gracefully before GH Actions kills the job
       elapsed = time.monotonic() - start_time

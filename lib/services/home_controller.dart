@@ -178,13 +178,22 @@ class HomeController extends ChangeNotifier {
 
   /// Re-fetch profile + sync theme after a purchase so Pro/Lifetime
   /// features unlock instantly without restarting.
-  Future<void> refreshAfterPurchase() async {
+  ///
+  /// [knownSubscriptionStatus] is the RC-verified status (source of truth).
+  /// It is re-applied after the DB fetch to guard against stale reads or
+  /// edge-function propagation delays overriding the correct tier.
+  Future<void> refreshAfterPurchase({String? knownSubscriptionStatus}) async {
     if (_user == null) return;
     try {
       final profile = await _profileService.fetchProfile(_user!.id);
       if (_isDisposed) return;
       _profile = profile;
       _themeProvider.syncFromProfile(profile);
+      // RC state is the source of truth for subscription tier.
+      // Re-apply it so stale DB reads can never lock themes.
+      if (knownSubscriptionStatus != null) {
+        _themeProvider.enforceSubscriptionLimits(knownSubscriptionStatus);
+      }
       notifyListeners();
     } catch (_) {}
   }

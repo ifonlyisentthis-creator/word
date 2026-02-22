@@ -140,9 +140,12 @@ class SubscriptionDebugScreen extends StatelessWidget {
                                   ? 'pro'
                                   : 'free';
                           context.read<ThemeProvider>().enforceSubscriptionLimits(newStatus);
-                          // Re-fetch profile so all screens see updated subscription
+                          // Re-fetch profile so all screens see updated subscription.
+                          // Pass RC status so stale DB reads can't re-lock themes.
                           try {
-                            context.read<HomeController>().refreshAfterPurchase();
+                            await context.read<HomeController>().refreshAfterPurchase(
+                              knownSubscriptionStatus: newStatus,
+                            );
                           } catch (_) {}
                         }
 
