@@ -1367,14 +1367,8 @@ def heal_inconsistent_profiles(client, now: datetime) -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"Guard 2 (orphaned inactive) failed: {exc}")
 
-    # Guard 3: Expired grace periods — reset at startup (belt-and-suspenders,
-    # also runs at end of cleanup_sent_entries but this guarantees it runs
-    # even if cleanup_sent_entries itself fails).
-    try:
-        grace_cutoff = (now - timedelta(days=30)).isoformat()
-        _reset_expired_grace_profiles(client, grace_cutoff, now_iso)
-    except Exception as exc:  # noqa: BLE001
-        print(f"Guard 3 (expired grace reset) failed: {exc}")
+    # Guard 3: Expired grace periods are handled by cleanup_sent_entries
+    # which runs at the end of main(). No separate startup sweep needed.
 
 
 def process_expired_entries(
@@ -1599,157 +1593,47 @@ def process_expired_entries(
 
 
 def cleanup_sent_entries(client) -> None:
+    """Grace-based cleanup: when grace period ends, delete ALL sent entries immediately.
 
+    Flow:
+      1. Find profiles with expired grace (inactive + protocol_executed_at <= 30 days ago)
+      2. For each profile:
+         a) If unprocessed entries exist → re-activate with expired timer for retry
+         b) Otherwise → tombstone + delete ALL sent entries → reset profile to fresh
+    """
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     now_iso = datetime.now(timezone.utc).isoformat()
-    print(f"cleanup_sent_entries: scanning for sent entries older than {cutoff}")
+    print(f"cleanup_sent_entries: scanning for profiles with expired grace (cutoff={cutoff})")
 
-    # Paginate sent entries to avoid loading millions into memory
-    user_ids: set[str] = set()
-    sender_names: dict[str, str] = {}
     total_found = 0
     total_deleted = 0
     total_tombstoned = 0
-
-    last_cleanup_id: str | None = None
-    while True:
-        cleanup_q = (
-            client.table("vault_entries")
-            .select("id,user_id,audio_file_path,sent_at")
-            .eq("status", "sent")
-            .lte("sent_at", cutoff)
-            .order("id")
-            .limit(PAGE_SIZE)
-        )
-        if last_cleanup_id is not None:
-            cleanup_q = cleanup_q.gt("id", last_cleanup_id)
-        cleanup_resp = cleanup_q.execute()
-        batch = cleanup_resp.data or []
-        if not batch:
-            break
-        last_cleanup_id = str(batch[-1]["id"])
-
-        # Batch-fetch sender_names for any new user_ids in this batch
-        new_uids = {str(e["user_id"]) for e in batch} - set(sender_names.keys())
-        if new_uids:
-            try:
-                profiles_resp = (
-                    client.table("profiles")
-                    .select("id,sender_name")
-                    .in_("id", list(new_uids))
-                    .execute()
-                )
-                for p in (profiles_resp.data or []):
-                    sender_names[str(p["id"])] = p.get("sender_name") or "Afterword"
-            except Exception:  # noqa: BLE001
-                pass
-            for uid in new_uids:
-                sender_names.setdefault(uid, "Afterword")
-
-        total_found += len(batch)
-        print(f"cleanup_sent_entries: processing batch of {len(batch)} sent entries")
-        for entry in batch:
-            user_ids.add(str(entry["user_id"]))
-
-            # Create tombstone BEFORE deleting (preserves History tab data).
-            # GUARD: Only delete the entry if tombstone was recorded successfully
-            # or already exists (duplicate key = safe to proceed).
-            tombstone_ok = False
-            try:
-                client.table("vault_entry_tombstones").insert({
-                    "vault_entry_id": entry["id"],
-                    "user_id": entry["user_id"],
-                    "sender_name": sender_names.get(str(entry["user_id"]), "Afterword"),
-                    "sent_at": entry.get("sent_at"),
-                    "expired_at": now_iso,
-                }).execute()
-                tombstone_ok = True
-                total_tombstoned += 1
-            except Exception as tomb_exc:  # noqa: BLE001
-                # Duplicate PK (already exists) is safe — history is preserved
-                if "duplicate" in str(tomb_exc).lower() or "23505" in str(tomb_exc):
-                    tombstone_ok = True
-                else:
-                    print(f"CRITICAL: Tombstone insert failed for entry {entry.get('id', '?')}: {tomb_exc} — skipping delete to preserve history")
-
-            # Delete entry (storage files + DB row) ONLY if history is safe
-            if tombstone_ok:
-                try:
-                    delete_entry(client, entry)
-                    total_deleted += 1
-                except Exception as del_exc:  # noqa: BLE001
-                    print(f"Failed to delete sent entry {entry.get('id', '?')}: {del_exc}")
-
-    # Reset users with zero remaining entries to fresh active state
-    for uid in user_ids:
-        try:
-            remaining = (
-                client.table("vault_entries")
-                .select("id", count="exact")
-                .eq("user_id", uid)
-                .execute()
-            )
-            if (remaining.count or 0) == 0:
-                client.table("profiles").update({
-                    "status": "active",
-                    "timer_days": 30,
-                    "last_check_in": now_iso,
-                    "protocol_executed_at": None,
-                    "warning_sent_at": None,
-                    "push_66_sent_at": None,
-                    "push_33_sent_at": None,
-                    "last_entry_at": None,
-                }).eq("id", uid).execute()
-                print(f"User {uid}: grace period ended, account reset to fresh state")
-        except Exception:  # noqa: BLE001
-            print(f"Failed to check/reset user {uid}")
-
-    print(
-        f"cleanup_sent_entries: done — "
-        f"found={total_found} tombstoned={total_tombstoned} deleted={total_deleted}"
-    )
-
-    # ── Sweep: reset inactive profiles whose grace period expired ──
-    # Handles edge case where all sent entries were already cleaned up
-    # (or never existed) but the profile is still stuck as 'inactive'.
-    _reset_expired_grace_profiles(client, cutoff, now_iso)
-
-
-def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
-    """Find inactive profiles with expired grace and reset them to active.
-
-    Two scenarios:
-      A) Zero vault entries → full reset to fresh active state.
-      B) Unprocessed (active/sending) entries still exist → set profile back
-         to 'active' with an already-expired timer so the main loop picks
-         them up next cycle and processes them.  This handles the edge case
-         where process_expired_entries partially failed.
-    """
-    print(f"_reset_expired_grace_profiles: scanning (cutoff={cutoff})")
     reset_count = 0
-    last_seen_id: str | None = None
+
+    last_profile_id: str | None = None
     while True:
-        query = (
+        prof_q = (
             client.table("profiles")
-            .select("id,timer_days")
+            .select("id,sender_name,timer_days")
             .eq("status", "inactive")
             .lte("protocol_executed_at", cutoff)
             .order("id")
-            .limit(200)
+            .limit(PROFILE_BATCH_SIZE)
         )
-        if last_seen_id is not None:
-            query = query.gt("id", last_seen_id)
-        response = query.execute()
-        batch = response.data or []
-        if not batch:
+        if last_profile_id is not None:
+            prof_q = prof_q.gt("id", last_profile_id)
+        prof_resp = prof_q.execute()
+        profiles = prof_resp.data or []
+        if not profiles:
             break
-        print(f"_reset_expired_grace_profiles: found {len(batch)} expired grace profiles")
-        last_seen_id = str(batch[-1]["id"])
+        last_profile_id = str(profiles[-1]["id"])
 
-        for profile in batch:
+        for profile in profiles:
             uid = str(profile["id"])
+            sender_name = profile.get("sender_name") or "Afterword"
+
             try:
-                # Count unprocessed entries (active or sending)
+                # Check for unprocessed entries (active/sending) — partial failure
                 unprocessed = (
                     client.table("vault_entries")
                     .select("id", count="exact")
@@ -1760,7 +1644,7 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
                 unprocessed_count = unprocessed.count or 0
 
                 if unprocessed_count > 0:
-                    # Scenario B: re-activate with expired timer for retry
+                    # Re-activate with expired timer so main loop retries sending
                     timer_days = profile.get("timer_days") or 30
                     expired_check_in = (
                         datetime.now(timezone.utc) - timedelta(days=timer_days + 1)
@@ -1773,46 +1657,82 @@ def _reset_expired_grace_profiles(client, cutoff: str, now_iso: str) -> None:
                         "push_66_sent_at": None,
                         "push_33_sent_at": None,
                     }).eq("id", uid).execute()
+                    reset_count += 1
                     print(
                         f"User {uid}: grace expired but {unprocessed_count} unprocessed "
                         f"entries remain — re-activated with expired timer for retry"
                     )
-                else:
-                    # Scenario A: only reset when there are truly zero entries.
-                    # If sent entries still exist (e.g., retention window not met),
-                    # keep profile inactive until cleanup_sent_entries can remove them.
-                    remaining = (
+                    continue
+
+                # Delete ALL sent entries for this user (grace ended = immediate cleanup)
+                last_entry_id: str | None = None
+                while True:
+                    entry_q = (
                         client.table("vault_entries")
-                        .select("id", count="exact")
+                        .select("id,user_id,audio_file_path,sent_at")
                         .eq("user_id", uid)
-                        .execute()
+                        .eq("status", "sent")
+                        .order("id")
+                        .limit(PAGE_SIZE)
                     )
-                    remaining_count = remaining.count or 0
-                    if remaining_count == 0:
-                        client.table("profiles").update({
-                            "status": "active",
-                            "timer_days": 30,
-                            "last_check_in": now_iso,
-                            "protocol_executed_at": None,
-                            "warning_sent_at": None,
-                            "push_66_sent_at": None,
-                            "push_33_sent_at": None,
-                            "last_entry_at": None,
-                        }).eq("id", uid).execute()
-                        print(f"User {uid}: expired grace period reset (no remaining entries)")
-                    else:
-                        print(
-                            f"User {uid}: grace expired but {remaining_count} entries remain "
-                            "(likely sent retention window) — keeping inactive"
-                        )
-                        continue
+                    if last_entry_id is not None:
+                        entry_q = entry_q.gt("id", last_entry_id)
+                    entry_resp = entry_q.execute()
+                    entries = entry_resp.data or []
+                    if not entries:
+                        break
+                    last_entry_id = str(entries[-1]["id"])
+
+                    total_found += len(entries)
+                    for entry in entries:
+                        # Create tombstone BEFORE deleting (preserves History tab data).
+                        # GUARD: Only delete if tombstone recorded or already exists.
+                        tombstone_ok = False
+                        try:
+                            client.table("vault_entry_tombstones").insert({
+                                "vault_entry_id": entry["id"],
+                                "user_id": entry["user_id"],
+                                "sender_name": sender_name,
+                                "sent_at": entry.get("sent_at"),
+                                "expired_at": now_iso,
+                            }).execute()
+                            tombstone_ok = True
+                            total_tombstoned += 1
+                        except Exception as tomb_exc:  # noqa: BLE001
+                            if "duplicate" in str(tomb_exc).lower() or "23505" in str(tomb_exc):
+                                tombstone_ok = True
+                            else:
+                                print(f"CRITICAL: Tombstone insert failed for entry {entry.get('id', '?')}: {tomb_exc} — skipping delete to preserve history")
+
+                        if tombstone_ok:
+                            try:
+                                delete_entry(client, entry)
+                                total_deleted += 1
+                            except Exception as del_exc:  # noqa: BLE001
+                                print(f"Failed to delete sent entry {entry.get('id', '?')}: {del_exc}")
+
+                # Reset profile to fresh active state
+                client.table("profiles").update({
+                    "status": "active",
+                    "timer_days": 30,
+                    "last_check_in": now_iso,
+                    "protocol_executed_at": None,
+                    "warning_sent_at": None,
+                    "push_66_sent_at": None,
+                    "push_33_sent_at": None,
+                    "last_entry_at": None,
+                }).eq("id", uid).execute()
                 reset_count += 1
+                print(f"User {uid}: grace period ended, all entries cleaned up, account reset")
+
             except Exception as exc:  # noqa: BLE001
-                print(f"Failed to reset expired grace profile {uid}: {type(exc).__name__}: {exc}")
-    if reset_count:
-        print(f"_reset_expired_grace_profiles: reset {reset_count} profiles")
-    else:
-        print("_reset_expired_grace_profiles: no expired grace profiles found")
+                print(f"Failed to process expired grace profile {uid}: {type(exc).__name__}: {exc}")
+
+    print(
+        f"cleanup_sent_entries: done — "
+        f"profiles_reset={reset_count} found={total_found} "
+        f"tombstoned={total_tombstoned} deleted={total_deleted}"
+    )
 
 
 def cleanup_bot_accounts(client, now: datetime) -> None:
