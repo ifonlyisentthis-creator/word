@@ -46,54 +46,65 @@ class _HistoryScreenState extends State<HistoryScreen> {
           .eq('user_id', widget.userId)
           .order('expired_at', ascending: false);
 
-      // Group by execution date (sent_at date)
+      // Group by execution timestamp (full sent_at), not by day.
+      // This avoids collapsing multiple protocol runs into one card.
       final Map<String, _HistoryGroup> groups = {};
 
       for (final row in sentRows as List) {
-        final sentAt = DateTime.parse(row['sent_at'] as String);
-        final dateKey = DateFormat('yyyy-MM-dd').format(sentAt.toLocal());
+        final sentAt = DateTime.parse(row['sent_at'] as String).toUtc();
+        final groupKey = sentAt.toIso8601String();
         final group = groups.putIfAbsent(
-            dateKey,
-            () => _HistoryGroup(
-                  executionDate: sentAt,
-                  sentItems: [],
-                  deletedItems: [],
-                ));
-        group.sentItems.add(_SentItem(
-          title: (row['title'] as String?) ?? 'Untitled',
-          actionType: (row['action_type'] as String?) ?? 'send',
-          dataType: (row['data_type'] as String?) ?? 'text',
-          sentAt: sentAt,
-        ));
+          groupKey,
+          () => _HistoryGroup(
+            executionDate: sentAt,
+            sentItems: [],
+            deletedItems: [],
+          ),
+        );
+        group.sentItems.add(
+          _SentItem(
+            title: (row['title'] as String?) ?? 'Untitled',
+            actionType: (row['action_type'] as String?) ?? 'send',
+            dataType: (row['data_type'] as String?) ?? 'text',
+            sentAt: sentAt,
+          ),
+        );
       }
 
       for (final row in tombRows as List) {
-        final expiredAt = DateTime.parse(row['expired_at'] as String);
+        final expiredAt = DateTime.parse(row['expired_at'] as String).toUtc();
         final sentAt = row['sent_at'] != null
-            ? DateTime.parse(row['sent_at'] as String)
+            ? DateTime.parse(row['sent_at'] as String).toUtc()
             : null;
-        final dateKey = sentAt != null
-            ? DateFormat('yyyy-MM-dd').format(sentAt.toLocal())
-            : DateFormat('yyyy-MM-dd').format(expiredAt.toLocal());
+        final vaultEntryId = (row['vault_entry_id'] as String?) ?? '';
+        final groupKey = sentAt != null
+            ? sentAt.toIso8601String()
+            : 'deleted:$vaultEntryId:${expiredAt.toIso8601String()}';
         final group = groups.putIfAbsent(
-            dateKey,
-            () => _HistoryGroup(
-                  executionDate: sentAt ?? expiredAt,
-                  sentItems: [],
-                  deletedItems: [],
-                ));
-        group.deletedItems.add(_DeletedItem(
-          expiredAt: expiredAt,
-        ));
+          groupKey,
+          () => _HistoryGroup(
+            executionDate: sentAt ?? expiredAt,
+            sentItems: [],
+            deletedItems: [],
+          ),
+        );
+        group.deletedItems.add(_DeletedItem(expiredAt: expiredAt));
       }
 
       final sorted = groups.values.toList()
         ..sort((a, b) => b.executionDate.compareTo(a.executionDate));
 
-      if (mounted) setState(() { _groups = sorted; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _groups = sorted;
+          _loading = false;
+        });
+      }
     } catch (e) {
       debugPrint('History load error: $e');
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -110,36 +121,39 @@ class _HistoryScreenState extends State<HistoryScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _groups.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.history, size: 48, color: Colors.white24),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No history yet',
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: Colors.white38),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Protocol executions will appear here.',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: Colors.white24),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.history, size: 48, color: Colors.white24),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No history yet',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white38,
+                    ),
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-                    itemCount: _groups.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 16),
-                    itemBuilder: (_, i) =>
-                        _HistoryGroupCard(group: _groups[i], fmt: _fmt),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Protocol executions will appear here.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.white24,
+                    ),
                   ),
-                ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                itemCount: _groups.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 16),
+                itemBuilder: (_, i) =>
+                    _HistoryGroupCard(group: _groups[i], fmt: _fmt),
+              ),
+            ),
     );
   }
 }
@@ -178,10 +192,24 @@ class _HistoryGroupCard extends StatelessWidget {
   final _HistoryGroup group;
   final DateFormat fmt;
 
+  DateTime _latestDeletedAt(List<_DeletedItem> items) {
+    var latest = items.first.expiredAt;
+    for (final item in items.skip(1)) {
+      if (item.expiredAt.isAfter(latest)) {
+        latest = item.expiredAt;
+      }
+    }
+    return latest;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dateFmt = DateFormat('MMM d, yyyy');
+    final deletedCount = group.deletedItems.length;
+    final latestDeletedAt = deletedCount > 0
+        ? _latestDeletedAt(group.deletedItems)
+        : null;
 
     final td = context.watch<ThemeProvider>().themeData;
     return Container(
@@ -215,8 +243,11 @@ class _HistoryGroupCard extends StatelessWidget {
                     color: theme.colorScheme.error.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.shield_outlined,
-                      size: 16, color: theme.colorScheme.error),
+                  child: Icon(
+                    Icons.shield_outlined,
+                    size: 16,
+                    color: theme.colorScheme.error,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -233,57 +264,59 @@ class _HistoryGroupCard extends StatelessWidget {
             // Sent items
             if (group.sentItems.isNotEmpty) ...[
               const SizedBox(height: 14),
-              ...group.sentItems.map((item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          item.actionType == 'destroy'
-                              ? Icons.delete_forever
-                              : item.dataType == 'audio'
-                                  ? Icons.mic
-                                  : Icons.mail_outline,
-                          size: 16,
+              ...group.sentItems.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        item.actionType == 'destroy'
+                            ? Icons.delete_forever
+                            : item.dataType == 'audio'
+                            ? Icons.mic
+                            : Icons.mail_outline,
+                        size: 16,
+                        color: item.actionType == 'destroy'
+                            ? theme.colorScheme.error
+                            : theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: theme.textTheme.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
                           color: item.actionType == 'destroy'
-                              ? theme.colorScheme.error
-                              : theme.colorScheme.primary,
+                              ? theme.colorScheme.error.withValues(alpha: 0.12)
+                              : theme.colorScheme.primary.withValues(
+                                  alpha: 0.12,
+                                ),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            style: theme.textTheme.bodyMedium,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
+                        child: Text(
+                          item.actionType == 'destroy' ? 'ERASED' : 'SENT',
+                          style: theme.textTheme.labelSmall?.copyWith(
                             color: item.actionType == 'destroy'
                                 ? theme.colorScheme.error
-                                    .withValues(alpha: 0.12)
-                                : theme.colorScheme.primary
-                                    .withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            item.actionType == 'destroy'
-                                ? 'ERASED'
-                                : 'SENT',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: item.actionType == 'destroy'
-                                  ? theme.colorScheme.error
-                                  : theme.colorScheme.primary,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1,
-                            ),
+                                : theme.colorScheme.primary,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
                           ),
                         ),
-                      ],
-                    ),
-                  )),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               Text(
                 'Sent items are read-only. Auto-deleted after 30 days.',
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -300,12 +333,12 @@ class _HistoryGroupCard extends StatelessWidget {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Icon(Icons.delete_sweep,
-                      size: 16, color: Colors.white38),
+                  Icon(Icons.delete_sweep, size: 16, color: Colors.white38),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Data permanently erased on ${dateFmt.format(group.deletedItems.first.expiredAt.toLocal())}',
+                      'Data permanently erased on ${dateFmt.format(latestDeletedAt!.toLocal())}'
+                      '${deletedCount > 1 ? ' · $deletedCount items' : ''}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.white38,
                         fontStyle: FontStyle.italic,

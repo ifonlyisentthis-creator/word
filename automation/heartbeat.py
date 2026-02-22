@@ -536,27 +536,33 @@ def _extract_email_address(address: str) -> str:
 
 
 def wrap_email_html(body_html: str, *, unsubscribe_email: str) -> str:
-    """Wrap bare email body HTML in a minimal, personal-looking structure.
-
-    Avoids marketing patterns that trigger Gmail Promotions tab:
-    - No coloured header bar or heavy table nesting
-    - No large CTA buttons (use plain links instead)
-    - Minimal styling, resembles a personal email
-    - Tiny footer for CAN-SPAM compliance only
-    """
+    """Wrap email body HTML in a premium card layout with dark header."""
     return (
         '<!DOCTYPE html>'
         '<html lang="en">'
-        '<head><meta charset="utf-8"></head>'
-        '<body style="font-family:sans-serif;font-size:15px;line-height:1.6;'
-        'color:#1a1a1a;max-width:560px;margin:0 auto;padding:24px">'
+        '<head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1.0">'
+        '</head>'
+        '<body style="margin:0;padding:0;background-color:#f0f0f0;'
+        'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,'
+        'Helvetica,Arial,sans-serif">'
+        '<div style="max-width:560px;margin:32px auto;background:#ffffff;'
+        'border-radius:12px;overflow:hidden">'
+        '<div style="background:#0a0a0a;padding:24px 32px">'
+        '<span style="color:#ffffff;font-size:22px;font-weight:700;'
+        'letter-spacing:0.3px">Afterword</span>'
+        '</div>'
+        '<div style="padding:28px 32px;font-size:15px;line-height:1.7;'
+        'color:#1a1a1a">'
         f'{body_html}'
-        '<p style="margin:32px 0 0;font-size:11px;color:#999999;'
-        'border-top:1px solid #eee;padding-top:12px">'
+        '</div>'
+        '<div style="padding:16px 32px 20px;border-top:1px solid #eee;'
+        'font-size:11px;color:#999999;line-height:1.5">'
         'Afterword &middot; afterword-app.com<br>'
         f'<a href="mailto:{unsubscribe_email}?subject=Unsubscribe" '
-        'style="color:#999999">Unsubscribe</a>'
-        '</p>'
+        'style="color:#999999;text-decoration:underline">Unsubscribe</a>'
+        '</div>'
+        '</div>'
         '</body></html>'
     )
 
@@ -1004,6 +1010,9 @@ def build_unlock_email_payload(
         "1. Open the viewer link above in your browser\n"
         "2. Paste the security key into the key field\n"
         "3. Your message will be decrypted locally in your browser\n\n"
+        "Note: If this email landed in Spam or Promotions, please move "
+        "it to your Primary inbox. This helps your email provider learn "
+        "that messages from Afterword are important.\n\n"
         "The security key is never sent to our servers. Do not share "
         "it — anyone with this key can read the message.\n\n"
         "This message will be available for 30 days, after which it "
@@ -1019,28 +1028,41 @@ def build_unlock_email_payload(
     safe_link = html_mod.escape(viewer_link)
 
     body_html = (
-        f'<p style="margin:0 0 16px"><strong>{safe_sender}</strong> left you a secure '
+        f'<p style="margin:0 0 18px"><strong>{safe_sender}</strong> left you a secure '
         'message using Afterword, a time-locked digital vault app.</p>'
 
-        f'<p style="margin:0 0 16px"><strong>Title:</strong> {safe_title}</p>'
+        f'<p style="margin:0 0 20px"><strong>Title:</strong> {safe_title}</p>'
 
-        '<p style="margin:0 0 16px">Open your secure message here:<br>'
-        f'<a href="{safe_link}" target="_blank">{safe_link}</a></p>'
+        f'<a href="{safe_link}" target="_blank" style="display:block;'
+        'background:#0a0a0a;color:#ffffff;text-decoration:none;'
+        'padding:16px 24px;border-radius:8px;font-size:16px;'
+        'font-weight:600;text-align:center;margin:0 0 28px">'
+        'Open Secure Message</a>'
 
-        '<p style="margin:0 0 8px"><strong>Your Security Key:</strong></p>'
-        '<p style="margin:0 0 16px;font-family:monospace;'
-        f'font-size:13px;word-break:break-all">{security_key}</p>'
+        '<p style="margin:0 0 8px;font-weight:700">Your Security Key:</p>'
+        '<div style="background:#f5f5f5;border:1px solid #e0e0e0;'
+        'border-radius:8px;padding:14px 16px;'
+        'font-family:\'Courier New\',monospace;font-size:13px;'
+        f'word-break:break-all;margin:0 0 28px;color:#333">{security_key}</div>'
 
-        '<p style="margin:0 0 16px"><strong>How to view your message:</strong></p>'
-        '<ol style="margin:0 0 16px;padding-left:20px">'
-        '<li>Click the link above to open the secure viewer</li>'
+        '<p style="margin:0 0 10px;font-weight:700">How to view your message:</p>'
+        '<ol style="margin:0 0 20px;padding-left:20px;font-size:14px;'
+        'color:#444;line-height:1.8">'
+        '<li>Click the button above to open the secure viewer</li>'
         '<li>Paste the security key into the key field</li>'
         '<li>Your message will be decrypted privately in your browser</li>'
         '</ol>'
 
-        '<p style="margin:0 0 16px;color:#666;font-size:13px">'
-        '<em>The security key is never sent to our servers. Do not share '
-        'it — anyone with this key can read the message.</em></p>'
+        '<p style="margin:0 0 20px;font-size:12px;color:#666;'
+        'background:#fafafa;border-radius:6px;padding:12px 14px;'
+        'border-left:3px solid #ddd">'
+        'If this email landed in Spam or Promotions, please move it to your '
+        'Primary inbox. This helps your email provider learn that messages '
+        'from Afterword are important.</p>'
+
+        '<p style="margin:0 0 12px;color:#888;font-size:12px;font-style:italic">'
+        'The security key is never sent to our servers. Do not share it '
+        '&mdash; anyone with this key can read the message.</p>'
 
         '<p style="margin:0;color:#888;font-size:12px">'
         'This message will be available for 30 days, after which it '
