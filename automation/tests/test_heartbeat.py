@@ -902,9 +902,12 @@ class HeartbeatTests(unittest.TestCase):
                          side_effect=lambda msg, key: {
                              f"p{i}|r{i}": f"sig{i}" for i in range(3)
                          }.get(msg, "nomatch")),
-            patch.object(heartbeat, "build_unlock_email_payload", return_value={"mock": True}),
+            patch.object(heartbeat, "build_unlock_email_payload",
+                         return_value={"to": ["u@x.com"], "headers": {}}),
             patch.object(heartbeat, "send_batch_emails",
                          side_effect=RuntimeError("Resend batch error: 429")),
+            patch.object(heartbeat, "send_unlock_email",
+                         side_effect=RuntimeError("Individual send also failed")),
             patch.object(heartbeat, "release_entry_lock",
                          side_effect=lambda _c, eid: released_ids.append(eid)),
             patch.object(heartbeat, "mark_entry_sent") as mock_mark,
@@ -917,7 +920,7 @@ class HeartbeatTests(unittest.TestCase):
 
         self.assertFalse(had_send)
         self.assertEqual(input_send_count, 3)
-        # All 3 locks released after batch failure
+        # All 3 locks released after both batch AND individual fallback failed
         self.assertEqual(sorted(released_ids), ["s-0", "s-1", "s-2"])
         mock_mark.assert_not_called()
 

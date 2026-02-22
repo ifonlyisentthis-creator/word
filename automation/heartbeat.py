@@ -1264,6 +1264,61 @@ def requeue_stale_sending_entries(client, now: datetime) -> int:
 
 
 
+def heal_inconsistent_profiles(client, now: datetime) -> None:
+    """Detect and fix inconsistent profile states at startup.
+
+    Guards against stuck states that could otherwise persist forever:
+      1. Active profile with protocol_executed_at set → stale field, clear it.
+      2. Inactive profile WITHOUT protocol_executed_at → orphaned inactive, reset.
+    """
+    now_iso = now.isoformat()
+
+    # Guard 1: Active profiles with stale protocol_executed_at
+    try:
+        stale = (
+            client.table("profiles")
+            .select("id", count="exact")
+            .eq("status", "active")
+            .neq("protocol_executed_at", "null")  # not-null filter
+            .execute()
+        )
+        if stale.data:
+            for row in stale.data:
+                uid = str(row["id"])
+                client.table("profiles").update({
+                    "protocol_executed_at": None,
+                }).eq("id", uid).eq("status", "active").execute()
+            print(f"Healed {len(stale.data)} active profiles with stale protocol_executed_at")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Guard 1 (stale protocol_executed_at) failed: {exc}")
+
+    # Guard 2: Inactive profiles with NULL protocol_executed_at (orphaned)
+    try:
+        orphaned = (
+            client.table("profiles")
+            .select("id", count="exact")
+            .eq("status", "inactive")
+            .is_("protocol_executed_at", "null")
+            .execute()
+        )
+        if orphaned.data:
+            for row in orphaned.data:
+                uid = str(row["id"])
+                client.table("profiles").update({
+                    "status": "active",
+                    "timer_days": 30,
+                    "last_check_in": now_iso,
+                    "protocol_executed_at": None,
+                    "warning_sent_at": None,
+                    "push_66_sent_at": None,
+                    "push_33_sent_at": None,
+                    "last_entry_at": None,
+                }).eq("id", uid).execute()
+            print(f"Healed {len(orphaned.data)} orphaned inactive profiles (no protocol_executed_at)")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Guard 2 (orphaned inactive) failed: {exc}")
+
+
 def process_expired_entries(
     client,
     profile: dict,
@@ -1306,8 +1361,8 @@ def process_expired_entries(
         print(f"CRITICAL: User {user_id} has {input_send_count} send entries but hmac_key_encrypted is NULL in profile")
 
     # ── Phase 1: Process destroy entries immediately, prepare send entries ──
-    # Each prepared send is (entry_id, entry_title, email_payload_dict)
-    prepared_sends: list[tuple[str, str, dict]] = []
+    # Each prepared send is (entry_id, entry_title, recipient, viewer_link, security_key, email_payload)
+    prepared_sends: list[tuple[str, str, str, str, str, dict]] = []
 
     for entry in entries:
         entry_id = entry.get("id", "unknown")
@@ -1391,7 +1446,7 @@ def process_expired_entries(
                 recipient_email, entry_id, sender_name, entry_title,
                 viewer_link, security_key, from_email,
             )
-            prepared_sends.append((entry_id, entry_title, email_payload))
+            prepared_sends.append((entry_id, entry_title, recipient_email, viewer_link, security_key, email_payload))
 
         except Exception as exc:  # noqa: BLE001
             try:
@@ -1402,39 +1457,83 @@ def process_expired_entries(
 
     # ── Phase 2: Batch-send all prepared emails in a single API call ──
     if prepared_sends:
-        batch_payloads = [p for _, _, p in prepared_sends]
-        batch_entry_ids = [eid for eid, _, _ in prepared_sends]
-        batch_idem_key = f"unlock-batch-{user_id}-{int(now.timestamp())}"
+        batch_payloads = [p for _, _, _, _, _, p in prepared_sends]
+        batch_entry_ids = [eid for eid, _, _, _, _, _ in prepared_sends]
 
+        # Stable idempotency key: based on sorted entry IDs so resending
+        # the same set of entries is a no-op (prevents duplicate emails).
+        entry_hash = hashlib.md5(
+            "|".join(sorted(batch_entry_ids)).encode()
+        ).hexdigest()[:16]
+        batch_idem_key = f"unlock-batch-{user_id}-{entry_hash}"
+
+        batch_ok = False
         try:
             print(f"User {user_id}: sending batch of {len(batch_payloads)} emails")
             send_batch_emails(resend_key, batch_payloads, idempotency_key=batch_idem_key)
-
-            # ── Phase 3: Mark all entries as sent + push notifications ──
-            for entry_id, entry_title, _ in prepared_sends:
-                try:
-                    if not mark_entry_sent(client, entry_id, now):
-                        print(f"WARNING: mark_entry_sent returned False for {entry_id}, retrying")
-                        mark_entry_sent(client, entry_id, now)
-                except Exception as mark_exc:  # noqa: BLE001
-                    print(f"Failed to mark entry {entry_id} as sent: {mark_exc}")
-                had_send = True
-                try:
-                    send_executed_push(
-                        client, profile["id"], entry_id, entry_title, fcm_ctx,
-                    )
-                except Exception as push_exc:  # noqa: BLE001
-                    print(f"Push executed failed for entry {entry_id}: {push_exc}")
-
+            batch_ok = True
         except Exception as batch_exc:  # noqa: BLE001
             print(f"BATCH SEND FAILED for user {user_id} ({len(batch_payloads)} emails): "
                   f"{type(batch_exc).__name__}: {batch_exc}")
-            # Release all locks so entries can be retried next cycle
-            for eid in batch_entry_ids:
+            print(f"User {user_id}: falling back to individual sends...")
+
+        # ── Phase 2b: Fallback — send individually if batch failed ──
+        if not batch_ok:
+            succeeded_ids: set[str] = set()
+            for entry_id, entry_title, recip, vlink, skey, payload in prepared_sends:
                 try:
-                    release_entry_lock(client, eid)
-                except Exception:  # noqa: BLE001
-                    pass
+                    send_unlock_email(
+                        recip,
+                        entry_id,
+                        sender_name,
+                        entry_title,
+                        vlink,
+                        skey,
+                        resend_key,
+                        from_email,
+                    )
+                    succeeded_ids.add(entry_id)
+                except Exception as ind_exc:  # noqa: BLE001
+                    print(f"INDIVIDUAL SEND ALSO FAILED for entry {entry_id}: "
+                          f"{type(ind_exc).__name__}: {ind_exc}")
+            if succeeded_ids:
+                print(f"User {user_id}: individual fallback sent {len(succeeded_ids)}/{len(prepared_sends)}")
+            # Update prepared_sends to only include those that succeeded
+            if not succeeded_ids:
+                # Total failure — release all locks for retry next cycle
+                for eid in batch_entry_ids:
+                    try:
+                        release_entry_lock(client, eid)
+                    except Exception:  # noqa: BLE001
+                        pass
+                return had_send, input_send_count
+
+            # Release locks for entries that failed individually
+            for eid in batch_entry_ids:
+                if eid not in succeeded_ids:
+                    try:
+                        release_entry_lock(client, eid)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+            # Filter prepared_sends to only succeeded entries
+            prepared_sends = [(eid, t, r, v, s, p) for eid, t, r, v, s, p in prepared_sends if eid in succeeded_ids]
+
+        # ── Phase 3: Mark all successfully sent entries + push notifications ──
+        for entry_id, entry_title, *_ in prepared_sends:
+            try:
+                if not mark_entry_sent(client, entry_id, now):
+                    print(f"WARNING: mark_entry_sent returned False for {entry_id}, retrying")
+                    mark_entry_sent(client, entry_id, now)
+            except Exception as mark_exc:  # noqa: BLE001
+                print(f"Failed to mark entry {entry_id} as sent: {mark_exc}")
+            had_send = True
+            try:
+                send_executed_push(
+                    client, profile["id"], entry_id, entry_title, fcm_ctx,
+                )
+            except Exception as push_exc:  # noqa: BLE001
+                print(f"Push executed failed for entry {entry_id}: {push_exc}")
 
     return had_send, input_send_count
 
@@ -1477,7 +1576,10 @@ def cleanup_sent_entries(client) -> None:
         for entry in batch:
             user_ids.add(str(entry["user_id"]))
 
-            # Create tombstone BEFORE deleting (preserves History tab data)
+            # Create tombstone BEFORE deleting (preserves History tab data).
+            # GUARD: Only delete the entry if tombstone was recorded successfully
+            # or already exists (duplicate key = safe to proceed).
+            tombstone_ok = False
             try:
                 client.table("vault_entry_tombstones").insert({
                     "vault_entry_id": entry["id"],
@@ -1486,15 +1588,20 @@ def cleanup_sent_entries(client) -> None:
                     "sent_at": entry.get("sent_at"),
                     "expired_at": now_iso,
                 }).execute()
-            except Exception:  # noqa: BLE001
-                # Tombstone insert may fail on duplicate PK if already exists — safe to skip
-                pass
+                tombstone_ok = True
+            except Exception as tomb_exc:  # noqa: BLE001
+                # Duplicate PK (already exists) is safe — history is preserved
+                if "duplicate" in str(tomb_exc).lower() or "23505" in str(tomb_exc):
+                    tombstone_ok = True
+                else:
+                    print(f"CRITICAL: Tombstone insert failed for entry {entry.get('id', '?')}: {tomb_exc} — skipping delete to preserve history")
 
-            # Delete entry (storage files + DB row)
-            try:
-                delete_entry(client, entry)
-            except Exception:  # noqa: BLE001
-                print(f"Failed to delete sent entry {entry.get('id', '?')}")
+            # Delete entry (storage files + DB row) ONLY if history is safe
+            if tombstone_ok:
+                try:
+                    delete_entry(client, entry)
+                except Exception:  # noqa: BLE001
+                    print(f"Failed to delete sent entry {entry.get('id', '?')}")
 
     # Reset users with zero remaining entries to fresh active state
     for uid in user_ids:
@@ -1883,7 +1990,10 @@ def main() -> int:
 
     requeue_stale_sending_entries(client, now)
 
-
+    try:
+        heal_inconsistent_profiles(client, now)
+    except Exception as exc:  # noqa: BLE001
+        print(f"heal_inconsistent_profiles failed: {exc}")
 
     processed_profiles = 0
 
@@ -2183,9 +2293,13 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"Processing failed for user {profile.get('id', '?')}: {exc}")
 
-    print(f"Active profiles processed: {processed_profiles}")
-
-    print(f"Active entries processed: {processed_entries}")
+    elapsed_total = time.monotonic() - start_time
+    print(
+        f"=== Heartbeat complete ===\n"
+        f"  Profiles processed: {processed_profiles}\n"
+        f"  Active entries seen: {processed_entries}\n"
+        f"  Runtime: {elapsed_total:.1f}s"
+    )
 
     try:
         cleanup_sent_entries(client)
