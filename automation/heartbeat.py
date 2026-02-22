@@ -524,7 +524,18 @@ def _format_from_address(from_email: str) -> str:
     return f"Afterword <{from_email}>"
 
 
-def wrap_email_html(body_html: str) -> str:
+def _extract_email_address(address: str) -> str:
+    """Extract raw email address from either 'Name <email>' or 'email'."""
+    raw = (address or "").strip()
+    if "<" in raw and ">" in raw:
+        start = raw.find("<") + 1
+        end = raw.find(">", start)
+        if end > start:
+            return raw[start:end].strip()
+    return raw
+
+
+def wrap_email_html(body_html: str, *, unsubscribe_email: str) -> str:
     """Wrap bare email body HTML in a minimal, personal-looking structure.
 
     Avoids marketing patterns that trigger Gmail Promotions tab:
@@ -543,7 +554,7 @@ def wrap_email_html(body_html: str) -> str:
         '<p style="margin:32px 0 0;font-size:11px;color:#999999;'
         'border-top:1px solid #eee;padding-top:12px">'
         'Afterword &middot; afterword-app.com<br>'
-        '<a href="mailto:afterword.app@gmail.com?subject=Unsubscribe" '
+        f'<a href="mailto:{unsubscribe_email}?subject=Unsubscribe" '
         'style="color:#999999">Unsubscribe</a>'
         '</p>'
         '</body></html>'
@@ -562,7 +573,8 @@ def send_email(
 ) -> None:
 
     formatted_from = _format_from_address(from_email)
-    wrapped_html = wrap_email_html(html)
+    reply_to_email = _extract_email_address(from_email)
+    wrapped_html = wrap_email_html(html, unsubscribe_email=reply_to_email)
 
     payload: dict = {
         "from": formatted_from,
@@ -570,9 +582,9 @@ def send_email(
         "subject": subject,
         "text": text,
         "html": wrapped_html,
-        "reply_to": "afterword.app@gmail.com",
+        "reply_to": reply_to_email,
         "headers": {
-            "List-Unsubscribe": "<mailto:afterword.app@gmail.com?subject=Unsubscribe>",
+            "List-Unsubscribe": f"<mailto:{reply_to_email}?subject=Unsubscribe>",
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
     }
@@ -645,7 +657,7 @@ def send_warning_email(
         "— The Afterword Team\n\n"
         "Afterword is a time-locked digital vault app. You are receiving this email "
         "because you have an active Afterword account with vault entries.\n\n"
-        "To unsubscribe, reply to afterword.app@gmail.com with subject 'Unsubscribe'."
+        "To unsubscribe, reply to this email with subject 'Unsubscribe'."
     )
 
     safe_name = html_mod.escape(sender_name)
@@ -999,7 +1011,7 @@ def build_unlock_email_payload(
         "If you do not recognize the sender, you may safely ignore "
         "this email.\n\n"
         "— The Afterword Team\n\n"
-        "To unsubscribe, reply to afterword.app@gmail.com with subject 'Unsubscribe'."
+        "To unsubscribe, reply to this email with subject 'Unsubscribe'."
     )
 
     safe_sender = html_mod.escape(sender_name)
@@ -1036,15 +1048,17 @@ def build_unlock_email_payload(
         'If you do not recognize the sender, you may safely ignore this email.</p>'
     )
 
+    reply_to_email = _extract_email_address(from_email)
+
     return {
         "from": formatted_from,
         "to": [recipient_email],
         "subject": subject,
         "text": text,
-        "html": wrap_email_html(body_html),
-        "reply_to": "afterword.app@gmail.com",
+        "html": wrap_email_html(body_html, unsubscribe_email=reply_to_email),
+        "reply_to": reply_to_email,
         "headers": {
-            "List-Unsubscribe": "<mailto:afterword.app@gmail.com?subject=Unsubscribe>",
+            "List-Unsubscribe": f"<mailto:{reply_to_email}?subject=Unsubscribe>",
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
     }
@@ -1931,7 +1945,7 @@ def handle_subscription_downgrade(
             "— The Afterword Team\n\n"
             "Afterword is a time-locked digital vault app. You are receiving "
             "this email because you have an Afterword account.\n\n"
-            "To unsubscribe, reply to afterword.app@gmail.com with subject 'Unsubscribe'."
+            "To unsubscribe, reply to this email with subject 'Unsubscribe'."
         )
         safe_name = html_mod.escape(sender_name)
         audio_li = (
