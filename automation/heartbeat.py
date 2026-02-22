@@ -555,6 +555,10 @@ def wrap_email_html(body_html: str) -> str:
         'someone designated you as a recipient.</p>'
         '<p style="margin:8px 0 0;font-size:12px;color:#999999">'
         'Afterword &middot; afterword-app.com</p>'
+        '<p style="margin:8px 0 0;font-size:11px;color:#bbbbbb">'
+        '<a href="mailto:afterword.app@gmail.com?subject=Unsubscribe" '
+        'style="color:#bbbbbb;text-decoration:underline">Unsubscribe</a>'
+        '</p>'
         '</td></tr>'
         '</table>'
         '</td></tr></table>'
@@ -582,8 +586,10 @@ def send_email(
         "subject": subject,
         "text": text,
         "html": wrapped_html,
+        "reply_to": "afterword.app@gmail.com",
         "headers": {
             "List-Unsubscribe": "<mailto:afterword.app@gmail.com?subject=Unsubscribe>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
     }
 
@@ -654,7 +660,8 @@ def send_warning_email(
         "If you are safe, open Afterword today to reset your timer.\n\n"
         "— The Afterword Team\n\n"
         "Afterword is a time-locked digital vault app. You are receiving this email "
-        "because you have an active Afterword account with vault entries."
+        "because you have an active Afterword account with vault entries.\n\n"
+        "To unsubscribe, reply to afterword.app@gmail.com with subject 'Unsubscribe'."
     )
 
     safe_name = html_mod.escape(sender_name)
@@ -1007,7 +1014,8 @@ def build_unlock_email_payload(
         "will be permanently and automatically erased.\n\n"
         "If you do not recognize the sender, you may safely ignore "
         "this email.\n\n"
-        "— The Afterword Team"
+        "— The Afterword Team\n\n"
+        "To unsubscribe, reply to afterword.app@gmail.com with subject 'Unsubscribe'."
     )
 
     safe_sender = html_mod.escape(sender_name)
@@ -1059,8 +1067,10 @@ def build_unlock_email_payload(
         "subject": subject,
         "text": text,
         "html": wrap_email_html(body_html),
+        "reply_to": "afterword.app@gmail.com",
         "headers": {
             "List-Unsubscribe": "<mailto:afterword.app@gmail.com?subject=Unsubscribe>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
     }
 
@@ -1924,7 +1934,8 @@ def handle_subscription_downgrade(
             "resubscribe at any time to restore premium features.\n\n"
             "— The Afterword Team\n\n"
             "Afterword is a time-locked digital vault app. You are receiving "
-            "this email because you have an Afterword account."
+            "this email because you have an Afterword account.\n\n"
+            "To unsubscribe, reply to afterword.app@gmail.com with subject 'Unsubscribe'."
         )
         safe_name = html_mod.escape(sender_name)
         audio_li = (
