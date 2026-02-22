@@ -1289,7 +1289,7 @@ def heal_inconsistent_profiles(client, now: datetime) -> None:
             client.table("profiles")
             .select("id", count="exact")
             .eq("status", "active")
-            .neq("protocol_executed_at", "null")  # not-null filter
+            .not_.is_("protocol_executed_at", "null")
             .execute()
         )
         if stale.data:
