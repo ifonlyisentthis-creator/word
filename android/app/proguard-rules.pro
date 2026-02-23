@@ -60,6 +60,12 @@
 
 # ── flutter_secure_storage ─────────────────────────────────────────────
 -keep class com.it_nomads.fluttersecurestorage.** { *; }
+# EncryptedSharedPreferences backend (Android Keystore)
+-keep class androidx.security.crypto.** { *; }
+-dontwarn androidx.security.crypto.**
+# Tink is the internal crypto engine for AndroidX Security
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
 
 # ── local_auth (biometric) ─────────────────────────────────────────────
 -keep class io.flutter.plugins.localauth.** { *; }
@@ -85,10 +91,16 @@
 -keep class kotlin.reflect.** { *; }
 -dontwarn kotlin.reflect.**
 
-# ── AndroidX / Material ───────────────────────────────────────────────
+# ── AndroidX / Material / Lifecycle / Fragment ───────────────────────
 -keep class androidx.core.app.** { *; }
 -keep class androidx.window.** { *; }
 -dontwarn androidx.window.**
+# Lifecycle (Firebase, Google Sign-In, local_auth)
+-keep class androidx.lifecycle.** { *; }
+-dontwarn androidx.lifecycle.**
+# Fragment (Google Sign-In Activity, local_auth BiometricPrompt)
+-keep class androidx.fragment.** { *; }
+-dontwarn androidx.fragment.**
 
 # ── Play Core (referenced by Flutter engine) ──────────────────────────
 -dontwarn com.google.android.play.core.splitcompat.**
