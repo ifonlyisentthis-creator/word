@@ -85,10 +85,10 @@ class TermsScreen extends StatelessWidget {
                         'Afterword offers tiered access:\n\n'
                         '• Free — Up to 3 text entries, 30-day fixed timer, 3 themes, '
                         '3 soul fire styles, push notifications, recovery phrase backup\n'
-                        '• Pro (Monthly / Annual) — Unlimited text entries, custom timer '
-                        '(7–365 days), Protocol Zero (erase mode), email warning before expiry, '
-                        'all themes and soul fire styles\n'
-                        '• Lifetime — All Pro features plus encrypted audio vault (10 min), '
+                        '• Pro (Monthly / Annual) — Unlimited text entries, encrypted audio vault '
+                        '(1 min), custom timer (7–365 days), Protocol Zero (erase mode), '
+                        'email warning before expiry, all themes and soul fire styles\n'
+                        '• Lifetime — All Pro features plus extended audio vault (10 min), '
                         'extended timer (up to 10 years), permanent access\n\n'
                         'Payment is charged to your app store account at confirmation of purchase. '
                         'Monthly and annual subscriptions auto-renew unless cancelled at least '
@@ -98,7 +98,7 @@ class TermsScreen extends StatelessWidget {
                         'If a subscription is cancelled, expires, or is refunded, the account '
                         'reverts to the free tier. Existing text vault entries are preserved. '
                         'Premium features (custom timer, erase mode, premium themes) are reset '
-                        'to free defaults. Audio vault entries from Lifetime plans are deleted upon reversion.',
+                        'to free defaults. Audio vault entries are deleted upon reversion.',
                         style: bodyStyle,
                       ),
                       const SizedBox(height: 20),

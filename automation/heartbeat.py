@@ -1853,7 +1853,7 @@ def handle_subscription_downgrade(
       2. Reset last_check_in to now() — user gets full 30 days
       3. Clear warning timestamps
       4. Reset theme and soul fire to free defaults
-      5. If former lifetime user: delete all audio vault entries
+      5. Delete all audio vault entries (audio requires pro/lifetime)
       6. Send notification email to user
     """
     uid = profile["id"]
@@ -1880,10 +1880,10 @@ def handle_subscription_downgrade(
     has_audio = bool(active_audio_entries)
     audio_entries: list[dict] = []
 
-    # Only query for audio if there are other pro/lifetime indicators.
-    # This avoids a DB query for every always-free user at scale.
+    # Check for audio entries if we have any pro/lifetime indicators, or if
+    # active_entries didn't include audio (audio is now pro+lifetime feature).
     has_pro_indicators = has_custom_timer or has_custom_theme or has_custom_soul_fire
-    if not has_audio and (has_pro_indicators or (selected_soul_fire in ("toxicCore", "crystalAscend"))):
+    if not has_audio and has_pro_indicators:
         try:
             audio_check = (
                 client.table("vault_entries")
@@ -1902,11 +1902,6 @@ def handle_subscription_downgrade(
     if not needs_revert:
         return False
 
-    was_lifetime = (
-        has_audio
-        or (has_custom_soul_fire and selected_soul_fire in ("toxicCore", "crystalAscend"))
-    )
-
     # 1. Reset profile to free defaults
     update_data = {
         "timer_days": 30,
@@ -1919,8 +1914,8 @@ def handle_subscription_downgrade(
     }
     client.table("profiles").update(update_data).eq("id", uid).execute()
 
-    # 2. If former lifetime: delete audio vault entries
-    if was_lifetime:
+    # 2. Delete audio vault entries (audio requires pro/lifetime)
+    if has_audio:
         if active_audio_entries:
             audio_entries = active_audio_entries
         else:
@@ -1935,20 +1930,20 @@ def handle_subscription_downgrade(
         for entry in audio_entries:
             delete_entry(client, entry)
         if audio_entries:
-            print(f"Deleted {len(audio_entries)} audio entries for downgraded lifetime user {uid}")
+            print(f"Deleted {len(audio_entries)} audio entries for downgraded user {uid}")
 
     # 3. Send notification email ONLY for genuine downgrades.
     # Strong indicators: timer > 30 (impossible without pro) or audio entries
-    # (impossible without lifetime). Theme/soul_fire alone are weak signals
+    # (impossible without pro/lifetime). Theme/soul_fire alone are weak signals
     # that can arise from bugs or testing — silently reset, no email.
     is_genuine_downgrade = has_custom_timer or has_audio
     if email and is_genuine_downgrade:
         reason = "refund or expiration"
         audio_note = ""
-        if was_lifetime and audio_entries:
+        if audio_entries:
             audio_note = (
                 " Audio vault entries have been removed as they require "
-                "a Lifetime subscription."
+                "a paid subscription."
             )
 
         subject = "Afterword — Subscription update"
@@ -1960,7 +1955,7 @@ def handle_subscription_downgrade(
             "- Your timer has been reset to the default 30 days\n"
             "- Custom themes and styles have been reset to defaults\n"
             "- All your existing vault entries are preserved\n"
-            f"{'- Audio vault entries have been removed (Lifetime feature)' if was_lifetime and audio_entries else ''}"
+            f"{'- Audio vault entries have been removed (requires paid subscription)' if audio_entries else ''}"
             "\n\n"
             "You can continue using Afterword on the free tier, or "
             "resubscribe at any time to restore premium features.\n\n"
@@ -1971,8 +1966,8 @@ def handle_subscription_downgrade(
         )
         safe_name = html_mod.escape(sender_name)
         audio_li = (
-            '<li style="margin-bottom:6px">Audio vault entries have been removed (Lifetime feature)</li>'
-            if was_lifetime and audio_entries else ''
+            '<li style="margin-bottom:6px">Audio vault entries have been removed (requires paid subscription)</li>'
+            if audio_entries else ''
         )
         html = (
             f'<p style="margin:0 0 16px">Hi {safe_name},</p>'

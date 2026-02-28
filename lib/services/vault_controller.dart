@@ -10,7 +10,11 @@ class VaultController extends ChangeNotifier {
 
   bool _isDisposed = false;
 
-  static const int audioTimeBankSeconds = 600;
+  static const int audioTimeBankSecondsLifetime = 600;
+  static const int audioTimeBankSecondsPro = 60;
+
+  static int audioTimeBankFor({required bool isLifetime}) =>
+      isLifetime ? audioTimeBankSecondsLifetime : audioTimeBankSecondsPro;
   static const int maxPlaintextLength = 50000;
   static const Duration createRateLimit = Duration(seconds: 5);
 
@@ -258,8 +262,8 @@ class VaultController extends ChangeNotifier {
         return 'Free plan allows up to 3 text items.';
       }
     }
-    if (draft.dataType == VaultDataType.audio && !isLifetime) {
-      return 'Audio vault is available on Lifetime.';
+    if (draft.dataType == VaultDataType.audio && !isPro) {
+      return 'Audio vault requires Pro or Lifetime.';
     }
     if (isAudio) {
       final hasExistingAudio = existingEntry?.dataType == VaultDataType.audio;
@@ -272,8 +276,9 @@ class VaultController extends ChangeNotifier {
         return 'Record audio before saving.';
       }
       final totalUsed = audioSecondsUsed;
+      final bankLimit = audioTimeBankFor(isLifetime: isLifetime);
       final availableSeconds =
-          audioTimeBankSeconds -
+          bankLimit -
           totalUsed +
           (hasExistingAudio ? (existingEntry?.audioDurationSeconds ?? 0) : 0);
       if (durationSeconds > availableSeconds) {

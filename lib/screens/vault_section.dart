@@ -1102,8 +1102,9 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
         ? widget.entry!.audioDurationSeconds!
         : 0;
 
+    final timeBankLimit = VaultController.audioTimeBankFor(isLifetime: widget.isLifetime);
     final remainingSecondsRaw =
-        VaultController.audioTimeBankSeconds -
+        timeBankLimit -
         audioSecondsUsed +
         existingAudioSeconds;
 
@@ -1122,7 +1123,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
         : (_recordedDurationSeconds ??
               (hasExistingAudio ? existingAudioSeconds : null));
 
-    final timeBankTotal = VaultController.audioTimeBankSeconds;
+    final timeBankTotal = timeBankLimit;
 
     final timeBankProgress = timeBankTotal == 0
         ? 0.0
@@ -1333,7 +1334,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
                           const Icon(Icons.graphic_eq, size: 16),
 
-                          if (!widget.isLifetime) ...[
+                          if (!widget.isPro) ...[
                             const SizedBox(width: 4),
 
                             const Icon(Icons.lock_outline, size: 16),
@@ -1343,7 +1344,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
                       selected: _dataType == VaultDataType.audio,
 
-                      onSelected: widget.isLifetime && !_isSaving
+                      onSelected: widget.isPro && !_isSaving
                           ? (_) async {
                               await _handleDataTypeChange(VaultDataType.audio);
                             }
@@ -1355,9 +1356,9 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                 const SizedBox(height: 6),
 
                 Text(
-                  widget.isLifetime
-                      ? 'Audio vault includes a 10 minute time bank.'
-                      : 'Audio vault unlocks on Lifetime.',
+                  widget.isPro
+                      ? 'Audio vault: ${_formatSeconds(timeBankTotal)} time bank.'
+                      : 'Audio vault unlocks on Pro.',
 
                   style: Theme.of(
                     context,
@@ -1398,7 +1399,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                         const SizedBox(height: 6),
 
                         Text(
-                          'Time bank: ${_formatSeconds(remainingSeconds)} left of ${_formatSeconds(VaultController.audioTimeBankSeconds)}',
+                          'Time bank: ${_formatSeconds(remainingSeconds)} left of ${_formatSeconds(timeBankTotal)}',
 
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: Colors.white70),

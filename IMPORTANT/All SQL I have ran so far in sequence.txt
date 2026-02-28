@@ -4977,3 +4977,678 @@ GRANT UPDATE (
 
 GRANT UPDATE (hmac_key_encrypted) ON profiles TO authenticated;
 
+48.
+-- ============================================================================
+-- AFTERWORD v36 — Theme/Soul-Fire Preference Alignment (SQL #48)
+-- Safe to re-run. Fixes constraints + update_preferences to include
+-- new free presets: midnightFrost, shadowRose, goldenPulse, nebulaHeart
+-- ============================================================================
+
+-- 1) Drop old theme constraint and recreate with expanded free presets
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_theme_check;
+ALTER TABLE profiles
+  ADD CONSTRAINT profiles_theme_check
+  CHECK (
+    selected_theme IS NULL OR selected_theme IN (
+      'oledVoid','midnightFrost','shadowRose',
+      'obsidianSteel','midnightEmber','deepOcean','auroraNight','cosmicDusk'
+    )
+  );
+
+-- 2) Drop old soul fire constraint and recreate with expanded free presets
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_soul_fire_check;
+ALTER TABLE profiles
+  ADD CONSTRAINT profiles_soul_fire_check
+  CHECK (
+    selected_soul_fire IS NULL OR selected_soul_fire IN (
+      'etherealOrb','goldenPulse','nebulaHeart',
+      'voidPortal','plasmaBurst','plasmaCell','toxicCore','crystalAscend'
+    )
+  );
+
+-- 3) Replace update_preferences RPC with updated tier mapping
+CREATE OR REPLACE FUNCTION public.update_preferences(
+  target_user_id uuid,
+  p_theme text DEFAULT NULL,
+  p_soul_fire text DEFAULT NULL
+)
+RETURNS profiles
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  result profiles;
+  sub text;
+  theme_tier text;
+  sf_tier text;
+BEGIN
+  IF auth.uid() <> target_user_id THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+
+  SELECT subscription_status INTO sub
+  FROM profiles WHERE id = target_user_id;
+
+  IF sub IS NULL THEN
+    RAISE EXCEPTION 'profile not found';
+  END IF;
+
+  IF p_theme IS NOT NULL THEN
+    theme_tier := CASE p_theme
+      WHEN 'oledVoid' THEN 'free'
+      WHEN 'midnightFrost' THEN 'free'
+      WHEN 'shadowRose' THEN 'free'
+      WHEN 'obsidianSteel' THEN 'pro'
+      WHEN 'midnightEmber' THEN 'pro'
+      WHEN 'deepOcean' THEN 'pro'
+      WHEN 'auroraNight' THEN 'lifetime'
+      WHEN 'cosmicDusk' THEN 'lifetime'
+      ELSE NULL
+    END;
+    IF theme_tier IS NULL THEN
+      RAISE EXCEPTION 'invalid theme';
+    END IF;
+    IF theme_tier = 'pro' AND sub NOT IN ('pro','lifetime') THEN
+      RAISE EXCEPTION 'theme requires pro or lifetime';
+    END IF;
+    IF theme_tier = 'lifetime' AND sub <> 'lifetime' THEN
+      RAISE EXCEPTION 'theme requires lifetime';
+    END IF;
+  END IF;
+
+  IF p_soul_fire IS NOT NULL THEN
+    sf_tier := CASE p_soul_fire
+      WHEN 'etherealOrb' THEN 'free'
+      WHEN 'goldenPulse' THEN 'free'
+      WHEN 'nebulaHeart' THEN 'free'
+      WHEN 'voidPortal' THEN 'pro'
+      WHEN 'plasmaBurst' THEN 'pro'
+      WHEN 'plasmaCell' THEN 'pro'
+      WHEN 'toxicCore' THEN 'lifetime'
+      WHEN 'crystalAscend' THEN 'lifetime'
+      ELSE NULL
+    END;
+    IF sf_tier IS NULL THEN
+      RAISE EXCEPTION 'invalid soul fire style';
+    END IF;
+    IF sf_tier = 'pro' AND sub NOT IN ('pro','lifetime') THEN
+      RAISE EXCEPTION 'soul fire style requires pro or lifetime';
+    END IF;
+    IF sf_tier = 'lifetime' AND sub <> 'lifetime' THEN
+      RAISE EXCEPTION 'soul fire style requires lifetime';
+    END IF;
+  END IF;
+
+  UPDATE profiles
+  SET selected_theme = COALESCE(p_theme, selected_theme),
+      selected_soul_fire = COALESCE(p_soul_fire, selected_soul_fire)
+  WHERE id = target_user_id
+  RETURNING * INTO result;
+
+  RETURN result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.update_preferences(uuid, text, text) FROM anon;
+GRANT EXECUTE ON FUNCTION public.update_preferences(uuid, text, text) TO authenticated;
+
+-- ============================================================================
+-- END OF v36 SQL
+-- ============================================================================
+
+49.
+CREATE OR REPLACE FUNCTION public.delete_my_account()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, storage
+AS $$
+DECLARE
+  uid uuid;
+BEGIN
+  uid := auth.uid();
+  IF uid IS NULL THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name LIKE uid::text || '/%';
+
+  DELETE FROM auth.users WHERE id = uid;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'user not found';
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.delete_my_account() FROM public;
+REVOKE ALL ON FUNCTION public.delete_my_account() FROM anon;
+GRANT EXECUTE ON FUNCTION public.delete_my_account() TO authenticated;
+
+50.
+-- Run this whole block in Supabase SQL Editor (all at once)
+
+BEGIN;
+
+-- 1) Recovery backup column + profile grants
+ALTER TABLE public.profiles
+ADD COLUMN IF NOT EXISTS key_backup_encrypted text;
+
+REVOKE UPDATE ON public.profiles FROM authenticated, anon;
+
+GRANT UPDATE (hmac_key_encrypted, key_backup_encrypted)
+ON public.profiles
+TO authenticated;
+
+GRANT UPDATE (
+  subscription_status,
+  status,
+  warning_sent_at,
+  push_66_sent_at,
+  push_33_sent_at,
+  timer_days,
+  last_check_in,
+  selected_theme,
+  selected_soul_fire,
+  protocol_executed_at,
+  last_entry_at,
+  had_vault_activity
+)
+ON public.profiles
+TO service_role;
+
+-- 2) Remove broad anon table reads
+DROP POLICY IF EXISTS entries_select_sent_anon ON public.vault_entries;
+REVOKE SELECT ON TABLE public.vault_entries FROM anon;
+
+-- 3) Recreate viewer RPC (syntax-safe SQL function form)
+DROP FUNCTION IF EXISTS public.viewer_get_entry(uuid);
+
+CREATE FUNCTION public.viewer_get_entry(entry_id uuid)
+RETURNS json
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT json_build_object(
+    'id', ve.id,
+    'title', ve.title,
+    'data_type', ve.data_type,
+    'payload_encrypted', ve.payload_encrypted,
+    'audio_file_path', ve.audio_file_path,
+    'audio_duration_seconds', ve.audio_duration_seconds,
+    'status', ve.status
+  )
+  FROM public.vault_entries AS ve
+  WHERE ve.id = entry_id
+    AND ve.status = 'sent'
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.viewer_get_entry(uuid) FROM public;
+GRANT EXECUTE ON FUNCTION public.viewer_get_entry(uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.viewer_get_entry(uuid) TO authenticated;
+
+COMMIT;
+
+51.
+-- ============================================================================
+-- AFTERWORD v38 — Production Hardening (Viewer Isolation + Storage Fix)
+-- Run this ENTIRE block in Supabase SQL Editor.
+--
+-- Changes:
+--   1) Ensure profiles.key_backup_encrypted column exists + column grants.
+--   2) Remove broad anonymous SELECT on vault_entries.
+--   3) Add viewer_entry_status SECURITY DEFINER RPC (expired / available).
+--   4) Add viewer_get_entry SECURITY DEFINER RPC (fetch single sent entry).
+--   5) Add is_sent_audio_path SECURITY DEFINER helper for storage policy.
+--   6) Recreate vault_audio_read_sent_anon policy using the helper
+--      (old policy used a direct subquery that breaks without anon SELECT).
+-- ============================================================================
+
+BEGIN;
+
+-- ── 1. Recovery backup column + column-level grants ────────────────────────
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS key_backup_encrypted text;
+
+REVOKE UPDATE ON profiles FROM authenticated, anon;
+GRANT UPDATE (hmac_key_encrypted, key_backup_encrypted) ON profiles TO authenticated;
+
+GRANT UPDATE (
+  subscription_status,
+  status,
+  warning_sent_at,
+  push_66_sent_at,
+  push_33_sent_at,
+  timer_days,
+  last_check_in,
+  selected_theme,
+  selected_soul_fire,
+  protocol_executed_at,
+  last_entry_at,
+  had_vault_activity
+) ON profiles TO service_role;
+
+-- ── 2. Remove broad anon table reads on vault_entries ──────────────────────
+
+DROP POLICY IF EXISTS entries_select_sent_anon ON vault_entries;
+REVOKE SELECT ON TABLE vault_entries FROM anon;
+
+-- ── 3. viewer_entry_status RPC (check if entry is available/expired) ───────
+
+DROP FUNCTION IF EXISTS public.viewer_entry_status(uuid);
+CREATE FUNCTION public.viewer_entry_status(entry_id uuid)
+RETURNS json
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    CASE
+      WHEN ve.id IS NULL THEN
+        json_build_object('state', 'unavailable', 'sender_name', NULL)
+      WHEN t.vault_entry_id IS NOT NULL THEN
+        json_build_object('state', 'expired', 'sender_name', t.sender_name)
+      ELSE
+        json_build_object(
+          'state', 'available',
+          'sender_name', (
+            SELECT p.sender_name FROM profiles p WHERE p.id = ve.user_id
+          )
+        )
+    END
+  FROM (SELECT entry_id AS lookup_id) AS q
+  LEFT JOIN vault_entries ve ON ve.id = q.lookup_id AND ve.status = 'sent'
+  LEFT JOIN vault_entry_tombstones t ON t.vault_entry_id = q.lookup_id
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.viewer_entry_status(uuid) FROM public;
+GRANT EXECUTE ON FUNCTION public.viewer_entry_status(uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.viewer_entry_status(uuid) TO authenticated;
+
+-- ── 4. viewer_get_entry RPC (fetch one sent entry by ID) ───────────────────
+
+DROP FUNCTION IF EXISTS public.viewer_get_entry(uuid);
+CREATE FUNCTION public.viewer_get_entry(entry_id uuid)
+RETURNS json
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT json_build_object(
+    'id', ve.id,
+    'title', ve.title,
+    'data_type', ve.data_type,
+    'payload_encrypted', ve.payload_encrypted,
+    'audio_file_path', ve.audio_file_path,
+    'audio_duration_seconds', ve.audio_duration_seconds,
+    'status', ve.status
+  )
+  FROM vault_entries AS ve
+  WHERE ve.id = entry_id
+    AND ve.status = 'sent'
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.viewer_get_entry(uuid) FROM public;
+GRANT EXECUTE ON FUNCTION public.viewer_get_entry(uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.viewer_get_entry(uuid) TO authenticated;
+
+-- ── 5. Storage helper: is_sent_audio_path ──────────────────────────────────
+-- The old vault_audio_read_sent_anon policy used EXISTS(SELECT FROM vault_entries)
+-- as the anon role. After revoking anon SELECT on vault_entries, that subquery
+-- fails with permission denied. This SECURITY DEFINER function bypasses RLS
+-- so the storage policy can still verify the audio belongs to a sent entry.
+
+DROP FUNCTION IF EXISTS public.is_sent_audio_path(text);
+CREATE FUNCTION public.is_sent_audio_path(file_path text)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM vault_entries ve
+    WHERE ve.audio_file_path = file_path
+      AND ve.status = 'sent'
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.is_sent_audio_path(text) FROM public;
+GRANT EXECUTE ON FUNCTION public.is_sent_audio_path(text) TO anon;
+
+-- ── 6. Recreate storage policy using the helper ────────────────────────────
+
+DROP POLICY IF EXISTS vault_audio_read_sent_anon ON storage.objects;
+CREATE POLICY vault_audio_read_sent_anon ON storage.objects
+FOR SELECT TO anon
+USING (
+  bucket_id = 'vault-audio'
+  AND public.is_sent_audio_path(name)
+);
+
+COMMIT;
+
+-- ============================================================================
+-- END OF v38 SQL
+-- ============================================================================
+
+52.
+-- ============================================================================
+-- AFTERWORD v39 — Scale indexes, account deletion fix, storage policy fix
+-- Run this in Supabase SQL Editor.
+--
+-- What this does:
+--   1. Fixes delete_my_account() — removes direct storage.objects DELETE
+--      (Supabase blocks it with error 42501). Audio cleanup is now done
+--      client-side via Storage API before calling this RPC.
+--   2. Fixes storage delete policy — allows ANY authenticated user to delete
+--      their own audio (not just Lifetime). Prevents orphaned files on
+--      downgrade or account deletion.
+--   3. Adds missing performance indexes for million-user scale.
+--
+-- Safe to re-run (all statements are idempotent).
+-- ============================================================================
+
+-- ── 1. Fix delete_my_account (remove storage.objects direct delete) ──
+
+CREATE OR REPLACE FUNCTION public.delete_my_account()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  uid uuid;
+BEGIN
+  uid := auth.uid();
+  IF uid IS NULL THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+
+  -- Audio storage cleanup is done client-side via Storage API before calling
+  -- this RPC (direct SQL DELETE on storage.objects is blocked by Supabase).
+
+  -- Delete auth identity; cascades to profiles/vault_entries/push_devices/tombstones.
+  DELETE FROM auth.users WHERE id = uid;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'user not found';
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.delete_my_account() FROM public;
+REVOKE ALL ON FUNCTION public.delete_my_account() FROM anon;
+GRANT EXECUTE ON FUNCTION public.delete_my_account() TO authenticated;
+
+-- ── 2. Fix storage delete policy (allow any user to delete own audio) ──
+
+DROP POLICY IF EXISTS vault_audio_delete_lifetime ON storage.objects;
+DROP POLICY IF EXISTS vault_audio_delete_own ON storage.objects;
+
+CREATE POLICY vault_audio_delete_own ON storage.objects
+FOR DELETE TO authenticated
+USING (
+  bucket_id = 'vault-audio'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- ── 3. Missing performance indexes ──
+
+CREATE INDEX IF NOT EXISTS idx_tombstones_user
+  ON vault_entry_tombstones (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_subscription
+  ON profiles (subscription_status) WHERE status = 'active';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_push_devices_user_token
+  ON push_devices (user_id, fcm_token);
+
+-- ============================================================================
+-- END v39
+-- ============================================================================
+
+
+53.
+-- ============================================================================
+-- AFTERWORD v40 — Server-side 12-hour cooldown guard on update_check_in
+-- Run this in Supabase SQL Editor.
+--
+-- Defence-in-depth: the client already enforces a 12-hour cooldown on Soul
+-- Fire presses, but this migration adds a server-side guard so that even
+-- direct REST API calls cannot spam last_check_in resets.
+--
+-- Behaviour:
+--   - If last_check_in is within 12 hours AND it is NOT the very first
+--     check-in after account creation (60s tolerance), the RPC returns the
+--     current profile row unchanged — no UPDATE is executed.
+--   - update_timer_days is NOT affected (separate RPC; timer adjustments
+--     always reset the timer as intended).
+--   - heartbeat.py writes via service_role direct UPDATEs, not this RPC,
+--     so they are unaffected.
+-- ============================================================================
+
+DROP FUNCTION IF EXISTS public.update_check_in(uuid, integer);
+
+CREATE OR REPLACE FUNCTION public.update_check_in(user_id uuid, p_timer_days int DEFAULT NULL)
+RETURNS profiles
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  result profiles;
+  sub text;
+  effective_timer int;
+  max_timer int;
+  current_last_check_in timestamptz;
+  profile_created_at timestamptz;
+BEGIN
+  IF auth.uid() <> user_id THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+
+  SELECT subscription_status, timer_days, last_check_in, created_at
+  INTO sub, effective_timer, current_last_check_in, profile_created_at
+  FROM profiles
+  WHERE id = user_id;
+
+  IF sub IS NULL THEN
+    RAISE EXCEPTION 'profile not found';
+  END IF;
+
+  -- ── Server-side 12-hour cooldown ──
+  -- Allow the write if:
+  --   (a) last_check_in is NULL (should not happen, but safe), OR
+  --   (b) this is the first real check-in (last_check_in ≈ created_at within 60s), OR
+  --   (c) 12+ hours have elapsed since last_check_in
+  IF current_last_check_in IS NOT NULL
+     AND abs(extract(epoch FROM current_last_check_in - profile_created_at)) > 60
+     AND now() - current_last_check_in < interval '12 hours'
+  THEN
+    -- Cooldown active: return current profile without writing
+    SELECT * INTO result FROM profiles WHERE id = user_id;
+    RETURN result;
+  END IF;
+
+  -- ── Subscription-tier timer clamping ──
+  IF sub = 'lifetime' THEN
+    max_timer := 3650;
+  ELSIF sub = 'pro' THEN
+    max_timer := 365;
+  ELSE
+    max_timer := 30;
+  END IF;
+
+  IF sub NOT IN ('pro','lifetime') THEN
+    effective_timer := 30;
+  ELSIF p_timer_days IS NOT NULL THEN
+    effective_timer := greatest(7, least(max_timer, p_timer_days));
+  END IF;
+
+  UPDATE profiles
+  SET last_check_in = now(),
+      timer_days = effective_timer,
+      warning_sent_at = NULL,
+      push_66_sent_at = NULL,
+      push_33_sent_at = NULL,
+      status = 'active'
+  WHERE id = user_id
+  RETURNING * INTO result;
+
+  RETURN result;
+END;
+$$;
+
+-- ============================================================================
+-- END OF v40 SQL
+-- ============================================================================
+
+
+54.
+-- v41: Reset timer when first entry is added to an empty vault
+CREATE OR REPLACE FUNCTION reset_timer_on_first_entry()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.status = 'active' THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM vault_entries
+      WHERE user_id = NEW.user_id
+        AND status = 'active'
+        AND id != NEW.id
+      LIMIT 1
+    ) THEN
+      UPDATE profiles
+      SET last_check_in = now(),
+          warning_sent_at = NULL,
+          push_66_sent_at = NULL,
+          push_33_sent_at = NULL
+      WHERE id = NEW.user_id
+        AND status = 'active';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_reset_timer_on_first_entry ON vault_entries;
+
+CREATE TRIGGER trg_reset_timer_on_first_entry
+  AFTER INSERT ON vault_entries
+  FOR EACH ROW
+  EXECUTE FUNCTION reset_timer_on_first_entry();
+
+55.
+-- Ensure service_role can update ALL columns the heartbeat touches
+GRANT UPDATE (
+  timer_days, last_check_in, selected_theme, selected_soul_fire,
+  protocol_executed_at, last_entry_at, had_vault_activity,
+  subscription_status, status, warning_sent_at,
+  push_66_sent_at, push_33_sent_at
+) ON profiles TO service_role;
+
+
+56.
+-- v42: Grant service_role access to vault_entry_tombstones
+GRANT INSERT, DELETE, SELECT ON TABLE vault_entry_tombstones TO service_role;
+
+57.
+-- v42: Grant service_role access to vault_entry_tombstones
+GRANT INSERT, DELETE, SELECT ON TABLE vault_entry_tombstones TO service_role;
+
+
+58.
+-- ============================================================================
+-- AFTERWORD SQL #58 — Audio Vault for Pro + Webhook Support
+-- Run this in Supabase SQL Editor.
+--
+-- Changes:
+--   1. Update enforce_audio_time_bank() — Pro gets 60s, Lifetime gets 600s
+--   2. Update RLS insert/update policies — allow audio for Pro users
+--   3. Update storage policies — allow Pro users to upload/update audio
+--
+-- Safe to re-run (all statements are idempotent).
+-- ============================================================================
+
+-- 1. UPDATE enforce_audio_time_bank — Pro (60s) + Lifetime (600s)
+CREATE OR REPLACE FUNCTION public.enforce_audio_time_bank()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  total_seconds int;
+  sub text;
+  new_duration int;
+  max_bank int;
+BEGIN
+  IF new.data_type <> 'audio' THEN RETURN new; END IF;
+  SELECT subscription_status INTO sub FROM profiles WHERE id = new.user_id;
+  IF sub NOT IN ('pro', 'lifetime') THEN
+    RAISE EXCEPTION 'audio vault requires pro or lifetime';
+  END IF;
+  new_duration := COALESCE(new.audio_duration_seconds, 0);
+  IF new_duration <= 0 THEN RAISE EXCEPTION 'audio duration required'; END IF;
+  IF sub = 'lifetime' THEN max_bank := 600;
+  ELSE max_bank := 60;
+  END IF;
+  SELECT COALESCE(sum(audio_duration_seconds), 0) INTO total_seconds
+  FROM vault_entries WHERE user_id = new.user_id AND data_type = 'audio' AND status = 'active' AND id <> new.id;
+  IF total_seconds + new_duration > max_bank THEN
+    RAISE EXCEPTION 'audio time bank limit reached';
+  END IF;
+  RETURN new;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS vault_entries_audio_bank ON vault_entries;
+CREATE TRIGGER vault_entries_audio_bank
+BEFORE INSERT OR UPDATE ON vault_entries
+FOR EACH ROW EXECUTE FUNCTION public.enforce_audio_time_bank();
+
+-- 2a. RLS Insert: allow audio for pro+lifetime
+DROP POLICY IF EXISTS entries_insert_own ON vault_entries;
+CREATE POLICY entries_insert_own ON vault_entries
+FOR INSERT WITH CHECK (
+  auth.uid() = user_id AND status = 'active'
+  AND (action_type <> 'destroy' OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')))
+  AND (data_type <> 'audio' OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')))
+  AND (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime'))
+       OR (SELECT count(*) FROM vault_entries ve WHERE ve.user_id = auth.uid() AND ve.status = 'active' AND ve.data_type = 'text') < 3)
+);
+
+-- 2b. RLS Update: allow audio for pro+lifetime
+DROP POLICY IF EXISTS entries_update_own ON vault_entries;
+CREATE POLICY entries_update_own ON vault_entries
+FOR UPDATE USING (auth.uid() = user_id AND status = 'active')
+WITH CHECK (
+  auth.uid() = user_id AND status = 'active'
+  AND (action_type <> 'destroy' OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')))
+  AND (data_type <> 'audio' OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')))
+);
+
+-- 3a. Storage insert: pro+lifetime
+DROP POLICY IF EXISTS vault_audio_insert_lifetime ON storage.objects;
+DROP POLICY IF EXISTS vault_audio_insert_paid ON storage.objects;
+CREATE POLICY vault_audio_insert_paid ON storage.objects
+FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'vault-audio' AND (storage.foldername(name))[1] = auth.uid()::text
+  AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')));
+
+-- 3b. Storage update: pro+lifetime
+DROP POLICY IF EXISTS vault_audio_update_lifetime ON storage.objects;
+DROP POLICY IF EXISTS vault_audio_update_paid ON storage.objects;
+CREATE POLICY vault_audio_update_paid ON storage.objects
+FOR UPDATE TO authenticated
+USING (bucket_id = 'vault-audio' AND (storage.foldername(name))[1] = auth.uid()::text)
+WITH CHECK (bucket_id = 'vault-audio' AND (storage.foldername(name))[1] = auth.uid()::text
+  AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')));
+
+-- END OF SQL #58
+
+

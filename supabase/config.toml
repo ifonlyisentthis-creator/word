@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.verify-subscription]
 verify_jwt = false
+
+[functions.sync-subscription]
+verify_jwt = false
