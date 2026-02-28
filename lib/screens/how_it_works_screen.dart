@@ -98,7 +98,7 @@ class HowItWorksScreen extends StatelessWidget {
                       ),
                       _StepCard(
                         number: '6',
-                        title: 'Protocol Zero',
+                        title: 'Secure Erase',
                         body:
                             'Pro and Lifetime users can set any item to "Erase" mode. '
                             'When the timer expires, the data is permanently removed from our servers '
@@ -117,9 +117,9 @@ class HowItWorksScreen extends StatelessWidget {
                       _SectionTitle('Plans'),
                       _BulletPoint('Free — 3 text items, 30-day timer, push notifications at 66% and 33%.'),
                       _BulletPoint('Pro — Unlimited text items, encrypted audio vault (1 min), '
-                          'custom timer (7–365 days), Protocol Zero (erase mode), email warning 24h before expiry.'),
+                          'custom timer (7–365 days), Secure Erase mode, email warning 24h before expiry.'),
                       _BulletPoint('Lifetime — Everything in Pro, plus extended audio vault '
-                          '(10 min), timer up to 10 years, all 6 themes and Soul Fire styles.'),
+                          '(10 min), timer up to 10 years, all 8 themes and Soul Fire styles.'),
                     ],
                   ),
                 ),

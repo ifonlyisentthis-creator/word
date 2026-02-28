@@ -63,7 +63,7 @@ class TermsScreen extends StatelessWidget {
                         'create, encrypt, and store text messages and audio recordings on your device '
                         'before uploading them to secure servers. Entries can be configured to:\n\n'
                         '• Deliver to a designated recipient when your check-in timer expires\n'
-                        '• Permanently erase when your timer expires (Protocol Zero)\n\n'
+                        '• Permanently erase when your timer expires (Secure Erase)\n\n'
                         'Recipients access delivered items via a secure browser viewer using a private key.',
                         style: bodyStyle,
                       ),
@@ -86,7 +86,7 @@ class TermsScreen extends StatelessWidget {
                         '• Free — Up to 3 text entries, 30-day fixed timer, 3 themes, '
                         '3 soul fire styles, push notifications, recovery phrase backup\n'
                         '• Pro (Monthly / Annual) — Unlimited text entries, encrypted audio vault '
-                        '(1 min), custom timer (7–365 days), Protocol Zero (erase mode), '
+                        '(1 min), custom timer (7–365 days), Secure Erase mode, '
                         'email warning before expiry, all themes and soul fire styles\n'
                         '• Lifetime — All Pro features plus extended audio vault (10 min), '
                         'extended timer (up to 10 years), permanent access\n\n'

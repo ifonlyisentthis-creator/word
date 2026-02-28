@@ -10,7 +10,7 @@ import 'account_service.dart';
 
 import 'notification_service.dart';
 
-import 'profile_service.dart';
+import 'profile_service.dart' show ProfilePrefetch, ProfileService;
 
 import 'theme_provider.dart';
 
@@ -124,7 +124,8 @@ class HomeController extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      var ensured = await _profileService.ensureProfile(user);
+      var ensured = await ProfilePrefetch.consume(user.id) ??
+          await _profileService.ensureProfile(user);
 
       if (_isDisposed) return;
 

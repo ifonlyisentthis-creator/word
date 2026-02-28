@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart';
@@ -37,6 +39,22 @@ Future<void> main() async {
 
   // Init everything WHILE native splash is visible (no black screen)
   await _initServices();
+
+  // Global error handlers — never show red screen of death to users
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    if (kDebugMode) return; // keep red screen in debug
+    debugPrint('FlutterError: ${details.exceptionAsString()}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Uncaught: $error\n$stack');
+    return true; // handled — don't crash
+  };
+
+  // In release: replace red screen with a minimal safe UI
+  if (!kDebugMode) {
+    ErrorWidget.builder = (details) => const SizedBox.shrink();
+  }
 
   runApp(const AfterwordApp());
 }
@@ -141,12 +159,21 @@ class _AfterwordAppState extends State<AfterwordApp> {
             title: 'Afterword',
             theme: merged,
             debugShowCheckedModeBanner: false,
+            scrollBehavior: const _PremiumScrollBehavior(),
             home: const AuthGate(),
           );
         },
       ),
     );
   }
+}
+
+class _PremiumScrollBehavior extends ScrollBehavior {
+  const _PremiumScrollBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
 }
 
 ThemeData _buildTheme() {

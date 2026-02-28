@@ -51,7 +51,7 @@ class FaqHelpScreen extends StatelessWidget {
                         answer:
                             'Your timer expires and Afterword delivers each vault '
                             'entry to its designated recipient (or permanently '
-                            'erases it if set to Protocol Zero).',
+                            'erases it if set to Secure Erase).',
                       ),
                       _FaqItem(
                         question: 'Can I change my timer after setting it?',

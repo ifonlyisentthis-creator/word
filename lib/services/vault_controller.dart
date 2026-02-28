@@ -256,7 +256,7 @@ class VaultController extends ChangeNotifier {
           .where((entry) => entry.status == VaultStatus.active)
           .length;
       if (draft.actionType == VaultActionType.destroy) {
-        return 'Upgrade to unlock Protocol Zero.';
+        return 'Upgrade to unlock Secure Erase mode.';
       }
       if (isNew && activeEntriesCount >= 3) {
         return 'Free plan allows up to 3 text items.';

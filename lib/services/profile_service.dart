@@ -2,6 +2,29 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/profile.dart';
 
+class ProfilePrefetch {
+  static Future<Profile?>? _future;
+  static String? _userId;
+
+  static void start(User user) {
+    _userId = user.id;
+    _future = ProfileService(Supabase.instance.client)
+        .ensureProfile(user)
+        .then<Profile?>((p) => p)
+        .catchError((_) => null);
+  }
+
+  static Future<Profile?> consume(String userId) async {
+    if (_future != null && _userId == userId) {
+      final f = _future!;
+      _future = null;
+      _userId = null;
+      return f;
+    }
+    return null;
+  }
+}
+
 class ProfileService {
   ProfileService(this._client);
 

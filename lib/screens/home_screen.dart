@@ -381,9 +381,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
               child: ListView(
                 controller: _scrollController,
 
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: ClampingScrollPhysics(),
-                ),
+                physics: const AlwaysScrollableScrollPhysics(),
 
                 cacheExtent: 500,
 

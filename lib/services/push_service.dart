@@ -33,6 +33,9 @@ class PushService {
   DateTime? _lastTokenAttempt;
   static const Duration _tokenCooldown = Duration(seconds: 60);
 
+  bool _permissionDenied = false;
+  bool get permissionDenied => _permissionDenied;
+
   Future<void> initialize() async {
     if (!_isSupportedPlatform()) return;
     if (_initialized) return;
@@ -57,6 +60,10 @@ class PushService {
         sound: true,
       );
       debugPrint('[PUSH] FCM permission: ${authStatus.authorizationStatus}');
+
+      _permissionDenied =
+          authStatus.authorizationStatus == AuthorizationStatus.denied ||
+          authStatus.authorizationStatus == AuthorizationStatus.notDetermined;
 
       _onMessageSubscription = FirebaseMessaging.onMessage.listen(
         (message) async {

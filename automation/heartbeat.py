@@ -535,8 +535,39 @@ def _extract_email_address(address: str) -> str:
     return raw
 
 
-def wrap_email_html(body_html: str, *, unsubscribe_email: str) -> str:
-    """Wrap email body HTML in a premium card layout with dark header."""
+def wrap_email_html(
+    body_html: str,
+    *,
+    unsubscribe_email: str,
+    preheader: str = "",
+) -> str:
+    """Wrap email body HTML in a premium card layout with dark header.
+
+    Args:
+        preheader: Hidden text that appears in inbox preview but not in the
+            rendered email. Feeding Gmail's AI a conversational snippet
+            dramatically reduces Promotions/Spam classification.
+    """
+    preheader_block = ""
+    if preheader:
+        safe_preheader = html_mod.escape(preheader)
+        preheader_block = (
+            f'<div style="display:none;font-size:1px;color:#f0f0f0;'
+            f'line-height:1px;max-height:0px;max-width:0px;opacity:0;'
+            f'overflow:hidden">{safe_preheader}'
+            '&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;'
+            '&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;'
+            '&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;'
+            '</div>'
+        )
+    conversational_footer = (
+        '<p style="margin:24px 0 0;color:#9a9a9a;font-size:12px;line-height:1.6">'
+        'Afterword is a time-locked digital vault app that securely stores '
+        'your encrypted messages and delivers them to people you choose. '
+        'You are receiving this email because you have an Afterword account. '
+        'If you have any questions, simply reply to this email and a real '
+        'person will get back to you.</p>'
+    )
     return (
         '<!DOCTYPE html>'
         '<html lang="en">'
@@ -546,6 +577,7 @@ def wrap_email_html(body_html: str, *, unsubscribe_email: str) -> str:
         '<body style="margin:0;padding:0;background-color:#f0f0f0;'
         'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,'
         'Helvetica,Arial,sans-serif">'
+        f'{preheader_block}'
         '<div style="max-width:560px;margin:32px auto;background:#ffffff;'
         'border-radius:12px;overflow:hidden">'
         '<div style="background:#0a0a0a;padding:24px 32px">'
@@ -555,6 +587,7 @@ def wrap_email_html(body_html: str, *, unsubscribe_email: str) -> str:
         '<div style="padding:28px 32px;font-size:15px;line-height:1.7;'
         'color:#1a1a1a">'
         f'{body_html}'
+        f'{conversational_footer}'
         '</div>'
         '<div style="padding:16px 32px 20px;border-top:1px solid #eee;'
         'font-size:11px;color:#999999;line-height:1.5">'
@@ -576,11 +609,14 @@ def send_email(
     html: str,
     *,
     idempotency_key: str | None = None,
+    preheader: str = "",
 ) -> None:
 
     formatted_from = _format_from_address(from_email)
     reply_to_email = _extract_email_address(from_email)
-    wrapped_html = wrap_email_html(html, unsubscribe_email=reply_to_email)
+    wrapped_html = wrap_email_html(
+        html, unsubscribe_email=reply_to_email, preheader=preheader,
+    )
 
     payload: dict = {
         "from": formatted_from,
@@ -687,6 +723,7 @@ def send_warning_email(
         text,
         html,
         idempotency_key=idempotency_key,
+        preheader=f"Hi {sender_name}, your Afterword timer needs attention — check in to keep your vault secure.",
     )
 
 
@@ -1077,7 +1114,11 @@ def build_unlock_email_payload(
         "to": [recipient_email],
         "subject": subject,
         "text": text,
-        "html": wrap_email_html(body_html, unsubscribe_email=reply_to_email),
+        "html": wrap_email_html(
+            body_html,
+            unsubscribe_email=reply_to_email,
+            preheader=f"{sender_name} left you a secure message. Open this email to view it.",
+        ),
         "reply_to": reply_to_email,
         "headers": {
             "List-Unsubscribe": f"<mailto:{reply_to_email}?subject=Unsubscribe>",
@@ -2008,6 +2049,7 @@ def handle_subscription_downgrade(
                 text,
                 html,
                 idempotency_key=f"downgrade-{uid}-{now.date().isoformat()}",
+                preheader=f"Hi {sender_name}, your Afterword subscription has changed — here is what happened to your account.",
             )
             print(f"Sent downgrade notification to {uid}")
         except Exception as exc:  # noqa: BLE001

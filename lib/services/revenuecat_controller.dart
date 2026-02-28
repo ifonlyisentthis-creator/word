@@ -268,7 +268,23 @@ class RevenueCatController extends ChangeNotifier {
 
   RevenueCatFailure _mapFailure(PlatformException exception) {
     final code = PurchasesErrorHelper.getErrorCode(exception);
-    final message = exception.message ?? 'RevenueCat error (${code.name}).';
+    final String message;
+    switch (code) {
+      case PurchasesErrorCode.networkError:
+        message = 'Network connection failed. Please check your internet and try again.';
+      case PurchasesErrorCode.purchaseNotAllowedError:
+        message = 'Purchases are not allowed on this device.';
+      case PurchasesErrorCode.purchaseInvalidError:
+        message = 'Purchase could not be completed. You have not been charged.';
+      case PurchasesErrorCode.storeProblemError:
+        message = 'Could not connect to the app store. Please try again later.';
+      case PurchasesErrorCode.paymentPendingError:
+        message = 'Your payment is pending. Access will unlock once confirmed.';
+      case PurchasesErrorCode.productAlreadyPurchasedError:
+        message = 'You already own this product. Try restoring purchases.';
+      default:
+        message = exception.message ?? 'Something went wrong. Please try again.';
+    }
     return RevenueCatFailure(message, code: code);
   }
 }

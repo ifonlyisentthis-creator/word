@@ -1265,7 +1265,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                   const SizedBox(height: 6),
 
                   Text(
-                    'Protocol Zero (erase) is unlocked on Pro.',
+                    'Upgrade to unlock Secure Erase mode.',
 
                     style: Theme.of(
                       context,

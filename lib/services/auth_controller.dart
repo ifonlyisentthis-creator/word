@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -98,8 +99,28 @@ class AuthController extends ChangeNotifier {
       _lastFailure = null;
     } on AuthException catch (exception) {
       _lastFailure = AuthFailure(exception.message);
-    } catch (_) {
-      _lastFailure = const AuthFailure('Unable to sign in. Please try again.');
+    } on SocketException catch (_) {
+      _lastFailure = const AuthFailure(
+        'Network connection failed. Please check your internet and try again.',
+      );
+    } on HttpException catch (_) {
+      _lastFailure = const AuthFailure(
+        'Network connection failed. Please check your internet and try again.',
+      );
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('socket') ||
+          msg.contains('connection refused') ||
+          msg.contains('network') ||
+          msg.contains('timeout')) {
+        _lastFailure = const AuthFailure(
+          'Network connection failed. Please check your internet and try again.',
+        );
+      } else {
+        _lastFailure = const AuthFailure(
+          'Unable to sign in. Please try again.',
+        );
+      }
     } finally {
       _setLoading(false);
     }

@@ -12,6 +12,9 @@ import 'package:local_auth/local_auth.dart';
 
 
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/profile_service.dart';
 import '../widgets/ambient_background.dart';
 
 
@@ -67,6 +70,11 @@ class _AppLockGateState extends State<AppLockGate>
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      ProfilePrefetch.start(user);
+    }
 
     _authenticateIfNeeded();
 
