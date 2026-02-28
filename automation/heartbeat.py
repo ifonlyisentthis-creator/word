@@ -1946,6 +1946,16 @@ def handle_subscription_downgrade(
                 "a paid subscription."
             )
 
+        text_preserved_line = (
+            "- Your text vault entries are preserved\n"
+            if audio_entries
+            else "- All your existing vault entries are preserved\n"
+        )
+        text_audio_line = (
+            "- Audio vault entries have been removed (requires paid subscription)\n"
+            if audio_entries
+            else ""
+        )
         subject = "Afterword — Subscription update"
         text = (
             f"Hi {sender_name},\n\n"
@@ -1954,8 +1964,8 @@ def handle_subscription_downgrade(
             "What this means:\n"
             "- Your timer has been reset to the default 30 days\n"
             "- Custom themes and styles have been reset to defaults\n"
-            "- All your existing vault entries are preserved\n"
-            f"{'- Audio vault entries have been removed (requires paid subscription)' if audio_entries else ''}"
+            f"{text_preserved_line}"
+            f"{text_audio_line}"
             "\n\n"
             "You can continue using Afterword on the free tier, or "
             "resubscribe at any time to restore premium features.\n\n"
@@ -1965,7 +1975,12 @@ def handle_subscription_downgrade(
             "To unsubscribe, reply to this email with subject 'Unsubscribe'."
         )
         safe_name = html_mod.escape(sender_name)
-        audio_li = (
+        html_preserved_li = (
+            '<li style="margin-bottom:6px">Your text vault entries are preserved</li>'
+            if audio_entries
+            else '<li style="margin-bottom:6px">All your existing vault entries are preserved</li>'
+        )
+        html_audio_li = (
             '<li style="margin-bottom:6px">Audio vault entries have been removed (requires paid subscription)</li>'
             if audio_entries else ''
         )
@@ -1977,8 +1992,8 @@ def handle_subscription_downgrade(
             '<ul style="margin:0 0 16px;padding-left:20px;color:#333333">'
             '<li style="margin-bottom:6px">Your timer has been reset to the default 30 days</li>'
             '<li style="margin-bottom:6px">Custom themes and styles have been reset to defaults</li>'
-            '<li style="margin-bottom:6px">All your existing vault entries are preserved</li>'
-            f'{audio_li}'
+            f'{html_preserved_li}'
+            f'{html_audio_li}'
             '</ul>'
             '<p style="margin:0 0 24px">You can continue using Afterword on the free tier, or '
             'resubscribe at any time to restore premium features.</p>'

@@ -1152,5 +1152,367 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(reset_update[0]["timer_days"], 30)
 
 
+    # ── Subscription downgrade edge-case tests ──
+
+    def test_downgrade_pro_user_with_audio_deletes_audio(self):
+        """Pro user (timer_days=60) with audio entries → audio deleted, email sent."""
+        client = _MinimalClient()
+        deleted_entries = []
+        sent_emails = []
+
+        profile = {
+            "id": "user-pro-audio",
+            "email": "pro@example.com",
+            "sender_name": "ProUser",
+            "timer_days": 60,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        active_entries = [
+            {"id": "audio-1", "data_type": "audio", "audio_file_path": "user-pro-audio/a1.enc"},
+            {"id": "text-1", "data_type": "text", "audio_file_path": None},
+        ]
+
+        with (
+            patch.object(heartbeat, "delete_entry",
+                         side_effect=lambda _c, e: deleted_entries.append(e["id"])),
+            patch.object(heartbeat, "send_email",
+                         side_effect=lambda *a, **kw: sent_emails.append(kw)),
+        ):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        self.assertEqual(deleted_entries, ["audio-1"])
+        self.assertEqual(len(sent_emails), 1)
+
+    def test_downgrade_audio_only_no_pro_indicators_still_detected(self):
+        """User with ONLY audio entries (timer=30, free themes) → still detected and cleaned."""
+        client = _MinimalClient()
+        deleted_entries = []
+        sent_emails = []
+
+        profile = {
+            "id": "user-audio-only",
+            "email": "audio@example.com",
+            "sender_name": "AudioOnly",
+            "timer_days": 30,
+            "selected_theme": "oledVoid",
+            "selected_soul_fire": "etherealOrb",
+        }
+        active_entries = [
+            {"id": "a1", "data_type": "audio", "audio_file_path": "user-audio-only/a1.enc"},
+        ]
+
+        with (
+            patch.object(heartbeat, "delete_entry",
+                         side_effect=lambda _c, e: deleted_entries.append(e["id"])),
+            patch.object(heartbeat, "send_email",
+                         side_effect=lambda *a, **kw: sent_emails.append(kw)),
+        ):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        self.assertEqual(deleted_entries, ["a1"])
+        self.assertEqual(len(sent_emails), 1)
+
+    def test_downgrade_timer_only_no_audio_no_audio_deleted(self):
+        """Pro user with custom timer but no audio → timer reset, no audio deletion, email sent."""
+        client = _MinimalClient()
+        deleted_entries = []
+        sent_emails = []
+
+        profile = {
+            "id": "user-timer-only",
+            "email": "timer@example.com",
+            "sender_name": "TimerOnly",
+            "timer_days": 180,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        active_entries = [
+            {"id": "text-1", "data_type": "text", "audio_file_path": None},
+        ]
+
+        with (
+            patch.object(heartbeat, "delete_entry",
+                         side_effect=lambda _c, e: deleted_entries.append(e["id"])),
+            patch.object(heartbeat, "send_email",
+                         side_effect=lambda *a, **kw: sent_emails.append(kw)),
+        ):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        self.assertEqual(deleted_entries, [])
+        self.assertEqual(len(sent_emails), 1)
+        self.assertEqual(client.profiles.updated_payload["timer_days"], 30)
+
+    def test_downgrade_already_free_defaults_returns_false(self):
+        """User already at free defaults (timer=30, no themes, no audio) → no action."""
+        client = _MinimalClient()
+
+        profile = {
+            "id": "user-already-free",
+            "email": "free@example.com",
+            "sender_name": "Free",
+            "timer_days": 30,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        active_entries = [
+            {"id": "text-1", "data_type": "text", "audio_file_path": None},
+        ]
+
+        reverted = heartbeat.handle_subscription_downgrade(
+            client=client, profile=profile, active_entries=active_entries,
+            resend_key="rk", from_email="no-reply@example.com",
+            now=heartbeat.datetime.now(heartbeat.timezone.utc),
+        )
+
+        self.assertFalse(reverted)
+        self.assertIsNone(client.profiles.updated_payload)
+
+    def test_downgrade_email_text_says_text_preserved_when_audio_deleted(self):
+        """When audio is deleted, email says 'text vault entries' not 'all vault entries'."""
+        client = _MinimalClient()
+        sent_emails = []
+
+        profile = {
+            "id": "user-email-check",
+            "email": "check@example.com",
+            "sender_name": "EmailCheck",
+            "timer_days": 60,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        active_entries = [
+            {"id": "a1", "data_type": "audio", "audio_file_path": "user-email-check/a1.enc"},
+        ]
+
+        with (
+            patch.object(heartbeat, "delete_entry", side_effect=lambda _c, e: None),
+            patch.object(heartbeat, "send_email",
+                         side_effect=lambda *args, **kwargs: sent_emails.append(args)),
+        ):
+            heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertEqual(len(sent_emails), 1)
+        # args: (api_key, from_email, to_email, subject, text, html)
+        text_body = sent_emails[0][4]
+        html_body = sent_emails[0][5]
+        self.assertIn("text vault entries are preserved", text_body)
+        self.assertNotIn("All your existing vault entries are preserved", text_body)
+        self.assertIn("Audio vault entries have been removed", text_body)
+        self.assertIn("text vault entries are preserved", html_body)
+        self.assertIn("Audio vault entries have been removed", html_body)
+
+    def test_downgrade_email_says_all_preserved_when_no_audio(self):
+        """When no audio deleted, email says 'All your existing vault entries'."""
+        client = _MinimalClient()
+        sent_emails = []
+
+        profile = {
+            "id": "user-no-audio-email",
+            "email": "noaudio@example.com",
+            "sender_name": "NoAudio",
+            "timer_days": 90,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        active_entries = [
+            {"id": "text-1", "data_type": "text", "audio_file_path": None},
+        ]
+
+        with (
+            patch.object(heartbeat, "send_email",
+                         side_effect=lambda *args, **kwargs: sent_emails.append(args)),
+        ):
+            heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertEqual(len(sent_emails), 1)
+        text_body = sent_emails[0][4]
+        self.assertIn("All your existing vault entries are preserved", text_body)
+        self.assertNotIn("Audio vault entries have been removed", text_body)
+
+    def test_downgrade_no_email_for_theme_only_change(self):
+        """Theme-only change (no custom timer, no audio) → silent reset, NO email."""
+        client = _MinimalClient()
+        sent_emails = []
+
+        profile = {
+            "id": "user-theme-only",
+            "email": "theme@example.com",
+            "sender_name": "ThemeOnly",
+            "timer_days": 30,
+            "selected_theme": "obsidianSteel",
+            "selected_soul_fire": None,
+        }
+        active_entries = []
+
+        with (
+            patch.object(heartbeat, "send_email",
+                         side_effect=lambda *a, **kw: sent_emails.append(kw)),
+        ):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        self.assertEqual(len(sent_emails), 0)
+        self.assertIsNone(client.profiles.updated_payload["selected_theme"])
+
+    def test_downgrade_idempotency_key_is_date_scoped(self):
+        """Idempotency key includes the date to prevent duplicate emails within same day."""
+        client = _MinimalClient()
+        sent_emails = []
+
+        now = datetime(2026, 3, 15, 10, 30, tzinfo=timezone.utc)
+        profile = {
+            "id": "user-idemp",
+            "email": "idemp@example.com",
+            "sender_name": "Idemp",
+            "timer_days": 90,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        active_entries = []
+
+        with patch.object(heartbeat, "send_email",
+                         side_effect=lambda *a, **kw: sent_emails.append(kw)):
+            heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=now,
+            )
+
+        self.assertEqual(len(sent_emails), 1)
+        self.assertEqual(
+            sent_emails[0]["idempotency_key"],
+            "downgrade-user-idemp-2026-03-15",
+        )
+
+    def test_downgrade_second_run_after_reset_is_noop(self):
+        """After downgrade resets everything, a second call with free defaults returns False."""
+        client = _MinimalClient()
+
+        # This is what the profile looks like AFTER the first downgrade run
+        profile = {
+            "id": "user-second-run",
+            "email": "second@example.com",
+            "sender_name": "Second",
+            "timer_days": 30,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        # No audio entries left after first run deleted them
+        active_entries = [
+            {"id": "text-1", "data_type": "text", "audio_file_path": None},
+        ]
+
+        reverted = heartbeat.handle_subscription_downgrade(
+            client=client, profile=profile, active_entries=active_entries,
+            resend_key="rk", from_email="no-reply@example.com",
+            now=heartbeat.datetime.now(heartbeat.timezone.utc),
+        )
+
+        self.assertFalse(reverted)
+        self.assertIsNone(client.profiles.updated_payload)
+
+    def test_downgrade_no_email_when_email_is_none(self):
+        """If user has no email on profile, downgrade still works but no email sent."""
+        client = _MinimalClient()
+        deleted_entries = []
+        sent_emails = []
+
+        profile = {
+            "id": "user-no-email",
+            "email": None,
+            "sender_name": "NoEmail",
+            "timer_days": 60,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        active_entries = [
+            {"id": "a1", "data_type": "audio", "audio_file_path": "user-no-email/a1.enc"},
+        ]
+
+        with (
+            patch.object(heartbeat, "delete_entry",
+                         side_effect=lambda _c, e: deleted_entries.append(e["id"])),
+            patch.object(heartbeat, "send_email",
+                         side_effect=lambda *a, **kw: sent_emails.append(kw)),
+        ):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        self.assertEqual(deleted_entries, ["a1"])
+        self.assertEqual(len(sent_emails), 0)
+
+    def test_downgrade_multiple_audio_entries_all_deleted(self):
+        """User with multiple audio entries → ALL audio entries deleted, single email."""
+        client = _MinimalClient()
+        deleted_entries = []
+        sent_emails = []
+
+        profile = {
+            "id": "user-multi-audio",
+            "email": "multi@example.com",
+            "sender_name": "MultiAudio",
+            "timer_days": 365,
+            "selected_theme": "deepOcean",
+            "selected_soul_fire": "voidPortal",
+        }
+        active_entries = [
+            {"id": "a1", "data_type": "audio", "audio_file_path": "user-multi-audio/a1.enc"},
+            {"id": "a2", "data_type": "audio", "audio_file_path": "user-multi-audio/a2.enc"},
+            {"id": "a3", "data_type": "audio", "audio_file_path": "user-multi-audio/a3.enc"},
+            {"id": "text-1", "data_type": "text", "audio_file_path": None},
+        ]
+
+        with (
+            patch.object(heartbeat, "delete_entry",
+                         side_effect=lambda _c, e: deleted_entries.append(e["id"])),
+            patch.object(heartbeat, "send_email",
+                         side_effect=lambda *a, **kw: sent_emails.append(kw)),
+        ):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        self.assertEqual(sorted(deleted_entries), ["a1", "a2", "a3"])
+        self.assertEqual(len(sent_emails), 1)
+        self.assertEqual(client.profiles.updated_payload["timer_days"], 30)
+        self.assertIsNone(client.profiles.updated_payload["selected_theme"])
+        self.assertIsNone(client.profiles.updated_payload["selected_soul_fire"])
+
+
 if __name__ == "__main__":
     unittest.main()
