@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'dart:io';
 
+import 'dart:math' show max;
+
 import 'package:flutter/material.dart';
 
 import 'package:just_audio/just_audio.dart';
@@ -2110,15 +2112,17 @@ class _SheetContainerState extends State<_SheetContainer> {
   Widget build(BuildContext context) {
     final topPad = MediaQuery.paddingOf(context).top;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final bottomNav = MediaQuery.viewPaddingOf(context).bottom;
+    final bottomSpace = max(bottomInset, bottomNav);
     // read, not watch — theme won't change while sheet is open
     final td = context.read<ThemeProvider>().themeData;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(8, topPad + 8, 8, 8 + bottomInset),
+      padding: EdgeInsets.fromLTRB(8, topPad + 8, 8, 8 + bottomSpace),
 
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.92 - topPad - bottomInset,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.92 - topPad - bottomSpace,
         ),
 
         decoration: BoxDecoration(

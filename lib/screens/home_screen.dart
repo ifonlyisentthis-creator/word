@@ -965,6 +965,8 @@ class _TimerCardState extends State<_TimerCard> {
                     fontWeight: FontWeight.w700,
 
                     letterSpacing: -0.5,
+
+                    color: td.easterEggAccent,
                   ),
                 ),
 
@@ -1344,6 +1346,7 @@ class _SurfaceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final td = context.watch<ThemeProvider>().themeData;
     final glowColor = td.cardBorderGlow;
+    final isEgg = td.isEasterEgg;
 
     return Container(
       decoration: BoxDecoration(
@@ -1359,16 +1362,22 @@ class _SurfaceCard extends StatelessWidget {
 
         border: Border.all(
           color: glowColor ?? td.dividerColor,
-          width: glowColor != null ? 1.2 : 1.0,
+          width: isEgg ? 1.3 : 1.0,
         ),
 
         boxShadow: [
-          if (glowColor != null)
+          if (glowColor != null) ...[
             BoxShadow(
               color: glowColor,
-              blurRadius: 16,
+              blurRadius: 20,
               spreadRadius: -2,
             ),
+            BoxShadow(
+              color: (td.easterEggAccent ?? glowColor).withValues(alpha: 0.08),
+              blurRadius: 40,
+              spreadRadius: -6,
+            ),
+          ],
           BoxShadow(
             color: td.accentGlow.withValues(alpha: 0.08),
 
@@ -1387,7 +1396,29 @@ class _SurfaceCard extends StatelessWidget {
         ],
       ),
 
-      child: ClipRRect(borderRadius: BorderRadius.circular(22), child: child),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Easter-egg accent gradient line at card top
+            if (isEgg && td.timerRingColors != null)
+              Container(
+                height: 2,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      ...td.timerRingColors!,
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            Flexible(child: child),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1409,16 +1440,43 @@ class _EasterEggTimerBar extends StatelessWidget {
       );
     }
 
-    // Easter-egg gradient timer bar
+    // Easter-egg gradient timer bar — taller, glowing, dramatic
     return SizedBox(
-      height: 6,
+      height: 8,
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           // Background track
           Container(
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          // Glow halo behind the fill (bleeds outside bounds)
+          Positioned.fill(
+            top: -4,
+            bottom: -4,
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: progress,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: [
+                    BoxShadow(
+                      color: ringColors.first.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      spreadRadius: -2,
+                    ),
+                    BoxShadow(
+                      color: ringColors.last.withValues(alpha: 0.2),
+                      blurRadius: 20,
+                      spreadRadius: -4,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
           // Gradient fill
@@ -1428,13 +1486,6 @@ class _EasterEggTimerBar extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: ringColors),
                 borderRadius: BorderRadius.circular(999),
-                boxShadow: [
-                  BoxShadow(
-                    color: ringColors.first.withValues(alpha: 0.4),
-                    blurRadius: 6,
-                    spreadRadius: -1,
-                  ),
-                ],
               ),
             ),
           ),

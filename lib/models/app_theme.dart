@@ -223,6 +223,8 @@ class AppThemeData {
     this.timerRingColors,
     this.cardBorderGlow,
     this.statusChipColor,
+    this.fontFamily,
+    this.easterEggAccent,
   });
 
   final AppThemeId id;
@@ -248,6 +250,12 @@ class AppThemeData {
 
   /// Override status chip color (null → default).
   final Color? statusChipColor;
+
+  /// Google Fonts family name for Easter-egg themes (null → default Sora).
+  final String? fontFamily;
+
+  /// Secondary accent for intensified glows (null → use accentGlow).
+  final Color? easterEggAccent;
 
   static AppThemeData fromId(AppThemeId id) {
     switch (id) {
@@ -378,8 +386,10 @@ class AppThemeData {
           cardGradientEnd: Color(0xFF0A0206),
           isEasterEgg: true,
           timerRingColors: [Color(0xFF8B1A3A), Color(0xFFD4A040), Color(0xFF8B1A3A)],
-          cardBorderGlow: Color(0x308B1A3A),
+          cardBorderGlow: Color(0x408B1A3A),
           statusChipColor: Color(0xFFD4A040),
+          fontFamily: 'Cinzel',
+          easterEggAccent: Color(0xFFD4A040),
         );
       case AppThemeId.obsidianPrism:
         return const AppThemeData(
@@ -396,8 +406,10 @@ class AppThemeData {
           cardGradientEnd: Color(0xFF08080C),
           isEasterEgg: true,
           timerRingColors: [Color(0xFFA080E0), Color(0xFF40E0D0), Color(0xFFE080A0), Color(0xFFA080E0)],
-          cardBorderGlow: Color(0x20A080E0),
+          cardBorderGlow: Color(0x30A080E0),
           statusChipColor: Color(0xFF40E0D0),
+          fontFamily: 'Rajdhani',
+          easterEggAccent: Color(0xFF40E0D0),
         );
     }
   }
