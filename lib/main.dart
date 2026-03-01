@@ -172,44 +172,8 @@ class _PremiumScrollBehavior extends ScrollBehavior {
   const _PremiumScrollBehavior();
 
   @override
-  Widget buildOverscrollIndicator(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) {
-    return child;
-  }
-
-  @override
   ScrollPhysics getScrollPhysics(BuildContext context) =>
-      const _VaultScrollPhysics(parent: AlwaysScrollableScrollPhysics());
-}
-
-/// Premium grounded physics: heavy drag, low fling carry, and no hard rebound.
-class _VaultScrollPhysics extends ClampingScrollPhysics {
-  const _VaultScrollPhysics({super.parent});
-
-  @override
-  _VaultScrollPhysics applyTo(ScrollPhysics? ancestor) {
-    return _VaultScrollPhysics(parent: buildParent(ancestor));
-  }
-
-  @override
-  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
-    // Slightly heavier drag for a grounded feel.
-    return offset * 0.88;
-  }
-
-  // Kill iOS-like momentum stacking between repeated flings.
-  @override
-  double carriedMomentum(double existingVelocity) => 0.0;
-
-  // Reduce ballistic overshoot and hard rebound on release.
-  @override
-  double get maxFlingVelocity => 3200.0;
-
-  @override
-  double get minFlingVelocity => 140.0;
+      const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
 }
 
 ThemeData _buildTheme() {
