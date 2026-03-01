@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 /// All available app themes.
 /// Free users get [oledVoid], [midnightFrost], and [shadowRose].
-/// Pro users unlock [obsidianSteel], [midnightEmber], [deepOcean].
-/// Lifetime users additionally unlock [auroraNight], [cosmicDusk].
+/// Pro users unlock [obsidianSteel], [midnightEmber], [deepOcean], [velvetAbyss].
+/// Lifetime users additionally unlock [auroraNight], [cosmicDusk], [obsidianPrism].
 enum AppThemeId {
   oledVoid,       // Free: pure OLED black + warm amber/gold accents
   midnightFrost,  // Free: near-black + icy blue/white frosty accents
@@ -11,8 +11,10 @@ enum AppThemeId {
   obsidianSteel,  // Pro: dark charcoal + cool silver/steel blue accents
   midnightEmber,  // Pro: deep navy + ember orange/red accents
   deepOcean,      // Pro: dark teal/ocean + aqua highlights
+  velvetAbyss,    // Pro: pitch black + deep burgundy velvet + liquid gold sparks
   auroraNight,    // Lifetime: near-black + shifting aurora green/purple
   cosmicDusk,     // Lifetime: dark plum/indigo + rose gold accents
+  obsidianPrism,  // Lifetime: jet black + prismatic iridescent rainbow edge
 }
 
 /// All available Soul Fire button styles.
@@ -23,8 +25,10 @@ enum SoulFireStyleId {
   voidPortal,     // Pro: dark void portal with cyan/purple swirling smoke
   plasmaBurst,    // Pro: intense cyan electric plasma burst
   plasmaCell,     // Pro: solid blue plasma ball with cell texture
+  infinityWell,   // Pro: recursive dimensional rift — concentric rings collapsing inward
   toxicCore,      // Lifetime: toxic green molten energy sphere
   crystalAscend,  // Lifetime: crystal blue ethereal orb with ascending wisps
+  phantomPulse,   // Lifetime: ghostly white specter with trailing afterimages
 }
 
 extension AppThemeIdX on AppThemeId {
@@ -48,6 +52,10 @@ extension AppThemeIdX on AppThemeId {
         return 'Aurora Night';
       case AppThemeId.cosmicDusk:
         return 'Cosmic Dusk';
+      case AppThemeId.velvetAbyss:
+        return 'Velvet Abyss';
+      case AppThemeId.obsidianPrism:
+        return 'Obsidian Prism';
     }
   }
 
@@ -62,9 +70,11 @@ extension AppThemeIdX on AppThemeId {
       case AppThemeId.obsidianSteel:
       case AppThemeId.midnightEmber:
       case AppThemeId.deepOcean:
+      case AppThemeId.velvetAbyss:
         return 'pro';
       case AppThemeId.auroraNight:
       case AppThemeId.cosmicDusk:
+      case AppThemeId.obsidianPrism:
         return 'lifetime';
     }
   }
@@ -104,6 +114,10 @@ extension SoulFireStyleIdX on SoulFireStyleId {
         return 'Toxic Core';
       case SoulFireStyleId.crystalAscend:
         return 'Crystal Ascend';
+      case SoulFireStyleId.infinityWell:
+        return 'Infinity Well';
+      case SoulFireStyleId.phantomPulse:
+        return 'Phantom Pulse';
     }
   }
 
@@ -116,9 +130,11 @@ extension SoulFireStyleIdX on SoulFireStyleId {
       case SoulFireStyleId.voidPortal:
       case SoulFireStyleId.plasmaBurst:
       case SoulFireStyleId.plasmaCell:
+      case SoulFireStyleId.infinityWell:
         return 'pro';
       case SoulFireStyleId.toxicCore:
       case SoulFireStyleId.crystalAscend:
+      case SoulFireStyleId.phantomPulse:
         return 'lifetime';
     }
   }
@@ -155,6 +171,10 @@ extension SoulFireStyleIdX on SoulFireStyleId {
         return const Color(0xFFFF6600); // Molten orange
       case SoulFireStyleId.crystalAscend:
         return const Color(0xFF87CEEB); // Light sky blue
+      case SoulFireStyleId.infinityWell:
+        return const Color(0xFF6A0DAD); // Deep violet
+      case SoulFireStyleId.phantomPulse:
+        return const Color(0xFFCCCCCC); // Spectral silver
     }
   }
 
@@ -177,6 +197,10 @@ extension SoulFireStyleIdX on SoulFireStyleId {
         return const Color(0xFFFF2200); // Lava red
       case SoulFireStyleId.crystalAscend:
         return const Color(0xFFE0F0FF); // Ice white-blue
+      case SoulFireStyleId.infinityWell:
+        return const Color(0xFFFF6EC7); // Neon pink
+      case SoulFireStyleId.phantomPulse:
+        return const Color(0xFF4488FF); // Phantom blue
     }
   }
 }
@@ -322,6 +346,34 @@ class AppThemeData {
           dividerColor: Color(0x1FD4C8D4),
           cardGradientStart: Color(0xFF1C1424),
           cardGradientEnd: Color(0xFF0E0A14),
+        );
+      case AppThemeId.velvetAbyss:
+        return const AppThemeData(
+          id: AppThemeId.velvetAbyss,
+          scaffoldColor: Color(0xFF040002),
+          surfaceColor: Color(0xFF0E0408),
+          primaryColor: Color(0xFF8B1A3A),   // deep burgundy
+          secondaryColor: Color(0xFFD4A040), // liquid gold
+          accentGlow: Color(0x338B1A3A),
+          textPrimary: Color(0xFFF0E4E8),
+          textSecondary: Color(0xB3D8C0C8),
+          dividerColor: Color(0x1FD8C0C8),
+          cardGradientStart: Color(0xFF180810),
+          cardGradientEnd: Color(0xFF0A0206),
+        );
+      case AppThemeId.obsidianPrism:
+        return const AppThemeData(
+          id: AppThemeId.obsidianPrism,
+          scaffoldColor: Color(0xFF020202),
+          surfaceColor: Color(0xFF0A0A0C),
+          primaryColor: Color(0xFFA080E0),   // iridescent violet
+          secondaryColor: Color(0xFF40E0D0), // prismatic teal
+          accentGlow: Color(0x33A080E0),
+          textPrimary: Color(0xFFF0F0F4),
+          textSecondary: Color(0xB3D0D0D8),
+          dividerColor: Color(0x1FD0D0D8),
+          cardGradientStart: Color(0xFF141418),
+          cardGradientEnd: Color(0xFF08080C),
         );
     }
   }

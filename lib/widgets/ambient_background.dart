@@ -118,6 +118,20 @@ List<_OrbData> _orbsForTheme(AppThemeId id, AppThemeData td) {
           _OrbData(const Alignment(0.8, -0.5), 320, td.secondaryColor, 0.18),
           _OrbData(const Alignment(0.0, 0.9), 460, const Color(0xFF2A1440), 0.22),
         ];
+      case AppThemeId.velvetAbyss:
+        return [
+          _OrbData(const Alignment(-0.8, -0.7), 420, td.primaryColor, 0.24),
+          _OrbData(const Alignment(0.7, -0.4), 300, td.secondaryColor, 0.14),
+          _OrbData(const Alignment(0.1, 0.85), 480, const Color(0xFF200008), 0.22),
+          _OrbData(const Alignment(-0.4, 0.3), 260, const Color(0xFF4A1020), 0.10),
+        ];
+      case AppThemeId.obsidianPrism:
+        return [
+          _OrbData(const Alignment(-0.85, -0.75), 380, td.primaryColor, 0.16),
+          _OrbData(const Alignment(0.8, -0.6), 340, td.secondaryColor, 0.14),
+          _OrbData(const Alignment(0.3, 0.8), 420, const Color(0xFF1A0A30), 0.18),
+          _OrbData(const Alignment(-0.5, 0.5), 280, const Color(0xFF0A2020), 0.12),
+        ];
     }
 }
 

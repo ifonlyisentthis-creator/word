@@ -302,10 +302,14 @@ class _OrbPainter extends CustomPainter {
         _paintPlasmaBurst(canvas, center, orbRadius, breathScale);
       case SoulFireStyleId.plasmaCell:
         _paintPlasmaCell(canvas, center, orbRadius, breathScale);
+      case SoulFireStyleId.infinityWell:
+        _paintInfinityWell(canvas, center, orbRadius, breathScale);
       case SoulFireStyleId.toxicCore:
         _paintToxicCore(canvas, center, orbRadius, breathScale);
       case SoulFireStyleId.crystalAscend:
         _paintCrystalAscend(canvas, center, orbRadius, breathScale);
+      case SoulFireStyleId.phantomPulse:
+        _paintPhantomPulse(canvas, center, orbRadius, breathScale);
     }
 
   }
@@ -498,11 +502,11 @@ class _OrbPainter extends CustomPainter {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 1b. GOLDEN PULSE (Free) — Sparkler Cascade
-  //     Firework sparkler effect: hundreds of golden sparks
-  //     fly outward in parabolic arcs leaving luminous trails.
-  //     Crackling embers. Molten gold core. Celebratory.
-  //     Colors: white-hot, gold, deep amber, copper trails.
+  // 1b. GOLDEN PULSE (Free) — Molten Supernova
+  //     Liquid gold plasma tendrils writhe like solar flares.
+  //     Twin counter-rotating corona rings. Particle fountains
+  //     erupt in spiraling golden arcs. White-hot nucleus.
+  //     Colors: incandescent white, liquid gold, molten amber.
   // ═══════════════════════════════════════════════════════
   void _paintGoldenPulse(
       Canvas canvas, Offset center, double r, double bs) {
@@ -512,350 +516,384 @@ class _OrbPainter extends CustomPainter {
     const copper = Color(0xFFBF6000);
     const darkCore = Color(0xFF1A0800);
 
-    // Warm atmospheric glow
-    canvas.drawCircle(
-      center, r * 2.0 * bs,
-      Paint()
+    // Wide atmospheric corona — layered for depth
+    for (int layer = 0; layer < 3; layer++) {
+      final layerR = r * (1.6 + layer * 0.3) * bs;
+      final layerAlpha = (0.03 + hold * 0.05) / (1 + layer * 0.5);
+      canvas.drawCircle(center, layerR, Paint()
         ..shader = RadialGradient(colors: [
-          deepAmber.withValues(alpha: 0.04 + hold * 0.08),
-          copper.withValues(alpha: 0.02),
+          _lerpHold(deepAmber, _gold).withValues(alpha: layerAlpha),
           Colors.transparent,
-        ], stops: const [0.0, 0.4, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: r * 2.0)),
-    );
+        ]).createShader(Rect.fromCircle(center: center, radius: layerR)));
+    }
 
     // Main body — dark molten sphere
-    canvas.drawCircle(
-      center, r * bs,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          darkCore,
-          const Color(0xFF2A1000),
-          _lerpHold(copper, brightGold),
-        ], stops: const [0.0, 0.5, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: r)),
-    );
+    canvas.drawCircle(center, r * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        darkCore,
+        const Color(0xFF2A1000),
+        _lerpHold(copper, brightGold),
+      ], stops: const [0.0, 0.5, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r)));
 
-    // SPARKLER SPARKS — parabolic arcs radiating from the surface
+    // SOLAR FLARE TENDRILS — thick writhing arcs hugging the surface
     final sRng = Random(77);
-    final sparkCount = 28 + (hold * 20).round();
-    for (int i = 0; i < sparkCount; i++) {
-      final baseAngle = (i / sparkCount) * 2 * pi + orbit * 2 * pi * 0.15;
-      final sparkPhase = (orbit * 3.0 + i * 0.37 + sRng.nextDouble() * 0.5) % 1.0;
-      final life = sparkPhase;
-      // Parabolic arc: sparks fly out then curve down with gravity
-      final outDist = r * (0.85 + life * 0.9 + hold * 0.5) * bs;
-      final gravity = life * life * r * 0.3 * (i.isEven ? 1 : -1);
-      final sparkX = center.dx + cos(baseAngle) * outDist;
-      final sparkY = center.dy + sin(baseAngle) * outDist + gravity;
-      final sparkPos = Offset(sparkX, sparkY);
-      final fadeAlpha = ((1.0 - life) * (0.4 + hold * 0.5)).clamp(0.0, 1.0);
-      final sparkSize = (2.0 + sRng.nextDouble() * 2.5) * (1.0 - life * 0.6);
-      final sparkColor = i % 3 == 0
-          ? hotWhite
-          : i % 3 == 1
-              ? brightGold
-              : deepAmber;
-
-      // Spark dot
-      canvas.drawCircle(
-        sparkPos, sparkSize,
-        Paint()
-          ..color = sparkColor.withValues(alpha: fadeAlpha)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, sparkSize * 0.5),
-      );
-
-      // Short luminous trail behind each spark
-      if (life > 0.05) {
-        final trailDist = outDist - r * 0.12;
-        final trailGravity = (life - 0.05) * (life - 0.05) * r * 0.3 * (i.isEven ? 1 : -1);
-        final trailPos = Offset(
-          center.dx + cos(baseAngle) * trailDist,
-          center.dy + sin(baseAngle) * trailDist + trailGravity,
-        );
-        canvas.drawLine(
-          trailPos, sparkPos,
-          Paint()
-            ..color = copper.withValues(alpha: fadeAlpha * 0.5)
-            ..strokeWidth = sparkSize * 0.6
-            ..strokeCap = StrokeCap.round,
-        );
-      }
-    }
-
-    // CRACKLING EMBERS — tiny bright flickers close to the surface
-    for (int i = 0; i < 14; i++) {
-      final emberAngle = (i / 14) * 2 * pi + orbit * 2 * pi * 0.4 + breath * 0.3;
-      final flicker = (sin(orbit * 2 * pi * 5 + i * 2.3) * 0.5 + 0.5).clamp(0.0, 1.0);
-      final emberDist = r * (0.75 + sRng.nextDouble() * 0.25 + hold * 0.08) * bs;
-      final emberPos = center + Offset(cos(emberAngle) * emberDist, sin(emberAngle) * emberDist);
-      final emberAlpha = (flicker * 0.6 + hold * 0.3).clamp(0.0, 1.0);
-      canvas.drawCircle(
-        emberPos, 1.5 + flicker * 1.5,
-        Paint()..color = hotWhite.withValues(alpha: emberAlpha),
-      );
-    }
-
-    // EXPANDING SPARK RINGS on hold — concentric bursts
-    if (hold > 0.1) {
-      for (int i = 0; i < 3; i++) {
-        final ringPhase = (orbit * 2.0 + i * 0.33) % 1.0;
-        final ringR = r * (0.9 + ringPhase * 0.8 * hold) * bs;
-        final ringAlpha = ((1.0 - ringPhase) * hold * 0.3).clamp(0.0, 1.0);
-        canvas.drawCircle(
-          center, ringR,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5 + hold
-            ..color = brightGold.withValues(alpha: ringAlpha),
-        );
-      }
-    }
-
-    // White-hot core
-    final coreR = r * (0.16 + breath * 0.05 + hold * 0.20);
-    canvas.drawCircle(
-      center, coreR,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          hotWhite.withValues(alpha: 0.95),
-          brightGold.withValues(alpha: 0.5),
-          Colors.transparent,
-        ], stops: const [0.0, 0.35, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: coreR)),
-    );
-
-    // Specular highlight
-    final specR = r * 0.25;
-    final specC = center + Offset(-r * 0.14, -r * 0.18);
-    canvas.drawCircle(
-      specC, specR,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          Colors.white.withValues(alpha: 0.12 + hold * 0.08),
-          Colors.transparent,
-        ]).createShader(Rect.fromCircle(center: specC, radius: specR)),
-    );
-
-    // GRAND SPARKLER BURST on completion — massive outward explosion
-    if (flash > 0) {
-      final burstR = r * (1.0 + flash * 2.0) * bs;
-      canvas.drawCircle(center, burstR, Paint()
-        ..shader = RadialGradient(colors: [
-          hotWhite.withValues(alpha: (1 - flash) * 0.6),
-          brightGold.withValues(alpha: (1 - flash) * 0.3),
-          Colors.transparent,
-        ], stops: const [0.0, 0.4, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: burstR)));
-      // Radial spark lines in the burst
-      for (int i = 0; i < 16; i++) {
-        final bAngle = (i / 16) * 2 * pi + flash * 0.3;
-        final bStart = center + Offset(cos(bAngle) * r * 0.5, sin(bAngle) * r * 0.5);
-        final bEnd = center + Offset(cos(bAngle) * burstR * 0.85, sin(bAngle) * burstR * 0.85);
-        canvas.drawLine(bStart, bEnd, Paint()
-          ..color = hotWhite.withValues(alpha: (1 - flash) * 0.4)
-          ..strokeWidth = 2.5 * (1 - flash)
-          ..strokeCap = StrokeCap.round);
-      }
-    }
-
-    // Gold rim with sparkle
-    canvas.drawCircle(
-      center, r * bs,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5 + hold * 2.0 + breath * 0.5
-        ..color = brightGold.withValues(alpha: 0.12 + hold * 0.25 + breath * 0.06),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // 1c. NEBULA HEART (Free) — Aurora Borealis Crystal
-  //     Shimmering aurora curtains draped over the orb with
-  //     crystalline ice particles floating in layers.
-  //     Vertical light pillars. Prismatic color shifts.
-  //     Colors: teal, emerald, rose, icy white.
-  // ═══════════════════════════════════════════════════════
-  void _paintNebulaHeart(
-      Canvas canvas, Offset center, double r, double bs) {
-    const teal = Color(0xFF00BFA5);
-    const emerald = Color(0xFF69F0AE);
-    const rose = Color(0xFFFF80AB);
-    const iceWhite = Color(0xFFE0F7FA);
-    const deepNight = Color(0xFF000A12);
-
-    // Wide aurora haze
-    canvas.drawCircle(
-      center, r * 2.0 * bs,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          _lerpHold(teal, _amber).withValues(alpha: 0.05 + hold * 0.08),
-          _lerpHold(rose, _gold).withValues(alpha: 0.02),
-          Colors.transparent,
-        ], stops: const [0.0, 0.45, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: r * 2.0)),
-    );
-
-    // Main body — dark polar sky sphere
-    canvas.drawCircle(
-      center, r * bs,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          deepNight,
-          _lerpHold(const Color(0xFF002020), const Color(0xFF0A0500)),
-          _lerpHold(teal, _amber).withValues(alpha: 0.7),
-        ], stops: const [0.0, 0.55, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: r)),
-    );
-
-    // AURORA CURTAINS — vertical sinusoidal ribbons draped across the orb
-    final aRng = Random(88);
-    for (int curtain = 0; curtain < 5; curtain++) {
-      final curtainX = -0.8 + curtain * 0.4; // spread across the orb (-0.8 to 0.8)
-      final curtainColor = curtain % 3 == 0
-          ? _lerpHold(teal, _amber)
-          : curtain % 3 == 1
-              ? _lerpHold(emerald, _gold)
-              : _lerpHold(rose, _warmWhite);
-      final alpha = (0.08 + aRng.nextDouble() * 0.10 + hold * 0.15).clamp(0.0, 1.0);
-      final sway = sin(orbit * 2 * pi * 0.3 + curtain * 1.2) * r * 0.12;
+    for (int i = 0; i < 8; i++) {
+      final baseAngle = (i / 8) * 2 * pi + orbit * 2 * pi * 0.08;
+      final flareColor = i.isEven
+          ? _lerpHold(brightGold, _warmWhite)
+          : _lerpHold(deepAmber, _gold);
+      final alpha = (0.10 + sRng.nextDouble() * 0.12 + hold * 0.20).clamp(0.0, 1.0);
+      final arcLen = 1.2 + sRng.nextDouble() * 1.0 + hold * 0.5;
+      final dist = r * (0.80 + sRng.nextDouble() * 0.15 + hold * 0.10) * bs;
+      // Flare height (how far it lifts off the surface)
+      final liftoff = r * (0.15 + sRng.nextDouble() * 0.25 + hold * 0.30);
 
       final path = Path();
       const steps = 24;
       for (int j = 0; j <= steps; j++) {
         final t = j / steps;
-        final y = center.dy + (t - 0.5) * r * 1.8 * bs;
-        final wave = sin(t * pi * 3 + orbit * 2 * pi * 0.5 + curtain * 0.8) * r * 0.15;
-        final x = center.dx + curtainX * r * bs + wave + sway;
-        if (j == 0) {
-          path.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
-        }
+        final angle = baseAngle + t * arcLen;
+        // Parabolic lift: peaks at midpoint, returns to surface
+        final lift = sin(t * pi) * liftoff;
+        final wave = sin(t * pi * 4 + orbit * 8) * r * 0.03;
+        final d = dist + lift + wave;
+        final pt = center + Offset(cos(angle) * d, sin(angle) * d);
+        if (j == 0) { path.moveTo(pt.dx, pt.dy); } else { path.lineTo(pt.dx, pt.dy); }
       }
-      // Draw the curtain as a wide glowing stroke
-      canvas.drawPath(
-        path,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 6.0 + aRng.nextDouble() * 4.0 + hold * 4.0
-          ..color = curtainColor.withValues(alpha: alpha)
-          ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-      );
-      // Brighter inner line
-      canvas.drawPath(
-        path,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0 + hold * 2.0
-          ..color = iceWhite.withValues(alpha: alpha * 0.5)
-          ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-      );
+      // Glow layer
+      canvas.drawPath(path, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5.0 + sRng.nextDouble() * 4.0 + hold * 4.0
+        ..color = flareColor.withValues(alpha: alpha * 0.3)
+        ..strokeCap = StrokeCap.round);
+      // Core line
+      canvas.drawPath(path, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5 + sRng.nextDouble() * 1.5 + hold * 1.5
+        ..color = flareColor.withValues(alpha: alpha)
+        ..strokeCap = StrokeCap.round);
     }
 
-    // CRYSTALLINE ICE PARTICLES — prismatic floating diamonds
-    for (int i = 0; i < 22; i++) {
-      final crystalAngle = (i / 22) * 2 * pi + orbit * 2 * pi * 0.2 + aRng.nextDouble() * 0.4;
-      final crystalDist = r * (0.2 + aRng.nextDouble() * 0.75) * bs;
-      final crystalPos = center + Offset(cos(crystalAngle) * crystalDist, sin(crystalAngle) * crystalDist);
-      final twinkle = (sin(orbit * 2 * pi * 4 + i * 2.1) * 0.5 + 0.5).clamp(0.0, 1.0);
-      final crystalAlpha = (0.1 + twinkle * 0.5 + hold * 0.3).clamp(0.0, 1.0);
-      final crystalSize = 1.5 + aRng.nextDouble() * 2.0 + hold * 0.8;
-      final crystalColor = i % 3 == 0 ? iceWhite : i % 3 == 1 ? emerald : teal;
-
-      // Diamond shape (rotated square)
+    // TWIN CORONA RINGS — counter-rotating ellipses
+    for (int ring = 0; ring < 2; ring++) {
       canvas.save();
-      canvas.translate(crystalPos.dx, crystalPos.dy);
-      canvas.rotate(orbit * 2 * pi * 0.3 + i * 0.5);
-      final diamondPath = Path()
-        ..moveTo(0, -crystalSize)
-        ..lineTo(crystalSize * 0.6, 0)
-        ..lineTo(0, crystalSize)
-        ..lineTo(-crystalSize * 0.6, 0)
-        ..close();
-      canvas.drawPath(
-        diamondPath,
-        Paint()
-          ..color = crystalColor.withValues(alpha: crystalAlpha)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, crystalSize * 0.3),
-      );
+      canvas.translate(center.dx, center.dy);
+      final ringAngle = orbit * 2 * pi * (ring == 0 ? 0.15 : -0.12) + ring * pi * 0.5;
+      canvas.rotate(ringAngle);
+      canvas.scale(1.0, 0.30 + ring * 0.08);
+      final ringR = r * (0.95 + hold * 0.15) * bs;
+      final ringAlpha = (0.10 + hold * 0.25).clamp(0.0, 1.0);
+      canvas.drawCircle(Offset.zero, ringR, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0 + hold * 2.0
+        ..shader = SweepGradient(colors: [
+          _lerpHold(brightGold, _warmWhite).withValues(alpha: 0.0),
+          _lerpHold(brightGold, _warmWhite).withValues(alpha: ringAlpha),
+          _lerpHold(deepAmber, _gold).withValues(alpha: ringAlpha * 0.3),
+          _lerpHold(brightGold, _warmWhite).withValues(alpha: 0.0),
+        ], stops: const [0.0, 0.3, 0.7, 1.0],
+          transform: GradientRotation(orbit * 2 * pi * 0.5),
+        ).createShader(Rect.fromCircle(center: Offset.zero, radius: ringR)));
       canvas.restore();
     }
 
-    // LIGHT PILLARS — vertical beams that pulse on hold
-    if (hold > 0.05) {
-      for (int i = 0; i < 6; i++) {
-        final pillarX = center.dx + (i - 2.5) * r * 0.28 * bs;
-        final pillarAlpha = (hold * 0.2 * (1.0 - (i - 2.5).abs() / 3.0)).clamp(0.0, 1.0);
-        final pillarColor = i.isEven
-            ? _lerpHold(teal, _amber)
-            : _lerpHold(emerald, _gold);
-        final pillarH = r * (0.6 + hold * 0.8) * bs;
-        canvas.drawLine(
-          Offset(pillarX, center.dy - pillarH),
-          Offset(pillarX, center.dy + pillarH),
-          Paint()
-            ..color = pillarColor.withValues(alpha: pillarAlpha)
-            ..strokeWidth = 3.0 + hold * 2.0
-            ..strokeCap = StrokeCap.round
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-        );
+    // PARTICLE FOUNTAINS — spiraling golden sparks erupting upward
+    for (int i = 0; i < 20; i++) {
+      final seed = sRng.nextDouble();
+      final phase = (orbit * (0.5 + seed * 0.6) + seed * 3.0) % 1.0;
+      final spawnAngle = (i / 20) * 2 * pi;
+      // Spiral outward with upward drift
+      final spiralR = r * (0.85 + phase * 0.9 + hold * 0.4) * bs;
+      final spiralAngle = spawnAngle + phase * 1.5 * (i.isEven ? 1 : -1);
+      final sx = center.dx + cos(spiralAngle) * spiralR;
+      final sy = center.dy + sin(spiralAngle) * spiralR - phase * r * 0.3;
+      final fadeIn = (phase * 4).clamp(0.0, 1.0);
+      final fadeOut = ((1 - phase) * 2).clamp(0.0, 1.0);
+      final sAlpha = (fadeIn * fadeOut * (0.3 + hold * 0.5)).clamp(0.0, 1.0);
+      final sSize = (1.5 + seed * 2.0) * (1 - phase * 0.5);
+      final sColor = i % 3 == 0 ? hotWhite : i % 3 == 1 ? brightGold : deepAmber;
+
+      if (sAlpha > 0.02) {
+        canvas.drawCircle(Offset(sx, sy), sSize, Paint()
+          ..color = sColor.withValues(alpha: sAlpha)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, sSize * 0.4));
+        // Short trail
+        if (phase > 0.05) {
+          final prevPhase = phase - 0.05;
+          final prevR = r * (0.85 + prevPhase * 0.9 + hold * 0.4) * bs;
+          final prevA = spawnAngle + prevPhase * 1.5 * (i.isEven ? 1 : -1);
+          final px = center.dx + cos(prevA) * prevR;
+          final py = center.dy + sin(prevA) * prevR - prevPhase * r * 0.3;
+          canvas.drawLine(Offset(px, py), Offset(sx, sy), Paint()
+            ..color = copper.withValues(alpha: sAlpha * 0.4)
+            ..strokeWidth = sSize * 0.5
+            ..strokeCap = StrokeCap.round);
+        }
       }
     }
 
-    // Icy core glow
-    final coreR = r * (0.18 + breath * 0.05 + hold * 0.22);
-    canvas.drawCircle(
-      center, coreR,
-      Paint()
+    // SURFACE EMBERS — bright twinkling dots on the sphere
+    for (int i = 0; i < 16; i++) {
+      final eAngle = (i / 16) * 2 * pi + orbit * 2 * pi * 0.3;
+      final flicker = (sin(orbit * 2 * pi * 6 + i * 2.7) * 0.5 + 0.5).clamp(0.0, 1.0);
+      final eDist = r * (0.65 + sRng.nextDouble() * 0.25) * bs;
+      final ePos = center + Offset(cos(eAngle) * eDist, sin(eAngle) * eDist);
+      final eAlpha = (flicker * 0.5 + hold * 0.3).clamp(0.0, 1.0);
+      canvas.drawCircle(ePos, 1.2 + flicker * 1.8, Paint()
+        ..color = hotWhite.withValues(alpha: eAlpha));
+    }
+
+    // White-hot nucleus
+    final coreR = r * (0.18 + breath * 0.06 + hold * 0.22);
+    canvas.drawCircle(center, coreR, Paint()
+      ..shader = RadialGradient(colors: [
+        hotWhite.withValues(alpha: 0.95),
+        brightGold.withValues(alpha: 0.5),
+        Colors.transparent,
+      ], stops: const [0.0, 0.35, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: coreR)));
+
+    // Specular highlight
+    final specR = r * 0.28;
+    final specC = center + Offset(-r * 0.16, -r * 0.20);
+    canvas.drawCircle(specC, specR, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: 0.14 + hold * 0.08),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
+
+    // SUPERNOVA BURST on completion
+    if (flash > 0) {
+      final burstR = r * (1.0 + flash * 2.2) * bs;
+      canvas.drawCircle(center, burstR, Paint()
         ..shader = RadialGradient(colors: [
-          _lerpHold(iceWhite, _warmWhite).withValues(alpha: 0.85),
-          _lerpHold(teal, _amber).withValues(alpha: 0.35),
+          hotWhite.withValues(alpha: (1 - flash) * 0.7),
+          brightGold.withValues(alpha: (1 - flash) * 0.35),
           Colors.transparent,
         ], stops: const [0.0, 0.4, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: coreR)),
-    );
+            .createShader(Rect.fromCircle(center: center, radius: burstR)));
+      // Radial flare lines
+      for (int i = 0; i < 20; i++) {
+        final bAngle = (i / 20) * 2 * pi + flash * 0.4;
+        final bLen = i.isEven ? burstR * 0.9 : burstR * 0.7;
+        final bStart = center + Offset(cos(bAngle) * r * 0.3, sin(bAngle) * r * 0.3);
+        final bEnd = center + Offset(cos(bAngle) * bLen, sin(bAngle) * bLen);
+        canvas.drawLine(bStart, bEnd, Paint()
+          ..color = (i.isEven ? hotWhite : brightGold).withValues(alpha: (1 - flash) * 0.45)
+          ..strokeWidth = (i.isEven ? 2.5 : 1.5) * (1 - flash)
+          ..strokeCap = StrokeCap.round);
+      }
+    }
+
+    // Gold corona rim
+    canvas.drawCircle(center, r * bs, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5 + hold * 2.5 + breath * 0.5
+      ..shader = SweepGradient(colors: [
+        brightGold.withValues(alpha: 0.0),
+        _lerpHold(brightGold, _warmWhite).withValues(alpha: 0.18 + hold * 0.30),
+        deepAmber.withValues(alpha: 0.05),
+        brightGold.withValues(alpha: 0.0),
+      ], stops: const [0.0, 0.3, 0.7, 1.0],
+        transform: GradientRotation(orbit * 2 * pi * 0.25),
+      ).createShader(Rect.fromCircle(center: center, radius: r * bs)));
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 1c. NEBULA HEART (Free) — Deep Space Nebula
+  //     Swirling gas clouds in layered depth, star clusters
+  //     twinkling through the gas, cosmic dust lanes carving
+  //     dark rivers, and a pulsing stellar nursery core.
+  //     Colors: orchid, teal, rose, cosmic blue, icy white.
+  // ═══════════════════════════════════════════════════════
+  void _paintNebulaHeart(
+      Canvas canvas, Offset center, double r, double bs) {
+    const orchid = Color(0xFFDA70D6);
+    const teal = Color(0xFF00BFA5);
+    const rose = Color(0xFFFF80AB);
+    const cosmicBlue = Color(0xFF4466CC);
+    const iceWhite = Color(0xFFE0F7FA);
+    const deepSpace = Color(0xFF020010);
+
+    // Nebula haze — multi-layered
+    for (int layer = 0; layer < 3; layer++) {
+      final hR = r * (1.7 + layer * 0.25) * bs;
+      final hColor = layer == 0 ? orchid : layer == 1 ? teal : rose;
+      final hAlpha = (0.03 + hold * 0.04) / (1 + layer * 0.4);
+      canvas.drawCircle(center, hR, Paint()
+        ..shader = RadialGradient(colors: [
+          _lerpHold(hColor, _amber).withValues(alpha: hAlpha),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: center, radius: hR)));
+    }
+
+    // Main body — deep space sphere
+    canvas.drawCircle(center, r * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        deepSpace,
+        _lerpHold(const Color(0xFF0A0020), const Color(0xFF0A0500)),
+        _lerpHold(orchid, _amber).withValues(alpha: 0.5),
+      ], stops: const [0.0, 0.55, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r)));
+
+    // GAS CLOUD LAYERS — thick curved nebula bands at different depths
+    final aRng = Random(88);
+    for (int cloud = 0; cloud < 7; cloud++) {
+      final cloudAngle = (cloud / 7) * 2 * pi + orbit * 2 * pi * 0.06;
+      final cloudColor = cloud % 4 == 0
+          ? _lerpHold(orchid, _amber)
+          : cloud % 4 == 1
+              ? _lerpHold(teal, _gold)
+              : cloud % 4 == 2
+                  ? _lerpHold(rose, _warmWhite)
+                  : _lerpHold(cosmicBlue, _gold);
+      final alpha = (0.06 + aRng.nextDouble() * 0.10 + hold * 0.15).clamp(0.0, 1.0);
+      final dist = r * (0.25 + aRng.nextDouble() * 0.50) * bs;
+      final arcLen = 1.0 + aRng.nextDouble() * 1.5;
+
+      final path = Path();
+      const steps = 20;
+      for (int j = 0; j <= steps; j++) {
+        final t = j / steps;
+        final angle = cloudAngle + t * arcLen;
+        final wave = sin(t * pi * 2 + orbit * 4 + cloud * 1.3) * r * 0.12;
+        final d = dist + wave;
+        final pt = center + Offset(cos(angle) * d, sin(angle) * d);
+        if (j == 0) { path.moveTo(pt.dx, pt.dy); } else { path.lineTo(pt.dx, pt.dy); }
+      }
+      // Wide glow layer
+      canvas.drawPath(path, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8.0 + aRng.nextDouble() * 6.0 + hold * 4.0
+        ..color = cloudColor.withValues(alpha: alpha * 0.35)
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+      // Bright inner edge
+      canvas.drawPath(path, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0 + hold * 1.5
+        ..color = cloudColor.withValues(alpha: alpha * 0.7)
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // STAR CLUSTERS — twinkling points scattered through the nebula
+    for (int i = 0; i < 28; i++) {
+      final sAngle = (i / 28) * 2 * pi + aRng.nextDouble() * 0.5;
+      final sDist = r * (0.10 + aRng.nextDouble() * 0.80) * bs;
+      final sPos = center + Offset(cos(sAngle) * sDist, sin(sAngle) * sDist);
+      final twinkle = (sin(orbit * 2 * pi * 5 + i * 2.7) * 0.5 + 0.5).clamp(0.0, 1.0);
+      final sAlpha = (0.05 + twinkle * 0.55 + hold * 0.25).clamp(0.0, 1.0);
+      final sSize = 0.8 + aRng.nextDouble() * 1.5;
+
+      // 4-point star shape for brighter stars
+      if (sSize > 1.5 && twinkle > 0.6) {
+        final crossLen = sSize * 2.5;
+        final crossAlpha = sAlpha * 0.5;
+        canvas.drawLine(
+          sPos + Offset(-crossLen, 0), sPos + Offset(crossLen, 0),
+          Paint()..color = iceWhite.withValues(alpha: crossAlpha)..strokeWidth = 0.5..strokeCap = StrokeCap.round);
+        canvas.drawLine(
+          sPos + Offset(0, -crossLen), sPos + Offset(0, crossLen),
+          Paint()..color = iceWhite.withValues(alpha: crossAlpha)..strokeWidth = 0.5..strokeCap = StrokeCap.round);
+      }
+      canvas.drawCircle(sPos, sSize, Paint()
+        ..color = iceWhite.withValues(alpha: sAlpha));
+    }
+
+    // COSMIC DUST LANES — dark rivers cutting through the nebula
+    for (int lane = 0; lane < 3; lane++) {
+      final laneAngle = (lane / 3) * 2 * pi + orbit * 2 * pi * 0.03 + 0.5;
+      final laneDist = r * (0.30 + lane * 0.18) * bs;
+      final lanePath = Path();
+      const steps = 18;
+      for (int j = 0; j <= steps; j++) {
+        final t = j / steps;
+        final angle = laneAngle + t * 1.8;
+        final wave = sin(t * pi * 2.5 + orbit * 3 + lane * 1.5) * r * 0.08;
+        final d = laneDist + wave;
+        final pt = center + Offset(cos(angle) * d, sin(angle) * d);
+        if (j == 0) { lanePath.moveTo(pt.dx, pt.dy); } else { lanePath.lineTo(pt.dx, pt.dy); }
+      }
+      canvas.drawPath(lanePath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0 + hold * 2.0
+        ..color = deepSpace.withValues(alpha: 0.25 + hold * 0.15)
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // PILLAR OF CREATION — vertical luminous column on hold
+    if (hold > 0.05) {
+      for (int i = 0; i < 4; i++) {
+        final px = center.dx + (i - 1.5) * r * 0.20 * bs;
+        final pAlpha = (hold * 0.22 * (1.0 - (i - 1.5).abs() / 2.0)).clamp(0.0, 1.0);
+        final pColor = i.isEven ? _lerpHold(orchid, _amber) : _lerpHold(teal, _gold);
+        final pH = r * (0.5 + hold * 1.0) * bs;
+        canvas.drawLine(
+          Offset(px, center.dy - pH), Offset(px, center.dy + pH),
+          Paint()
+            ..color = pColor.withValues(alpha: pAlpha)
+            ..strokeWidth = 4.0 + hold * 3.0
+            ..strokeCap = StrokeCap.round
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
+      }
+    }
+
+    // Stellar nursery core — pulsing bright center
+    final coreR = r * (0.20 + breath * 0.06 + hold * 0.24);
+    canvas.drawCircle(center, coreR, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(iceWhite, _warmWhite).withValues(alpha: 0.90),
+        _lerpHold(orchid, _amber).withValues(alpha: 0.35),
+        Colors.transparent,
+      ], stops: const [0.0, 0.4, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: coreR)));
 
     // Specular
     final specR = r * 0.26;
     final specC = center + Offset(-r * 0.15, -r * 0.20);
-    canvas.drawCircle(
-      specC, specR,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          Colors.white.withValues(alpha: 0.10 + hold * 0.06),
-          Colors.transparent,
-        ]).createShader(Rect.fromCircle(center: specC, radius: specR)),
-    );
+    canvas.drawCircle(specC, specR, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: 0.10 + hold * 0.06),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
 
-    // AURORA NOVA on completion — prismatic expanding rings
+    // NEBULA NOVA on completion — multi-color expanding wave
     if (flash > 0) {
-      final novaR = r * (1.0 + flash * 1.8) * bs;
+      final novaR = r * (1.0 + flash * 2.0) * bs;
       canvas.drawCircle(center, novaR, Paint()
         ..shader = RadialGradient(colors: [
-          _lerpHold(iceWhite, _warmWhite).withValues(alpha: (1 - flash) * 0.45),
-          _lerpHold(teal, _amber).withValues(alpha: (1 - flash) * 0.20),
-          _lerpHold(rose, _gold).withValues(alpha: (1 - flash) * 0.10),
+          _lerpHold(iceWhite, _warmWhite).withValues(alpha: (1 - flash) * 0.50),
+          _lerpHold(orchid, _amber).withValues(alpha: (1 - flash) * 0.25),
+          _lerpHold(teal, _gold).withValues(alpha: (1 - flash) * 0.12),
           Colors.transparent,
-        ], stops: const [0.0, 0.35, 0.65, 1.0])
+        ], stops: const [0.0, 0.3, 0.6, 1.0])
             .createShader(Rect.fromCircle(center: center, radius: novaR)));
-      // Prismatic ring
-      canvas.drawCircle(center, novaR * 0.7, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.0 * (1 - flash)
-        ..color = emerald.withValues(alpha: (1 - flash) * 0.35));
+      // Starburst rays
+      for (int i = 0; i < 12; i++) {
+        final rAngle = (i / 12) * 2 * pi + flash * 0.3;
+        final rColor = i % 3 == 0 ? orchid : i % 3 == 1 ? teal : rose;
+        final rStart = center + Offset(cos(rAngle) * r * 0.25, sin(rAngle) * r * 0.25);
+        final rEnd = center + Offset(cos(rAngle) * novaR * 0.8, sin(rAngle) * novaR * 0.8);
+        canvas.drawLine(rStart, rEnd, Paint()
+          ..color = _lerpHold(rColor, _gold).withValues(alpha: (1 - flash) * 0.35)
+          ..strokeWidth = 2.0 * (1 - flash)
+          ..strokeCap = StrokeCap.round);
+      }
     }
 
-    // Teal-rose rim
-    canvas.drawCircle(
-      center, r * bs,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5 + hold * 2.0 + breath * 0.5
-        ..color = _lerpHold(teal, _gold).withValues(alpha: 0.10 + hold * 0.22 + breath * 0.05),
-    );
+    // Orchid-teal rim
+    canvas.drawCircle(center, r * bs, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5 + hold * 2.0 + breath * 0.5
+      ..shader = SweepGradient(colors: [
+        _lerpHold(orchid, _gold).withValues(alpha: 0.0),
+        _lerpHold(teal, _gold).withValues(alpha: 0.12 + hold * 0.20),
+        _lerpHold(rose, _amber).withValues(alpha: 0.06),
+        _lerpHold(orchid, _gold).withValues(alpha: 0.0),
+      ], stops: const [0.0, 0.3, 0.7, 1.0],
+        transform: GradientRotation(orbit * 2 * pi * 0.2),
+      ).createShader(Rect.fromCircle(center: center, radius: r * bs)));
   }
 
   // ═══════════════════════════════════════════════════════
@@ -1883,6 +1921,343 @@ class _OrbPainter extends CustomPainter {
           transform: GradientRotation(orbit * 2 * pi),
         ).createShader(Rect.fromCircle(center: center, radius: r * bs)),
     );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 7. INFINITY WELL (Pro) — Recursive Dimensional Rift
+  //    Concentric rings collapse inward in an infinite tunnel
+  //    effect. Neon-lit edges. Warped perspective grid. Particles
+  //    get sucked into the singularity. Hypnotic depth illusion.
+  //    Colors: deep violet, neon pink, electric blue.
+  // ═══════════════════════════════════════════════════════
+  void _paintInfinityWell(
+      Canvas canvas, Offset center, double r, double bs) {
+    const deepViolet = Color(0xFF6A0DAD);
+    const neonPink = Color(0xFFFF6EC7);
+    const electricBlue = Color(0xFF4488FF);
+    const abyssBlack = Color(0xFF020008);
+
+    // Outer dimensional glow
+    canvas.drawCircle(center, r * 1.8 * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(deepViolet, _amber).withValues(alpha: 0.06 + hold * 0.10),
+        _lerpHold(neonPink, _gold).withValues(alpha: 0.02),
+        Colors.transparent,
+      ], stops: const [0.0, 0.5, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r * 1.8)));
+
+    // Main body — absolute black void
+    canvas.drawCircle(center, r * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        abyssBlack,
+        _lerpHold(const Color(0xFF0A0018), const Color(0xFF0A0500)),
+        _lerpHold(deepViolet, _amber).withValues(alpha: 0.5),
+      ], stops: const [0.0, 0.6, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r)));
+
+    // CONCENTRIC COLLAPSING RINGS — infinite tunnel effect
+    final wRng = Random(55);
+    const ringCount = 12;
+    for (int i = 0; i < ringCount; i++) {
+      // Each ring collapses inward over time
+      final ringPhase = ((orbit * 0.8 + i / ringCount) % 1.0);
+      final ringR = r * (0.10 + ringPhase * 0.85) * bs;
+      // Deeper rings are dimmer (perspective fade)
+      final depthFade = 1.0 - ringPhase * 0.7;
+      final ringAlpha = (depthFade * (0.08 + hold * 0.20)).clamp(0.0, 1.0);
+      // Alternate colors for neon look
+      final ringColor = i % 3 == 0
+          ? _lerpHold(neonPink, _gold)
+          : i % 3 == 1
+              ? _lerpHold(electricBlue, _amber)
+              : _lerpHold(deepViolet, _warmWhite);
+      // Slight perspective warp — elliptical tilt
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.scale(1.0, 0.85 + sin(orbit * pi * 2 + i * 0.3) * 0.08);
+      canvas.drawCircle(Offset.zero, ringR, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2 + hold * 1.5 + (1 - ringPhase) * 1.0
+        ..color = ringColor.withValues(alpha: ringAlpha));
+      canvas.restore();
+    }
+
+    // PERSPECTIVE GRID LINES — radial spokes converging to center
+    for (int spoke = 0; spoke < 8; spoke++) {
+      final sAngle = (spoke / 8) * 2 * pi + orbit * 2 * pi * 0.05;
+      final sAlpha = (0.04 + hold * 0.12).clamp(0.0, 1.0);
+      final sColor = spoke.isEven
+          ? _lerpHold(neonPink, _gold)
+          : _lerpHold(electricBlue, _amber);
+      final sStart = center + Offset(cos(sAngle) * r * 0.85 * bs, sin(sAngle) * r * 0.85 * bs);
+      // Converge toward center but stop short
+      final sEnd = center + Offset(cos(sAngle) * r * 0.08, sin(sAngle) * r * 0.08);
+      canvas.drawLine(sStart, sEnd, Paint()
+        ..color = sColor.withValues(alpha: sAlpha)
+        ..strokeWidth = 0.5 + hold * 0.8
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // PARTICLE VORTEX — dots spiraling inward and disappearing
+    for (int i = 0; i < 18; i++) {
+      final seed = wRng.nextDouble();
+      final phase = (orbit * (0.4 + seed * 0.5) + seed * 3.0) % 1.0;
+      final spiralAngle = (i / 18) * 2 * pi + phase * 4.0 * (i.isEven ? 1 : -1);
+      // Move from outer edge inward
+      final spiralR = r * (0.85 - phase * 0.75) * bs;
+      final px = center.dx + cos(spiralAngle) * spiralR;
+      final py = center.dy + sin(spiralAngle) * spiralR;
+      final fadeIn = (phase * 3).clamp(0.0, 1.0);
+      final fadeOut = ((1 - phase) * 3).clamp(0.0, 1.0);
+      final pAlpha = (fadeIn * fadeOut * (0.25 + hold * 0.45)).clamp(0.0, 1.0);
+      final pSize = (1.0 + seed * 1.5) * (1 - phase * 0.6);
+      final pColor = i % 3 == 0 ? neonPink : i % 3 == 1 ? electricBlue : Colors.white;
+
+      if (pAlpha > 0.02) {
+        canvas.drawCircle(Offset(px, py), pSize, Paint()
+          ..color = _lerpHold(pColor, _gold).withValues(alpha: pAlpha));
+      }
+    }
+
+    // DIMENSIONAL FRACTURES on hold — jagged tears in spacetime
+    if (hold > 0.08) {
+      for (int i = 0; i < 6; i++) {
+        final fAngle = (i / 6) * 2 * pi + orbit * pi * 0.2;
+        final fStart = center + Offset(cos(fAngle) * r * 0.3 * bs, sin(fAngle) * r * 0.3 * bs);
+        final fLen = r * (0.2 + hold * 0.6) * bs;
+        final fPath = Path();
+        fPath.moveTo(fStart.dx, fStart.dy);
+        var cur = fStart;
+        for (int j = 1; j <= 5; j++) {
+          final t = j / 5;
+          final jag = (wRng.nextDouble() - 0.5) * r * 0.15;
+          cur = fStart + Offset(
+            cos(fAngle) * fLen * t + cos(fAngle + pi / 2) * jag,
+            sin(fAngle) * fLen * t + sin(fAngle + pi / 2) * jag,
+          );
+          fPath.lineTo(cur.dx, cur.dy);
+        }
+        final fAlpha = (hold * 0.45).clamp(0.0, 1.0);
+        canvas.drawPath(fPath, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5 + hold * 1.5
+          ..color = _lerpHold(neonPink, _warmWhite).withValues(alpha: fAlpha)
+          ..strokeCap = StrokeCap.round);
+      }
+    }
+
+    // Singularity core — impossibly bright pinpoint
+    final coreR = r * (0.10 + breath * 0.03 + hold * 0.15);
+    canvas.drawCircle(center, coreR, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: 0.95),
+        _lerpHold(neonPink, _warmWhite).withValues(alpha: 0.5),
+        Colors.transparent,
+      ], stops: const [0.0, 0.3, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: coreR)));
+
+    // RIFT COLLAPSE on completion — rings rush inward
+    if (flash > 0) {
+      for (int i = 0; i < 5; i++) {
+        final collapsePhase = (flash + i * 0.12).clamp(0.0, 1.0);
+        final colR = r * (1.0 - collapsePhase * 0.85) * bs;
+        final colAlpha = ((1 - collapsePhase) * 0.50).clamp(0.0, 1.0);
+        final colColor = i.isEven ? neonPink : electricBlue;
+        canvas.drawCircle(center, colR, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5 * (1 - collapsePhase) + 0.5
+          ..color = _lerpHold(colColor, _gold).withValues(alpha: colAlpha));
+      }
+      // Central flash
+      final flashR = r * (0.5 * (1 - flash)) * bs;
+      canvas.drawCircle(center, flashR, Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: (1 - flash) * 0.8),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: center, radius: flashR)));
+    }
+
+    // Neon rim
+    canvas.drawCircle(center, r * bs, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5 + hold * 2.0
+      ..shader = SweepGradient(colors: [
+        _lerpHold(neonPink, _gold).withValues(alpha: 0.0),
+        _lerpHold(electricBlue, _gold).withValues(alpha: 0.12 + hold * 0.22),
+        _lerpHold(deepViolet, _amber).withValues(alpha: 0.05),
+        _lerpHold(neonPink, _gold).withValues(alpha: 0.0),
+      ], stops: const [0.0, 0.3, 0.65, 1.0],
+        transform: GradientRotation(orbit * 2 * pi * 0.3),
+      ).createShader(Rect.fromCircle(center: center, radius: r * bs)));
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 8. PHANTOM PULSE (Lifetime) — Ghostly Specter
+  //    Ethereal white-silver orb with trailing afterimages
+  //    that lag behind like spectral echoes. Wispy tendrils
+  //    of ghost smoke. Phantom heartbeat pulse. Eerie.
+  //    Colors: spectral silver, phantom blue, ghostly white.
+  // ═══════════════════════════════════════════════════════
+  void _paintPhantomPulse(
+      Canvas canvas, Offset center, double r, double bs) {
+    const spectralSilver = Color(0xFFCCCCCC);
+    const phantomBlue = Color(0xFF4488FF);
+    const ghostWhite = Color(0xFFE8E8F0);
+    const deepVoid = Color(0xFF040408);
+
+    // Spectral haze
+    canvas.drawCircle(center, r * 1.9 * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(spectralSilver, _amber).withValues(alpha: 0.05 + hold * 0.08),
+        _lerpHold(phantomBlue, _gold).withValues(alpha: 0.02),
+        Colors.transparent,
+      ], stops: const [0.0, 0.4, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r * 1.9)));
+
+    // Main body — near-black with ghostly edge
+    canvas.drawCircle(center, r * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        deepVoid,
+        _lerpHold(const Color(0xFF0C0C14), const Color(0xFF0A0500)),
+        _lerpHold(spectralSilver, _amber).withValues(alpha: 0.4),
+      ], stops: const [0.0, 0.55, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r)));
+
+    // AFTERIMAGE ECHOES — 3 trailing ghost orbs that lag behind
+    for (int echo = 0; echo < 3; echo++) {
+      // Each echo lags slightly more in the orbit
+      final lagAmount = (echo + 1) * 0.08;
+      final echoOrbit = orbit - lagAmount;
+      final echoAngle = echoOrbit * 2 * pi * 0.15;
+      final echoOffset = Offset(cos(echoAngle) * r * 0.06, sin(echoAngle) * r * 0.06);
+      final echoCenter = center + echoOffset * (echo + 1).toDouble();
+      final echoAlpha = (0.08 - echo * 0.02 + hold * 0.08).clamp(0.0, 1.0);
+      final echoR = r * (0.90 - echo * 0.05) * bs;
+
+      canvas.drawCircle(echoCenter, echoR, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0 - echo * 0.4
+        ..color = _lerpHold(spectralSilver, _gold).withValues(alpha: echoAlpha));
+    }
+
+    // GHOST SMOKE TENDRILS — wispy, slow, ethereal
+    final gRng = Random(99);
+    for (int i = 0; i < 10; i++) {
+      final baseAngle = (i / 10) * 2 * pi + orbit * 2 * pi * 0.05;
+      final tendrilColor = i.isEven
+          ? _lerpHold(spectralSilver, _gold)
+          : _lerpHold(phantomBlue, _amber);
+      final alpha = (0.05 + gRng.nextDouble() * 0.08 + hold * 0.15).clamp(0.0, 1.0);
+      final dist = r * (0.70 + gRng.nextDouble() * 0.25) * bs;
+      final arcLen = 0.6 + gRng.nextDouble() * 0.8;
+
+      final path = Path();
+      const steps = 16;
+      for (int j = 0; j <= steps; j++) {
+        final t = j / steps;
+        final angle = baseAngle + t * arcLen;
+        final wave = sin(t * pi * 2 + orbit * 3 + i * 0.9) * r * 0.10;
+        // Tendrils drift slightly outward (ghost dispersing)
+        final drift = t * r * 0.08 * (1 + hold * 0.5);
+        final d = dist + wave + drift;
+        final pt = center + Offset(cos(angle) * d, sin(angle) * d);
+        if (j == 0) { path.moveTo(pt.dx, pt.dy); } else { path.lineTo(pt.dx, pt.dy); }
+      }
+      canvas.drawPath(path, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0 + gRng.nextDouble() * 3.0 + hold * 3.0
+        ..color = tendrilColor.withValues(alpha: alpha * 0.4)
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+      canvas.drawPath(path, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0 + hold * 1.0
+        ..color = ghostWhite.withValues(alpha: alpha * 0.5)
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // PHANTOM HEARTBEAT — pulsing rings that emanate from center
+    for (int beat = 0; beat < 3; beat++) {
+      final beatPhase = (orbit * 1.2 + beat * 0.33) % 1.0;
+      final beatR = r * (0.15 + beatPhase * 0.80) * bs;
+      final beatAlpha = ((1 - beatPhase) * (0.08 + hold * 0.18)).clamp(0.0, 1.0);
+      if (beatAlpha > 0.01) {
+        canvas.drawCircle(center, beatR, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5 * (1 - beatPhase) + 0.3
+          ..color = _lerpHold(spectralSilver, _gold).withValues(alpha: beatAlpha));
+      }
+    }
+
+    // SOUL WISPS — faint ascending shapes on hold
+    if (hold > 0.05) {
+      for (int i = 0; i < 8; i++) {
+        final seed = gRng.nextDouble();
+        final phase = (orbit * (0.3 + seed * 0.4) + seed * 2.0) % 1.0;
+        final xSpread = (gRng.nextDouble() - 0.5) * r * 0.5;
+        final y = center.dy + r * 0.3 - phase * r * 2.0;
+        final fadeIn = (phase * 3).clamp(0.0, 1.0);
+        final fadeOut = ((1 - phase) * 2.5).clamp(0.0, 1.0);
+        final wAlpha = (fadeIn * fadeOut * hold * 0.40).clamp(0.0, 1.0);
+        if (wAlpha > 0.02) {
+          // Wispy oval shape
+          canvas.save();
+          canvas.translate(center.dx + xSpread, y);
+          canvas.scale(1.0, 1.5);
+          canvas.drawCircle(Offset.zero, 1.5 + seed * 1.5, Paint()
+            ..color = _lerpHold(ghostWhite, _warmWhite).withValues(alpha: wAlpha)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+          canvas.restore();
+        }
+      }
+    }
+
+    // Ghostly core — soft silver glow
+    final coreR = r * (0.16 + breath * 0.05 + hold * 0.20);
+    canvas.drawCircle(center, coreR, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(ghostWhite, _warmWhite).withValues(alpha: 0.80),
+        _lerpHold(spectralSilver, _amber).withValues(alpha: 0.30),
+        Colors.transparent,
+      ], stops: const [0.0, 0.4, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: coreR)));
+
+    // Specular
+    final specR = r * 0.24;
+    final specC = center + Offset(-r * 0.16, -r * 0.20);
+    canvas.drawCircle(specC, specR, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: 0.12 + hold * 0.06),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
+
+    // SPECTRAL DISPERSAL on completion — ghost splits into echoes
+    if (flash > 0) {
+      // Multiple ghost copies expanding outward
+      for (int i = 0; i < 6; i++) {
+        final disperseAngle = (i / 6) * 2 * pi + flash * 0.5;
+        final disperseDist = r * flash * 1.5;
+        final disperseCenter = center + Offset(cos(disperseAngle) * disperseDist, sin(disperseAngle) * disperseDist);
+        final disperseAlpha = ((1 - flash) * 0.25).clamp(0.0, 1.0);
+        final disperseR = r * (0.3 - flash * 0.15) * bs;
+        canvas.drawCircle(disperseCenter, disperseR, Paint()
+          ..color = _lerpHold(ghostWhite, _warmWhite).withValues(alpha: disperseAlpha)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4 + flash * 6));
+      }
+      // Central bright flash
+      final flashR = r * (0.4 * (1 - flash)) * bs;
+      canvas.drawCircle(center, flashR, Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: (1 - flash) * 0.7),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: center, radius: flashR)));
+    }
+
+    // Silver rim — barely visible, ghostly
+    canvas.drawCircle(center, r * bs, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0 + hold * 1.5 + breath * 0.3
+      ..color = _lerpHold(spectralSilver, _gold).withValues(alpha: 0.06 + hold * 0.15 + breath * 0.03));
   }
 
   @override

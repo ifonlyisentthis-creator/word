@@ -1130,6 +1130,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
         : (timeBankTotal - remainingSeconds) / timeBankTotal;
 
     return SafeArea(
+      bottom: false,
       child: Column(
         children: [
           Expanded(
@@ -1543,7 +1544,8 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
                   maxLength: VaultController.maxPlaintextLength,
 
-                  maxLines: 8,
+                  minLines: 4,
+                  maxLines: null,
 
                   buildCounter:
                       (
@@ -2106,15 +2108,16 @@ class _SheetContainerState extends State<_SheetContainer> {
   @override
   Widget build(BuildContext context) {
     final topPad = MediaQuery.paddingOf(context).top;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     // read, not watch — theme won't change while sheet is open
     final td = context.read<ThemeProvider>().themeData;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(8, topPad + 8, 8, 8),
+      padding: EdgeInsets.fromLTRB(8, topPad + 8, 8, 8 + bottomInset),
 
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.92 - topPad,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.92 - topPad - bottomInset,
         ),
 
         decoration: BoxDecoration(

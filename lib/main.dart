@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -173,7 +174,30 @@ class _PremiumScrollBehavior extends ScrollBehavior {
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) =>
-      const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+      const _VaultScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+}
+
+/// Heavy, grounded iOS-style bounce — barely pulls at edge, snaps back instantly.
+class _VaultScrollPhysics extends BouncingScrollPhysics {
+  const _VaultScrollPhysics({super.parent});
+
+  @override
+  _VaultScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _VaultScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  // Extremely high friction → tiny overscroll distance
+  @override
+  double frictionFactor(double overscrollFraction) =>
+      0.04 * pow(1 - overscrollFraction, 2).toDouble();
+
+  // Very fast snap-back spring — stiff, no wobble
+  @override
+  SpringDescription get spring => const SpringDescription(
+        mass: 1.0,
+        stiffness: 800.0, // very stiff
+        damping: 60.0,    // heavily damped — no oscillation
+      );
 }
 
 ThemeData _buildTheme() {
