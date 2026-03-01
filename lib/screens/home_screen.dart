@@ -965,8 +965,6 @@ class _TimerCardState extends State<_TimerCard> {
                     fontWeight: FontWeight.w700,
 
                     letterSpacing: -0.5,
-
-                    color: td.easterEggAccent,
                   ),
                 ),
 
@@ -1055,12 +1053,15 @@ class _TimerCardState extends State<_TimerCard> {
                   Icon(Icons.timer_outlined, size: 16, color: Colors.white54),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'Timer: ${_fmtDays(currentDays)}',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Timer: ${_fmtDays(currentDays)}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -1228,12 +1229,15 @@ class _TimerPickerSheetState extends State<_TimerPickerSheet> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.white10),
               ),
-              child: Text(
-                _fmtDays(_selectedDays),
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _fmtDays(_selectedDays),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
             ),
@@ -1346,7 +1350,6 @@ class _SurfaceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final td = context.watch<ThemeProvider>().themeData;
     final glowColor = td.cardBorderGlow;
-    final isEgg = td.isEasterEgg;
 
     return Container(
       decoration: BoxDecoration(
@@ -1362,22 +1365,16 @@ class _SurfaceCard extends StatelessWidget {
 
         border: Border.all(
           color: glowColor ?? td.dividerColor,
-          width: isEgg ? 1.3 : 1.0,
+          width: glowColor != null ? 1.2 : 1.0,
         ),
 
         boxShadow: [
-          if (glowColor != null) ...[
+          if (glowColor != null)
             BoxShadow(
               color: glowColor,
-              blurRadius: 20,
+              blurRadius: 16,
               spreadRadius: -2,
             ),
-            BoxShadow(
-              color: (td.easterEggAccent ?? glowColor).withValues(alpha: 0.08),
-              blurRadius: 40,
-              spreadRadius: -6,
-            ),
-          ],
           BoxShadow(
             color: td.accentGlow.withValues(alpha: 0.08),
 
@@ -1396,29 +1393,7 @@ class _SurfaceCard extends StatelessWidget {
         ],
       ),
 
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Easter-egg accent gradient line at card top
-            if (isEgg && td.timerRingColors != null)
-              Container(
-                height: 2,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      ...td.timerRingColors!,
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            Flexible(child: child),
-          ],
-        ),
-      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(22), child: child),
     );
   }
 }
@@ -1440,43 +1415,16 @@ class _EasterEggTimerBar extends StatelessWidget {
       );
     }
 
-    // Easter-egg gradient timer bar — taller, glowing, dramatic
+    // Easter-egg gradient timer bar
     return SizedBox(
-      height: 8,
+      height: 6,
       child: Stack(
-        clipBehavior: Clip.none,
         children: [
           // Background track
           Container(
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(999),
-            ),
-          ),
-          // Glow halo behind the fill (bleeds outside bounds)
-          Positioned.fill(
-            top: -4,
-            bottom: -4,
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: progress,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  boxShadow: [
-                    BoxShadow(
-                      color: ringColors.first.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      spreadRadius: -2,
-                    ),
-                    BoxShadow(
-                      color: ringColors.last.withValues(alpha: 0.2),
-                      blurRadius: 20,
-                      spreadRadius: -4,
-                    ),
-                  ],
-                ),
-              ),
             ),
           ),
           // Gradient fill
@@ -1486,6 +1434,13 @@ class _EasterEggTimerBar extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: ringColors),
                 borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: ringColors.first.withValues(alpha: 0.4),
+                    blurRadius: 6,
+                    spreadRadius: -1,
+                  ),
+                ],
               ),
             ),
           ),

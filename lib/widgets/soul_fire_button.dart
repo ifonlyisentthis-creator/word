@@ -1933,6 +1933,25 @@ class _OrbPainter extends CustomPainter {
       ], stops: const [0.0, 0.65, 1.0])
           .createShader(Rect.fromCircle(center: center, radius: r)));
 
+    // INNER NEBULA — soft gas clouds for depth
+    final nebRng = Random(77);
+    for (int i = 0; i < 4; i++) {
+      final nebAngle = (i / 4) * 2 * pi + orbit * 0.15;
+      final nebDist = r * (0.25 + nebRng.nextDouble() * 0.30) * bs;
+      final nebSize = r * (0.15 + nebRng.nextDouble() * 0.12);
+      final nebColor = i.isEven
+          ? _lerpHold(deepViolet, _amber)
+          : _lerpHold(neonPink, _gold);
+      final nebAlpha = (0.04 + hold * 0.06 + breath * 0.02).clamp(0.0, 1.0);
+      canvas.drawCircle(
+        center + Offset(cos(nebAngle) * nebDist, sin(nebAngle) * nebDist),
+        nebSize,
+        Paint()
+          ..color = nebColor.withValues(alpha: nebAlpha)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, nebSize * 0.7),
+      );
+    }
+
     // WORMHOLE TUNNEL — rings that shrink inward with perspective
     const tunnelRings = 14;
     for (int i = 0; i < tunnelRings; i++) {
@@ -2044,6 +2063,13 @@ class _OrbPainter extends CustomPainter {
 
     // Singularity core — impossibly bright pinpoint
     final coreR = r * (0.08 + breath * 0.03 + hold * 0.14);
+    // Outer halo
+    canvas.drawCircle(center, coreR * 2.5, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(neonPink, _warmWhite).withValues(alpha: 0.12 + hold * 0.08),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: center, radius: coreR * 2.5)));
+    // Bright core
     canvas.drawCircle(center, coreR, Paint()
       ..shader = RadialGradient(colors: [
         Colors.white.withValues(alpha: 0.95),
@@ -2051,6 +2077,15 @@ class _OrbPainter extends CustomPainter {
         Colors.transparent,
       ], stops: const [0.0, 0.3, 1.0])
           .createShader(Rect.fromCircle(center: center, radius: coreR)));
+
+    // Specular highlight — glass-like surface catch
+    final specR = r * 0.20;
+    final specC = center + Offset(-r * 0.14, -r * 0.18);
+    canvas.drawCircle(specC, specR, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: 0.08 + hold * 0.04),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
 
     // WORMHOLE COLLAPSE on completion — all rings slam inward
     if (flash > 0) {
@@ -2129,6 +2164,26 @@ class _OrbPainter extends CustomPainter {
         _lerpHold(spectralSilver, _amber).withValues(alpha: 0.35),
       ], stops: const [0.0, 0.55, 1.0])
           .createShader(Rect.fromCircle(center: center, radius: r)));
+
+    // INNER SPECTRAL AURORA — soft colored bands that shimmer inside the orb
+    for (int i = 0; i < 3; i++) {
+      final auroraAngle = (i / 3) * 2 * pi + orbit * 0.2 + i * 0.8;
+      final auroraDist = r * (0.20 + i * 0.12) * bs;
+      final auroraSize = r * (0.18 + i * 0.04);
+      final auroraColor = i == 0
+          ? _lerpHold(phantomBlue, _gold)
+          : i == 1
+              ? _lerpHold(eerieGreen, _amber)
+              : _lerpHold(spectralSilver, _warmWhite);
+      final auroraAlpha = (0.04 + hold * 0.05 + breath * 0.02).clamp(0.0, 1.0);
+      canvas.drawCircle(
+        center + Offset(cos(auroraAngle) * auroraDist, sin(auroraAngle) * auroraDist),
+        auroraSize,
+        Paint()
+          ..color = auroraColor.withValues(alpha: auroraAlpha)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, auroraSize * 0.6),
+      );
+    }
 
     // ORBITING GHOST COPIES — 4 phantom echoes at independent phases
     for (int ghost = 0; ghost < 4; ghost++) {
@@ -2244,6 +2299,15 @@ class _OrbPainter extends CustomPainter {
 
     // Ghostly core — eerie pulsing silver
     final coreR = r * (0.14 + breath * 0.05 + hold * 0.18);
+    // Outer halo — ethereal glow around core
+    canvas.drawCircle(center, coreR * 2.8, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(phantomBlue, _gold).withValues(alpha: 0.08 + hold * 0.06),
+        _lerpHold(eerieGreen, _amber).withValues(alpha: 0.03),
+        Colors.transparent,
+      ], stops: const [0.0, 0.4, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: coreR * 2.8)));
+    // Bright core
     canvas.drawCircle(center, coreR, Paint()
       ..shader = RadialGradient(colors: [
         _lerpHold(ghostWhite, _warmWhite).withValues(alpha: 0.85),

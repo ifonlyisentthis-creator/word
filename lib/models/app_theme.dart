@@ -223,8 +223,6 @@ class AppThemeData {
     this.timerRingColors,
     this.cardBorderGlow,
     this.statusChipColor,
-    this.fontFamily,
-    this.easterEggAccent,
   });
 
   final AppThemeId id;
@@ -250,12 +248,6 @@ class AppThemeData {
 
   /// Override status chip color (null → default).
   final Color? statusChipColor;
-
-  /// Google Fonts family name for Easter-egg themes (null → default Sora).
-  final String? fontFamily;
-
-  /// Secondary accent for intensified glows (null → use accentGlow).
-  final Color? easterEggAccent;
 
   static AppThemeData fromId(AppThemeId id) {
     switch (id) {
@@ -374,42 +366,52 @@ class AppThemeData {
       case AppThemeId.velvetAbyss:
         return const AppThemeData(
           id: AppThemeId.velvetAbyss,
-          scaffoldColor: Color(0xFF040002),
-          surfaceColor: Color(0xFF0E0408),
-          primaryColor: Color(0xFF8B1A3A),   // deep burgundy
-          secondaryColor: Color(0xFFD4A040), // liquid gold
-          accentGlow: Color(0x338B1A3A),
-          textPrimary: Color(0xFFF0E4E8),
-          textSecondary: Color(0xB3D8C0C8),
-          dividerColor: Color(0x1FD8C0C8),
-          cardGradientStart: Color(0xFF180810),
-          cardGradientEnd: Color(0xFF0A0206),
+          scaffoldColor: Color(0xFF030001),
+          surfaceColor: Color(0xFF0C0306),
+          primaryColor: Color(0xFFA02048),   // rich crimson burgundy
+          secondaryColor: Color(0xFFE8B860), // warm liquid gold
+          accentGlow: Color(0x40A02048),
+          textPrimary: Color(0xFFF5E8EC),
+          textSecondary: Color(0xB3E0C8D0),
+          dividerColor: Color(0x22E0C8D0),
+          cardGradientStart: Color(0xFF1A0810),
+          cardGradientEnd: Color(0xFF080104),
           isEasterEgg: true,
-          timerRingColors: [Color(0xFF8B1A3A), Color(0xFFD4A040), Color(0xFF8B1A3A)],
-          cardBorderGlow: Color(0x408B1A3A),
-          statusChipColor: Color(0xFFD4A040),
-          fontFamily: 'Cinzel',
-          easterEggAccent: Color(0xFFD4A040),
+          timerRingColors: [
+            Color(0xFFA02048),  // rich crimson
+            Color(0xFFD4708A),  // rose
+            Color(0xFFE8B860),  // liquid gold
+            Color(0xFFD4708A),  // rose
+            Color(0xFFA02048),  // rich crimson
+          ],
+          cardBorderGlow: Color(0x40A02048),
+          statusChipColor: Color(0xFFE8B860),
         );
       case AppThemeId.obsidianPrism:
         return const AppThemeData(
           id: AppThemeId.obsidianPrism,
-          scaffoldColor: Color(0xFF020202),
-          surfaceColor: Color(0xFF0A0A0C),
-          primaryColor: Color(0xFFA080E0),   // iridescent violet
-          secondaryColor: Color(0xFF40E0D0), // prismatic teal
-          accentGlow: Color(0x33A080E0),
-          textPrimary: Color(0xFFF0F0F4),
-          textSecondary: Color(0xB3D0D0D8),
-          dividerColor: Color(0x1FD0D0D8),
-          cardGradientStart: Color(0xFF141418),
-          cardGradientEnd: Color(0xFF08080C),
+          scaffoldColor: Color(0xFF010102),
+          surfaceColor: Color(0xFF08080E),
+          primaryColor: Color(0xFFB090F0),   // luminous violet
+          secondaryColor: Color(0xFF50F0E0), // vivid prismatic teal
+          accentGlow: Color(0x40B090F0),
+          textPrimary: Color(0xFFF4F2F8),
+          textSecondary: Color(0xB3D8D4E0),
+          dividerColor: Color(0x22D8D4E0),
+          cardGradientStart: Color(0xFF12101A),
+          cardGradientEnd: Color(0xFF06060A),
           isEasterEgg: true,
-          timerRingColors: [Color(0xFFA080E0), Color(0xFF40E0D0), Color(0xFFE080A0), Color(0xFFA080E0)],
-          cardBorderGlow: Color(0x30A080E0),
-          statusChipColor: Color(0xFF40E0D0),
-          fontFamily: 'Rajdhani',
-          easterEggAccent: Color(0xFF40E0D0),
+          timerRingColors: [
+            Color(0xFFE06080),  // rose red
+            Color(0xFFE8A040),  // amber
+            Color(0xFFE8E050),  // gold
+            Color(0xFF50E0A0),  // emerald
+            Color(0xFF50C0F0),  // cyan
+            Color(0xFFB090F0),  // violet
+            Color(0xFFE06080),  // rose red (close the loop)
+          ],
+          cardBorderGlow: Color(0x30B090F0),
+          statusChipColor: Color(0xFF50F0E0),
         );
     }
   }

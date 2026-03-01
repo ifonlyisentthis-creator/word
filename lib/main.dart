@@ -152,13 +152,9 @@ class _AfterwordAppState extends State<AfterwordApp> {
 
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
-          final td = themeProvider.themeData;
-          final selected = td.toFlutterTheme();
-          // Easter-egg themes get their own gorgeous font; everyone else gets Sora
-          final textTheme = td.fontFamily != null
-              ? _buildEasterEggTextTheme(td.fontFamily!)
-              : _cachedTheme.textTheme;
-          final merged = selected.copyWith(textTheme: textTheme);
+          final selected = themeProvider.themeData.toFlutterTheme();
+          // Use the full selected theme — only keep GoogleFonts textTheme
+          final merged = selected.copyWith(textTheme: _cachedTheme.textTheme);
           return MaterialApp(
             title: 'Afterword',
             theme: merged,
@@ -185,52 +181,6 @@ class _PremiumScrollBehavior extends ScrollBehavior {
       BuildContext context, Widget child, ScrollableDetails details) {
     return child;
   }
-}
-
-// Cache Easter-egg text themes to avoid rebuilding on every frame.
-final Map<String, TextTheme> _easterEggFontCache = {};
-
-TextTheme _buildEasterEggTextTheme(String fontFamily) {
-  return _easterEggFontCache.putIfAbsent(fontFamily, () {
-    final base = ThemeData.dark(useMaterial3: true);
-    final textTheme = GoogleFonts.getTextTheme(fontFamily, base.textTheme)
-        .apply(bodyColor: Colors.white, displayColor: Colors.white);
-    return textTheme.copyWith(
-      displayLarge: textTheme.displayLarge?.copyWith(
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.6,
-      ),
-      displayMedium: textTheme.displayMedium?.copyWith(
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.4,
-      ),
-      displaySmall: textTheme.displaySmall?.copyWith(
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.3,
-      ),
-      headlineLarge: textTheme.headlineLarge?.copyWith(
-        fontWeight: FontWeight.w600,
-      ),
-      headlineMedium: textTheme.headlineMedium?.copyWith(
-        fontWeight: FontWeight.w600,
-      ),
-      headlineSmall: textTheme.headlineSmall?.copyWith(
-        fontWeight: FontWeight.w600,
-      ),
-      titleLarge: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-      titleMedium: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
-      labelLarge: textTheme.labelLarge?.copyWith(
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.4,
-      ),
-      labelSmall: textTheme.labelSmall?.copyWith(
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.1,
-      ),
-      bodyMedium: textTheme.bodyMedium?.copyWith(height: 1.5),
-      bodySmall: textTheme.bodySmall?.copyWith(height: 1.4),
-    );
-  });
 }
 
 ThemeData _buildTheme() {
