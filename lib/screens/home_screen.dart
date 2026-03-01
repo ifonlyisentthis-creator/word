@@ -337,6 +337,11 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _refreshHome() async {
+    final hc = context.read<HomeController>();
+    await Future.wait([hc.autoCheckIn(), hc.refreshVaultStatus()]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<HomeController>();
@@ -369,10 +374,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
               displacement: 50,
               edgeOffset: 10,
               strokeWidth: 2,
-              onRefresh: () async {
-                final hc = context.read<HomeController>();
-                await Future.wait([hc.autoCheckIn(), hc.refreshVaultStatus()]);
-              },
+              onRefresh: _refreshHome,
               color: Theme.of(context).colorScheme.primary,
               backgroundColor: context
                   .watch<ThemeProvider>()
@@ -381,7 +383,9 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
               child: ListView(
                 controller: _scrollController,
 
-                physics: const AlwaysScrollableScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                ),
 
                 cacheExtent: 500,
 
@@ -393,7 +397,11 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                     isLifetime: isLifetime,
 
+                    isLoading: controller.isLoading,
+
                     onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+
+                    onRefresh: () => unawaited(_refreshHome()),
                   ),
 
                   const SizedBox(height: 16),
@@ -540,14 +548,22 @@ class _HeaderRow extends StatelessWidget {
 
     required this.isLifetime,
 
+    required this.isLoading,
+
     required this.onMenu,
+
+    required this.onRefresh,
   });
 
   final bool isPro;
 
   final bool isLifetime;
 
+  final bool isLoading;
+
   final VoidCallback onMenu;
+
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -614,6 +630,42 @@ class _HeaderRow extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ],
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        Container(
+          decoration: BoxDecoration(
+            color: context
+                .read<ThemeProvider>()
+                .themeData
+                .accentGlow
+                .withValues(alpha: 0.06),
+
+            borderRadius: BorderRadius.circular(14),
+
+            border: Border.all(
+              color: context
+                  .read<ThemeProvider>()
+                  .themeData
+                  .accentGlow
+                  .withValues(alpha: 0.15),
+            ),
+          ),
+
+          child: IconButton(
+            onPressed: isLoading ? null : onRefresh,
+
+            icon: isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
+
+            tooltip: 'Refresh',
           ),
         ),
 

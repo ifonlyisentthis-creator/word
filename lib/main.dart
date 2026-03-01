@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -173,12 +172,21 @@ class _PremiumScrollBehavior extends ScrollBehavior {
   const _PremiumScrollBehavior();
 
   @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
+  }
+
+  @override
   ScrollPhysics getScrollPhysics(BuildContext context) =>
       const _VaultScrollPhysics(parent: AlwaysScrollableScrollPhysics());
 }
 
-/// Heavy, grounded iOS-style bounce — barely pulls at edge, snaps back instantly.
-class _VaultScrollPhysics extends BouncingScrollPhysics {
+/// Premium grounded physics: heavy drag, low fling carry, and no hard rebound.
+class _VaultScrollPhysics extends ClampingScrollPhysics {
   const _VaultScrollPhysics({super.parent});
 
   @override
@@ -186,18 +194,22 @@ class _VaultScrollPhysics extends BouncingScrollPhysics {
     return _VaultScrollPhysics(parent: buildParent(ancestor));
   }
 
-  // Extremely high friction → tiny overscroll distance
   @override
-  double frictionFactor(double overscrollFraction) =>
-      0.04 * pow(1 - overscrollFraction, 2).toDouble();
+  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
+    // Slightly heavier drag for a grounded feel.
+    return offset * 0.88;
+  }
 
-  // Very fast snap-back spring — stiff, no wobble
+  // Kill iOS-like momentum stacking between repeated flings.
   @override
-  SpringDescription get spring => const SpringDescription(
-        mass: 1.0,
-        stiffness: 800.0, // very stiff
-        damping: 60.0,    // heavily damped — no oscillation
-      );
+  double carriedMomentum(double existingVelocity) => 0.0;
+
+  // Reduce ballistic overshoot and hard rebound on release.
+  @override
+  double get maxFlingVelocity => 3200.0;
+
+  @override
+  double get minFlingVelocity => 140.0;
 }
 
 ThemeData _buildTheme() {

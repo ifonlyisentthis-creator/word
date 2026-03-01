@@ -1013,6 +1013,8 @@ class VaultEntrySheet extends StatefulWidget {
 }
 
 class _VaultEntrySheetState extends State<VaultEntrySheet> {
+  late final ScrollController _sheetScrollController;
+
   late final TextEditingController _titleController;
 
   late final TextEditingController _recipientController;
@@ -1041,12 +1043,16 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
   bool _isSaving = false;
   bool _consentChecked = false;
   bool _audioUsageLoaded = false;
+  int? _messageDragPointer;
+  double? _messageDragLastY;
 
   String? _saveError;
 
   @override
   void initState() {
     super.initState();
+
+    _sheetScrollController = ScrollController();
 
     _titleController = TextEditingController(text: widget.entry?.title ?? '');
 
@@ -1082,6 +1088,8 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
     _recipientController.dispose();
 
     _bodyController.dispose();
+
+    _sheetScrollController.dispose();
 
     super.dispose();
   }
@@ -1135,7 +1143,11 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
         children: [
           Expanded(
             child: ListView(
+              controller: _sheetScrollController,
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
 
               children: [
@@ -1539,33 +1551,79 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                   const SizedBox(height: 12),
                 ],
 
-                TextField(
-                  controller: _bodyController,
+                Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (event) {
+                    _messageDragPointer = event.pointer;
+                    _messageDragLastY = event.position.dy;
+                  },
+                  onPointerMove: (event) {
+                    if (_messageDragPointer != event.pointer ||
+                        !_sheetScrollController.hasClients) {
+                      return;
+                    }
+                    if (event.delta.dy.abs() < event.delta.dx.abs()) {
+                      return;
+                    }
 
-                  maxLength: VaultController.maxPlaintextLength,
+                    final lastY = _messageDragLastY;
+                    _messageDragLastY = event.position.dy;
+                    if (lastY == null) return;
 
-                  minLines: 4,
-                  maxLines: null,
+                    final position = _sheetScrollController.position;
+                    final target =
+                        (position.pixels - (event.position.dy - lastY)).clamp(
+                              position.minScrollExtent,
+                              position.maxScrollExtent,
+                            );
+                    if ((target - position.pixels).abs() > 0.0) {
+                      _sheetScrollController.jumpTo(target);
+                    }
+                  },
+                  onPointerUp: (event) {
+                    if (_messageDragPointer == event.pointer) {
+                      _messageDragPointer = null;
+                      _messageDragLastY = null;
+                    }
+                  },
+                  onPointerCancel: (event) {
+                    if (_messageDragPointer == event.pointer) {
+                      _messageDragPointer = null;
+                      _messageDragLastY = null;
+                    }
+                  },
+                  child: TextField(
+                    controller: _bodyController,
 
-                  buildCounter:
-                      (
-                        context, {
+                    maxLength: VaultController.maxPlaintextLength,
 
-                        required currentLength,
+                    minLines: 8,
+                    maxLines: 8,
 
-                        required isFocused,
+                    scrollPhysics: const NeverScrollableScrollPhysics(),
 
-                        maxLength,
-                      }) => null,
+                    onTapOutside: (_) => FocusScope.of(context).unfocus(),
 
-                  decoration: InputDecoration(
-                    labelText: _dataType == VaultDataType.audio
-                        ? 'Message (optional)'
-                        : 'Message',
+                    buildCounter:
+                        (
+                          context, {
 
-                    alignLabelWithHint: true,
+                          required currentLength,
 
-                    filled: true,
+                          required isFocused,
+
+                          maxLength,
+                        }) => null,
+
+                    decoration: InputDecoration(
+                      labelText: _dataType == VaultDataType.audio
+                          ? 'Message (optional)'
+                          : 'Message',
+
+                      alignLabelWithHint: true,
+
+                      filled: true,
+                    ),
                   ),
                 ),
 
