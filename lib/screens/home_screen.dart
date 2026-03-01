@@ -876,10 +876,12 @@ class _TimerCardState extends State<_TimerCard> {
         ? 'Protocol secure'
         : 'Protocol executed';
 
+    final td = context.watch<ThemeProvider>().themeData;
+    final activeColor = td.statusChipColor ?? theme.colorScheme.secondary;
     final statusColor = vaultEmpty
         ? Colors.white38
         : resolvedProfile.status.toLowerCase() == 'active'
-        ? theme.colorScheme.secondary
+        ? activeColor
         : theme.colorScheme.error;
 
     final totalSeconds = resolvedProfile.timerDays * 24 * 60 * 60;
@@ -986,13 +988,8 @@ class _TimerCardState extends State<_TimerCard> {
 
             ClipRRect(
               borderRadius: BorderRadius.circular(999),
-
-              child: LinearProgressIndicator(
-                value: progress.clamp(0, 1),
-
-                minHeight: 6,
-
-                backgroundColor: Colors.white.withValues(alpha: 0.06),
+              child: _EasterEggTimerBar(
+                progress: progress.clamp(0, 1).toDouble(),
               ),
             ),
 
@@ -1346,6 +1343,7 @@ class _SurfaceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final td = context.watch<ThemeProvider>().themeData;
+    final glowColor = td.cardBorderGlow;
 
     return Container(
       decoration: BoxDecoration(
@@ -1359,9 +1357,18 @@ class _SurfaceCard extends StatelessWidget {
 
         borderRadius: BorderRadius.circular(22),
 
-        border: Border.all(color: td.dividerColor),
+        border: Border.all(
+          color: glowColor ?? td.dividerColor,
+          width: glowColor != null ? 1.2 : 1.0,
+        ),
 
         boxShadow: [
+          if (glowColor != null)
+            BoxShadow(
+              color: glowColor,
+              blurRadius: 16,
+              spreadRadius: -2,
+            ),
           BoxShadow(
             color: td.accentGlow.withValues(alpha: 0.08),
 
@@ -1381,6 +1388,58 @@ class _SurfaceCard extends StatelessWidget {
       ),
 
       child: ClipRRect(borderRadius: BorderRadius.circular(22), child: child),
+    );
+  }
+}
+
+class _EasterEggTimerBar extends StatelessWidget {
+  const _EasterEggTimerBar({required this.progress});
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final td = context.watch<ThemeProvider>().themeData;
+    final ringColors = td.timerRingColors;
+
+    if (ringColors == null) {
+      return LinearProgressIndicator(
+        value: progress,
+        minHeight: 6,
+        backgroundColor: Colors.white.withValues(alpha: 0.06),
+      );
+    }
+
+    // Easter-egg gradient timer bar
+    return SizedBox(
+      height: 6,
+      child: Stack(
+        children: [
+          // Background track
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          // Gradient fill
+          FractionallySizedBox(
+            widthFactor: progress,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: ringColors),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: ringColors.first.withValues(alpha: 0.4),
+                    blurRadius: 6,
+                    spreadRadius: -1,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

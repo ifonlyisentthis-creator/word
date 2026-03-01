@@ -219,6 +219,10 @@ class AppThemeData {
     required this.dividerColor,
     required this.cardGradientStart,
     required this.cardGradientEnd,
+    this.isEasterEgg = false,
+    this.timerRingColors,
+    this.cardBorderGlow,
+    this.statusChipColor,
   });
 
   final AppThemeId id;
@@ -232,6 +236,18 @@ class AppThemeData {
   final Color dividerColor;
   final Color cardGradientStart;
   final Color cardGradientEnd;
+
+  /// Easter-egg themes transform the entire app experience.
+  final bool isEasterEgg;
+
+  /// Custom timer progress bar gradient (null → default single-color).
+  final List<Color>? timerRingColors;
+
+  /// Subtle glow color for card borders (null → no glow).
+  final Color? cardBorderGlow;
+
+  /// Override status chip color (null → default).
+  final Color? statusChipColor;
 
   static AppThemeData fromId(AppThemeId id) {
     switch (id) {
@@ -360,6 +376,10 @@ class AppThemeData {
           dividerColor: Color(0x1FD8C0C8),
           cardGradientStart: Color(0xFF180810),
           cardGradientEnd: Color(0xFF0A0206),
+          isEasterEgg: true,
+          timerRingColors: [Color(0xFF8B1A3A), Color(0xFFD4A040), Color(0xFF8B1A3A)],
+          cardBorderGlow: Color(0x308B1A3A),
+          statusChipColor: Color(0xFFD4A040),
         );
       case AppThemeId.obsidianPrism:
         return const AppThemeData(
@@ -374,6 +394,10 @@ class AppThemeData {
           dividerColor: Color(0x1FD0D0D8),
           cardGradientStart: Color(0xFF141418),
           cardGradientEnd: Color(0xFF08080C),
+          isEasterEgg: true,
+          timerRingColors: [Color(0xFFA080E0), Color(0xFF40E0D0), Color(0xFFE080A0), Color(0xFFA080E0)],
+          cardBorderGlow: Color(0x20A080E0),
+          statusChipColor: Color(0xFF40E0D0),
         );
     }
   }

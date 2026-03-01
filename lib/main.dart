@@ -174,6 +174,13 @@ class _PremiumScrollBehavior extends ScrollBehavior {
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) =>
       const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+
+  // Kill the default Android overscroll glow everywhere
+  @override
+  Widget buildOverscrollIndicator(
+      BuildContext context, Widget child, ScrollableDetails details) {
+    return child;
+  }
 }
 
 ThemeData _buildTheme() {
