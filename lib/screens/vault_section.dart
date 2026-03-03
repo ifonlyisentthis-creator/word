@@ -116,6 +116,7 @@ Future<bool> openVaultEntryEditor(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      barrierColor: const Color(0xF0000000),
       builder: (sheetContext) => ChangeNotifierProvider.value(
         value: controller,
         child: _SheetContainer(
@@ -506,6 +507,8 @@ class _VaultSectionView extends StatelessWidget {
 
       backgroundColor: Colors.transparent,
 
+      barrierColor: const Color(0xF0000000),
+
       builder: (sheetContext) => ChangeNotifierProvider.value(
         value: controller,
 
@@ -567,6 +570,8 @@ class _VaultSectionView extends StatelessWidget {
       isScrollControlled: true,
 
       backgroundColor: Colors.transparent,
+
+      barrierColor: const Color(0xF0000000),
 
       builder: (sheetContext) => _SheetContainer(
         child: _EntryDetailsSheet(

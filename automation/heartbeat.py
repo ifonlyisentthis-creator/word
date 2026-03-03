@@ -1036,8 +1036,11 @@ def build_unlock_email_payload(
     subject = f"Message from {sender_name}"
 
     text = (
-        f"{sender_name} left you a secure message using Afterword, "
-        "a time-locked digital vault app.\n\n"
+        f"Hi,\n\n"
+        f"{sender_name} assigned you as a beneficiary on Afterword, "
+        "a secure, time-locked digital vault app. "
+        "Because their check-in timer expired, the following message "
+        "has been automatically released to you.\n\n"
         f"Title: {entry_title}\n\n"
         "To view this message, open the link below and paste your "
         "security key when prompted.\n\n"
@@ -1065,8 +1068,11 @@ def build_unlock_email_payload(
     safe_link = html_mod.escape(viewer_link)
 
     body_html = (
-        f'<p style="margin:0 0 18px"><strong>{safe_sender}</strong> left you a secure '
-        'message using Afterword, a time-locked digital vault app.</p>'
+        f'<p style="margin:0 0 12px">Hi,</p>'
+        f'<p style="margin:0 0 18px"><strong>{safe_sender}</strong> assigned you as a '
+        'beneficiary on Afterword, a secure, time-locked digital vault app. '
+        'Because their check-in timer expired, the following message '
+        'has been automatically released to you.</p>'
 
         f'<p style="margin:0 0 20px"><strong>Title:</strong> {safe_title}</p>'
 
@@ -1117,7 +1123,7 @@ def build_unlock_email_payload(
         "html": wrap_email_html(
             body_html,
             unsubscribe_email=reply_to_email,
-            preheader=f"{sender_name} left you a secure message. Open this email to view it.",
+            preheader=f"{sender_name} assigned you as a beneficiary. A secure message has been released to you.",
         ),
         "reply_to": reply_to_email,
         "headers": {
