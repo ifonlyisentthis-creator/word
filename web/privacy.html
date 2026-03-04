@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Afterword privacy policy.">
+  <meta name="theme-color" content="#050505">
+  <title>Afterword · Privacy Policy</title>
+
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Manrope:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="landing.css">
+</head>
+<body>
+  <div class="background">
+    <div class="glow glow--one"></div>
+    <div class="glow glow--two"></div>
+    <div class="glow glow--three"></div>
+    <div class="gridlines"></div>
+  </div>
+
+  <div class="page">
+    <header class="site-header" data-header="">
+      <div class="header-bar">
+        <a class="logo" href="/">
+          <span class="logo__mark">Afterword</span>
+          <span class="logo__tag">Privacy Policy</span>
+        </a>
+        <div class="header-bar__actions">
+          <a class="button ghost header__cta" href="/">Back</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section" style="padding-top: 7.5rem">
+        <div class="section__header">
+          <span class="eyebrow">Privacy Policy</span>
+          <h1 style="font-size: 2.4rem; margin: 0.75rem 0 0.5rem">Afterword Privacy Policy</h1>
+          <p style="margin:0">Effective date: March 5, 2026</p>
+        </div>
+
+        <div class="card" style="max-width: 56rem; margin: 1.75rem auto 0; padding: 1.75rem">
+          <p style="margin:0 0 1rem">
+            Afterword is a secure, time-locked digital vault. This policy explains what information we collect,
+            how we use it, and the choices you have.
+          </p>
+
+          <h2 style="margin:1.5rem 0 0.75rem">1) What we collect</h2>
+          <ul style="margin:0 0 1rem; padding-left: 1.25rem; line-height:1.8">
+            <li><strong>Account information</strong>: email address, authentication identifiers.</li>
+            <li><strong>Profile settings</strong>: sender name, subscription status, timer settings, theme selections.</li>
+            <li><strong>Encrypted vault data</strong>: encrypted messages, encrypted recipient addresses, encrypted audio.
+              We store ciphertext and integrity seals, not plaintext.</li>
+            <li><strong>Device and app info</strong>: push notification tokens and basic diagnostics needed to deliver notifications reliably.</li>
+            <li><strong>Purchase information</strong>: subscription entitlement state (processed via our billing providers).</li>
+          </ul>
+
+          <h2 style="margin:1.5rem 0 0.75rem">2) What we do not collect</h2>
+          <ul style="margin:0 0 1rem; padding-left: 1.25rem; line-height:1.8">
+            <li><strong>We do not collect your message plaintext</strong>.</li>
+            <li><strong>We do not collect beneficiary security keys</strong>. Decryption happens locally in the beneficiary’s browser.</li>
+          </ul>
+
+          <h2 style="margin:1.5rem 0 0.75rem">3) How we use information</h2>
+          <ul style="margin:0 0 1rem; padding-left: 1.25rem; line-height:1.8">
+            <li>To create and manage your account.</li>
+            <li>To store your encrypted vault items and enforce integrity checks.</li>
+            <li>To operate the check-in timer, warnings, and protocol execution.</li>
+            <li>To deliver push notifications and service emails.</li>
+            <li>To provide customer support when you contact us.</li>
+          </ul>
+
+          <h2 style="margin:1.5rem 0 0.75rem">4) Legal bases</h2>
+          <ul style="margin:0 0 1rem; padding-left: 1.25rem; line-height:1.8">
+            <li><strong>Contract</strong>: providing the service you request.</li>
+            <li><strong>Legitimate interests</strong>: security, abuse prevention, and reliability.</li>
+            <li><strong>Consent</strong>: where required (for example, notification permissions on your device).</li>
+          </ul>
+
+          <h2 style="margin:1.5rem 0 0.75rem">5) Sharing and third parties</h2>
+          <p style="margin:0 0 1rem; line-height:1.8">
+            We use trusted providers to operate Afterword. They may process limited data on our behalf:
+          </p>
+          <ul style="margin:0 0 1rem; padding-left: 1.25rem; line-height:1.8">
+            <li><strong>Supabase</strong>: database, authentication, encrypted storage.</li>
+            <li><strong>Google Firebase Cloud Messaging</strong>: push notification delivery.</li>
+            <li><strong>RevenueCat</strong> and <strong>Google Play Billing</strong>: subscription and purchase processing.</li>
+            <li><strong>Resend</strong>: email delivery for warnings and beneficiary release messages.</li>
+          </ul>
+          <p style="margin:0 0 1rem; line-height:1.8">
+            We do not sell your personal information.
+          </p>
+
+          <h2 style="margin:1.5rem 0 0.75rem">6) Retention</h2>
+          <ul style="margin:0 0 1rem; padding-left: 1.25rem; line-height:1.8">
+            <li>Encrypted vault items are retained until you delete them, your account is deleted, or the protocol lifecycle triggers deletion.</li>
+            <li>When items are released to a beneficiary, they are available for a limited period and then automatically purged.</li>
+            <li>Operational logs and delivery metadata may be retained briefly for reliability and abuse prevention.</li>
+          </ul>
+
+          <h2 style="margin:1.5rem 0 0.75rem">7) Security</h2>
+          <p style="margin:0 0 1rem; line-height:1.8">
+            Afterword is designed so the service cannot read your vault contents. Encryption occurs on your device.
+            We also use integrity seals (HMAC) to detect tampering. No system is perfectly secure, but we design
+            and operate Afterword with security as a core requirement.
+          </p>
+
+          <h2 style="margin:1.5rem 0 0.75rem">8) Your choices and rights</h2>
+          <ul style="margin:0 0 1rem; padding-left: 1.25rem; line-height:1.8">
+            <li>You can edit or delete vault entries in the app.</li>
+            <li>You can delete your account from the app (which deletes associated stored data).</li>
+            <li>You can manage notification permissions in your device settings.</li>
+            <li>If applicable in your region, you may request access, correction, or deletion of personal information by contacting us.</li>
+          </ul>
+
+          <h2 style="margin:1.5rem 0 0.75rem">9) Children</h2>
+          <p style="margin:0 0 1rem; line-height:1.8">
+            Afterword is not intended for children under 13 (or the minimum age required in your jurisdiction).
+          </p>
+
+          <h2 style="margin:1.5rem 0 0.75rem">10) Contact</h2>
+          <p style="margin:0; line-height:1.8">
+            Email: <a href="mailto:afterword.app@gmail.com">afterword.app@gmail.com</a>
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div>
+        <div class="logo">Afterword</div>
+        <p>A secure vault for messages released only on your terms.</p>
+        <span class="footer__meta">Privacy policy</span>
+      </div>
+      <div class="footer__links">
+        <a href="/">Home</a>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>
