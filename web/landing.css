@@ -130,6 +130,15 @@ a {
   gap: var(--section-gap);
 }
 
+.page.page--policy {
+  gap: clamp(18px, 3vw, 28px);
+  padding-bottom: 72px;
+}
+
+.page.page--policy main {
+  gap: clamp(26px, 4vw, 42px);
+}
+
 .site-header {
   position: sticky;
   top: 0;
@@ -438,6 +447,70 @@ a {
   padding: clamp(20px, 4vw, 28px);
   background: linear-gradient(160deg, rgba(24, 24, 30, 0.92), rgba(10, 10, 12, 0.72));
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.policy-hero {
+  padding-top: clamp(18px, 3vw, 28px);
+}
+
+.policy-hero__header {
+  max-width: 56rem;
+}
+
+.policy-hero__header h1 {
+  font-family: "Fraunces", serif;
+  font-size: clamp(2.1rem, 5.2vw, 3.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-top: 0.75rem;
+}
+
+.policy-hero__meta {
+  margin-top: 0.7rem;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.policy-card {
+  max-width: 56rem;
+  margin: clamp(18px, 3vw, 26px) auto 0;
+  padding: clamp(22px, 4vw, 34px);
+  background: linear-gradient(155deg, rgba(28, 28, 34, 0.92), rgba(10, 10, 12, 0.7));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.45);
+}
+
+.policy-card p {
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 1.02rem;
+  line-height: 1.85;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.policy-card h2 {
+  margin: 1.6rem 0 0.85rem;
+  font-size: 1.08rem;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.policy-card ul {
+  margin: 0 0 1.1rem;
+  padding-left: 1.25rem;
+  line-height: 1.85;
+}
+
+.policy-card li {
+  margin: 0.25rem 0;
+}
+
+.policy-card a {
+  color: rgba(242, 180, 100, 0.95);
+}
+
+.policy-card a:hover {
+  color: rgba(242, 180, 100, 1);
 }
 
 .panel__eyebrow {
