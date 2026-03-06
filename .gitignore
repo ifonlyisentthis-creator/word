@@ -2,3 +2,7 @@
 /build/
 **/build/
 .dart_tool/
+
+# Android signing (never commit)
+/android/key.properties
+/android/upload-keystore.jks
