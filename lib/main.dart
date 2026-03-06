@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -172,14 +173,37 @@ class _PremiumScrollBehavior extends ScrollBehavior {
   const _PremiumScrollBehavior();
 
   @override
-  ScrollPhysics getScrollPhysics(BuildContext context) =>
-      const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+  ScrollPhysics getScrollPhysics(BuildContext context) => const PremiumScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      );
 
   // Kill the default Android overscroll glow everywhere
   @override
   Widget buildOverscrollIndicator(
       BuildContext context, Widget child, ScrollableDetails details) {
     return child;
+  }
+}
+
+class PremiumScrollPhysics extends BouncingScrollPhysics {
+  const PremiumScrollPhysics({super.parent});
+
+  @override
+  PremiumScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return PremiumScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  SpringDescription get spring => const SpringDescription(
+        mass: 2.6,
+        stiffness: 520.0,
+        damping: 38.0,
+      );
+
+  @override
+  double frictionFactor(double overscrollFraction) {
+    final t = (1.0 - overscrollFraction).clamp(0.0, 1.0);
+    return 0.42 * math.pow(t, 2).toDouble();
   }
 }
 
