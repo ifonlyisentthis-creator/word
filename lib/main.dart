@@ -195,15 +195,15 @@ class PremiumScrollPhysics extends BouncingScrollPhysics {
 
   @override
   SpringDescription get spring => SpringDescription.withDampingRatio(
-        mass: 0.3,
-        stiffness: 300.0,
-        ratio: 1.1,
+        mass: 0.15,
+        stiffness: 350.0,
+        ratio: 0.85,
       );
 
   @override
   double frictionFactor(double overscrollFraction) {
     final t = (1.0 - overscrollFraction).clamp(0.0, 1.0);
-    return 0.05 * math.pow(t, 2).toDouble();
+    return 0.15 * math.pow(t, 2).toDouble();
   }
 }
 
