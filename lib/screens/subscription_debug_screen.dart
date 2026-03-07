@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 import 'package:provider/provider.dart';
+
+import 'package:url_launcher/url_launcher.dart';
 
 
 
@@ -14,9 +18,14 @@ import '../widgets/ambient_background.dart';
 
 
 
+enum _PlanKind { monthly, yearly, lifetime, unknown }
+
 class SubscriptionDebugScreen extends StatelessWidget {
 
   const SubscriptionDebugScreen({super.key});
+
+  static final Uri _playSubscriptionsUrl =
+      Uri.parse('https://play.google.com/store/account/subscriptions');
 
   String _normalizeProductId(String id) {
     final trimmed = id.trim();
@@ -24,6 +33,62 @@ class SubscriptionDebugScreen extends StatelessWidget {
     final idx = trimmed.indexOf(':');
     if (idx <= 0) return trimmed;
     return trimmed.substring(0, idx);
+  }
+
+  bool _isLifetimeProductId(String id) {
+    return id.toLowerCase().contains('lifetime');
+  }
+
+  _PlanKind _planKindForPackage(Package package) {
+    final id = package.storeProduct.identifier;
+    if (_isLifetimeProductId(id)) return _PlanKind.lifetime;
+
+    final typeName = package.packageType.name.toLowerCase();
+    if (typeName.contains('annual') || typeName.contains('year')) {
+      return _PlanKind.yearly;
+    }
+    if (typeName.contains('month')) return _PlanKind.monthly;
+
+    final normalized = _normalizeProductId(id).toLowerCase();
+    if (normalized.contains('year') || normalized.contains('annual')) {
+      return _PlanKind.yearly;
+    }
+    if (normalized.contains('month')) return _PlanKind.monthly;
+
+    return _PlanKind.unknown;
+  }
+
+  Future<void> _showLifetimeCancelDialog(BuildContext context) async {
+    if (!context.mounted) return;
+    debugPrint('[PAYWALL] Showing manual-cancel dialog (lifetime + active sub)');
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Lifetime unlocked!'),
+          content: const Text(
+            "Please note: you must manually cancel your old subscription in Google Play to avoid future charges.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                debugPrint('[PAYWALL] User tapped open subscriptions link');
+                await launchUrl(
+                  _playSubscriptionsUrl,
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('Open Google Play Subscriptions'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
 
@@ -46,11 +111,25 @@ class SubscriptionDebugScreen extends StatelessWidget {
         final isPro = controller.isPro;
         final activeProductId = controller.activeProductId;
 
+        final activeSubscriptionsRaw =
+            controller.customerInfo?.activeSubscriptions ?? <String>[];
+
         final activeSubscriptionIds = <String>{
-          for (final id in controller.customerInfo?.activeSubscriptions ?? <String>[]) _normalizeProductId(id),
+          for (final id in activeSubscriptionsRaw) _normalizeProductId(id),
           if (activeProductId != null && activeProductId.isNotEmpty)
             _normalizeProductId(activeProductId),
         };
+
+        Package? currentPackage;
+        for (final package in packages) {
+          if (activeSubscriptionIds
+              .contains(_normalizeProductId(package.storeProduct.identifier))) {
+            currentPackage = package;
+            break;
+          }
+        }
+        final currentKind =
+            currentPackage != null ? _planKindForPackage(currentPackage) : null;
 
         return Scaffold(
 
@@ -136,38 +215,115 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
                   for (final package in packages) ...[
 
-                    _PackageTile(
+                    Builder(
+                      builder: (context) {
+                        final kind = _planKindForPackage(package);
+                        final normalizedId =
+                            _normalizeProductId(package.storeProduct.identifier);
 
-                      package: package,
+                        final isCurrent =
+                            isPro && activeSubscriptionIds.contains(normalizedId);
 
-                      isLoading: controller.isLoading,
+                        final isDowngradeBlocked = isPro &&
+                            currentKind == _PlanKind.yearly &&
+                            kind == _PlanKind.monthly;
 
-                      isCurrentPackage: isPro &&
-                          activeSubscriptionIds.contains(
-                            _normalizeProductId(package.storeProduct.identifier),
-                          ),
+                        final buttonLabel = isCurrent
+                            ? 'Current Plan'
+                            : isDowngradeBlocked
+                                ? 'Unavailable'
+                                : controller.isLoading
+                                    ? 'Processing'
+                                    : 'Subscribe';
 
-                      onPurchase: () async {
+                        final isDisabled =
+                            controller.isLoading || isCurrent || isDowngradeBlocked;
 
-                        await controller.purchasePackage(package);
-                        if (context.mounted) {
-                          final newStatus = controller.isLifetime
-                              ? 'lifetime'
-                              : controller.isPro
-                                  ? 'pro'
-                                  : 'free';
-                          context.read<ThemeProvider>().enforceSubscriptionLimits(newStatus);
-                          // Re-fetch profile so all screens see updated subscription.
-                          // Pass RC status so stale DB reads can't re-lock themes.
-                          try {
-                            await context.read<HomeController>().refreshAfterPurchase(
-                              knownSubscriptionStatus: newStatus,
+                        return _PackageTile(
+                          package: package,
+                          isLoading: controller.isLoading,
+                          isCurrentPackage: isCurrent,
+                          isDisabled: isDisabled,
+                          buttonLabel: buttonLabel,
+                          onPurchase: () async {
+                            final beforeActiveSubs =
+                                controller.customerInfo?.activeSubscriptions ??
+                                    <String>[];
+
+                            String? oldProductId;
+                            if (defaultTargetPlatform ==
+                                    TargetPlatform.android &&
+                                isPro &&
+                                currentKind != null &&
+                                kind != _PlanKind.lifetime &&
+                                kind != _PlanKind.unknown &&
+                                currentKind != _PlanKind.unknown &&
+                                currentKind != kind &&
+                                beforeActiveSubs.isNotEmpty) {
+                              // Pick the exact old product id from activeSubscriptions that matches the current package.
+                              // This must be the Google Play base plan id string as returned by RevenueCat.
+                              final currentNormalized = currentPackage == null
+                                  ? null
+                                  : _normalizeProductId(
+                                      currentPackage.storeProduct.identifier,
+                                    );
+                              oldProductId = beforeActiveSubs.firstWhere(
+                                (id) => currentNormalized != null &&
+                                    _normalizeProductId(id) == currentNormalized,
+                                orElse: () => beforeActiveSubs.first,
+                              );
+                            }
+
+                            debugPrint(
+                              '[PAYWALL] Purchase attempt: id=${package.storeProduct.identifier} kind=$kind oldProductId=${oldProductId ?? "(none)"}',
                             );
-                          } catch (_) {}
-                        }
 
+                            await controller.purchasePackage(
+                              package,
+                              oldProductId: oldProductId,
+                            );
+
+                            debugPrint(
+                              '[PAYWALL] Purchase finished: isPro=${controller.isPro} isLifetime=${controller.isLifetime} activeSubs=${controller.customerInfo?.activeSubscriptions}',
+                            );
+
+                            if (context.mounted) {
+                              final newStatus = controller.isLifetime
+                                  ? 'lifetime'
+                                  : controller.isPro
+                                      ? 'pro'
+                                      : 'free';
+                              context
+                                  .read<ThemeProvider>()
+                                  .enforceSubscriptionLimits(newStatus);
+                              // Re-fetch profile so all screens see updated subscription.
+                              // Pass RC status so stale DB reads can't re-lock themes.
+                              try {
+                                await context
+                                    .read<HomeController>()
+                                    .refreshAfterPurchase(
+                                      knownSubscriptionStatus: newStatus,
+                                    );
+                              } catch (_) {}
+
+                              // Edge case: Android does not auto-cancel subscriptions when a one-time lifetime
+                              // product is bought. If we just bought lifetime while a subscription was active,
+                              // force a mandatory dialog to prevent double-billing.
+                              final afterActiveSubs = controller
+                                      .customerInfo?.activeSubscriptions ??
+                                  <String>[];
+                              if (kind == _PlanKind.lifetime &&
+                                  controller.isLifetime &&
+                                  beforeActiveSubs.isNotEmpty &&
+                                  afterActiveSubs.isNotEmpty) {
+                                if (context.mounted) {
+                                  await _showLifetimeCancelDialog(context);
+                                }
+                              }
+                            }
+                          },
+                        );
                       },
-
                     ),
 
                     const SizedBox(height: 12),
@@ -188,7 +344,21 @@ class SubscriptionDebugScreen extends StatelessWidget {
                         child: OutlinedButton.icon(
                           onPressed: controller.isLoading
                               ? null
-                              : () async => controller.restore(),
+                              : () async {
+                                  await controller.restore();
+                                  if (!context.mounted) return;
+                                  final last = controller.lastFailure;
+                                  if (last?.code ==
+                                      PurchasesErrorCode.receiptAlreadyInUseError) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'This purchase is linked to another account.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
                           icon: const Icon(Icons.restore, size: 18),
                           label: const Text('Restore Purchases'),
                         ),
@@ -551,6 +721,10 @@ class _PackageTile extends StatelessWidget {
 
     required this.isCurrentPackage,
 
+    required this.isDisabled,
+
+    required this.buttonLabel,
+
     required this.onPurchase,
 
   });
@@ -562,6 +736,10 @@ class _PackageTile extends StatelessWidget {
   final bool isLoading;
 
   final bool isCurrentPackage;
+
+  final bool isDisabled;
+
+  final String buttonLabel;
 
   final Future<void> Function() onPurchase;
 
@@ -676,7 +854,7 @@ class _PackageTile extends StatelessWidget {
 
                 FilledButton.icon(
 
-                  onPressed: (isLoading || isCurrentPackage)
+                  onPressed: isDisabled
 
                       ? null
 
@@ -690,9 +868,7 @@ class _PackageTile extends StatelessWidget {
                       ? Icons.check_circle_outline
                       : Icons.shopping_bag_outlined),
 
-                  label: Text(isCurrentPackage
-                      ? 'Current Plan'
-                      : isLoading ? 'Processing' : 'Subscribe'),
+                  label: Text(buttonLabel),
 
                 ),
 

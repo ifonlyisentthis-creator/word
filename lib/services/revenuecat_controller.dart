@@ -119,11 +119,31 @@ class RevenueCatController extends ChangeNotifier {
     }
   }
 
-  Future<CustomerInfo?> purchasePackage(Package package) async {
+  Future<CustomerInfo?> purchasePackage(Package package, {String? oldProductId}) async {
     if (!_isConfigured) return null;
     _setLoading(true);
     try {
-      final result = await Purchases.purchase(PurchaseParams.package(package));
+      final bool isAndroidUpgrade =
+          Platform.isAndroid && oldProductId != null && oldProductId.isNotEmpty;
+
+      if (kDebugMode) {
+        debugPrint(
+          '[RC-PURCHASE] package=${package.storeProduct.identifier} oldProductId=${oldProductId ?? "(none)"}',
+        );
+      }
+
+      final params = PurchaseParams.package(
+        package,
+        googleProductChangeInfo: isAndroidUpgrade
+            ? GoogleProductChangeInfo(
+                oldProductId,
+                prorationMode:
+                    GoogleProrationMode.immediateWithTimeProration,
+              )
+            : null,
+      );
+
+      final result = await Purchases.purchase(params);
       _customerInfo = result.customerInfo;
       _lastFailure = null;
       await _syncSubscriptionStatus(force: true);
@@ -150,7 +170,15 @@ class RevenueCatController extends ChangeNotifier {
       await _syncSubscriptionStatus(force: true);
       return customerInfo;
     } on PlatformException catch (exception) {
-      _lastFailure = _mapFailure(exception);
+      final code = PurchasesErrorHelper.getErrorCode(exception);
+      if (code == PurchasesErrorCode.receiptAlreadyInUseError) {
+        _lastFailure = const RevenueCatFailure(
+          'This purchase is linked to another account.',
+          code: PurchasesErrorCode.receiptAlreadyInUseError,
+        );
+      } else {
+        _lastFailure = _mapFailure(exception);
+      }
       return null;
     } finally {
       _setLoading(false);
