@@ -18,6 +18,14 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
   const SubscriptionDebugScreen({super.key});
 
+  String _normalizeProductId(String id) {
+    final trimmed = id.trim();
+    if (trimmed.isEmpty) return trimmed;
+    final idx = trimmed.indexOf(':');
+    if (idx <= 0) return trimmed;
+    return trimmed.substring(0, idx);
+  }
+
 
 
   @override
@@ -37,6 +45,12 @@ class SubscriptionDebugScreen extends StatelessWidget {
         final isLifetime = controller.isLifetime;
         final isPro = controller.isPro;
         final activeProductId = controller.activeProductId;
+
+        final activeSubscriptionIds = <String>{
+          for (final id in controller.customerInfo?.activeSubscriptions ?? <String>[]) _normalizeProductId(id),
+          if (activeProductId != null && activeProductId.isNotEmpty)
+            _normalizeProductId(activeProductId),
+        };
 
         return Scaffold(
 
@@ -128,7 +142,10 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
                       isLoading: controller.isLoading,
 
-                      isCurrentPackage: isPro && package.storeProduct.identifier == activeProductId,
+                      isCurrentPackage: isPro &&
+                          activeSubscriptionIds.contains(
+                            _normalizeProductId(package.storeProduct.identifier),
+                          ),
 
                       onPurchase: () async {
 
@@ -752,7 +769,7 @@ class _FeatureComparisonCard extends StatelessWidget {
           row('Text entries', true, true, true),
           row('Push notifications', true, true, true),
           row('Recovery phrase backup', true, true, true),
-          row('3 themes & 3 soul fires', true, false, false),
+          row('3 themes & 3 soul fires', true, true, true),
           row('Unlimited entries', false, true, true),
           row('Custom timer (7–365 days)', false, true, true),
           row('Inactivity failsafe (erase mode)', false, true, true),
