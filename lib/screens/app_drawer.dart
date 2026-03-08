@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 
+import '../models/app_theme.dart';
 import '../services/auth_controller.dart';
 import '../services/home_controller.dart';
 import '../services/revenuecat_controller.dart';
@@ -45,7 +46,9 @@ class AppDrawer extends StatelessWidget {
 
     final isPro = revenueCat.isPro || revenueCat.isLifetime;
 
-    final td = context.watch<ThemeProvider>().themeData;
+    final td = context.select<ThemeProvider, AppThemeData>(
+      (tp) => tp.themeData,
+    );
 
     return Drawer(
       backgroundColor: td.scaffoldColor,

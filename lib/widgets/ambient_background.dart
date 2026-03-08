@@ -10,9 +10,8 @@ class AmbientBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tp = context.watch<ThemeProvider>();
-    final td = tp.themeData;
-    final id = tp.themeId;
+    final id = context.select<ThemeProvider, AppThemeId>((tp) => tp.themeId);
+    final td = AppThemeData.fromId(id);
 
     final orbs = _orbsForTheme(id, td);
 

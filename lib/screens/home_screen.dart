@@ -371,9 +371,9 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
               },
               color: Theme.of(context).colorScheme.primary,
               backgroundColor: context
-                  .watch<ThemeProvider>()
-                  .themeData
-                  .cardGradientStart,
+                  .select<ThemeProvider, Color>(
+                    (tp) => tp.themeData.cardGradientStart,
+                  ),
               child: ListView(
                 controller: _scrollController,
 
@@ -432,13 +432,11 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                               child: TickerMode(
                                 enabled:
                                     ModalRoute.of(context)?.isCurrent ?? true,
-                                child: SoulFireButton(
-                                  styleId: context
-                                      .watch<ThemeProvider>()
-                                      .soulFireId,
-                                  hapticsEnabled: context
-                                      .watch<ThemeProvider>()
-                                      .soulFireHaptics,
+                                child: Builder(builder: (context) {
+                                  final tp = context.watch<ThemeProvider>();
+                                  return SoulFireButton(
+                                  styleId: tp.soulFireId,
+                                  hapticsEnabled: tp.soulFireHaptics,
                                   enabled:
                                       !isInGracePeriod &&
                                       !controller.isLoading &&
@@ -464,7 +462,8 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                                         break;
                                     }
                                   },
-                                ),
+                                );
+                                }),
                               ),
                             ),
                           ),

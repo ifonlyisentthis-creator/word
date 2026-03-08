@@ -16,6 +16,7 @@ import 'package:record/record.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/app_theme.dart';
 import '../services/theme_provider.dart';
 
 import '../models/vault_entry.dart';
@@ -2247,7 +2248,9 @@ class _VaultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final td = context.watch<ThemeProvider>().themeData;
+    final td = AppThemeData.fromId(
+      context.select<ThemeProvider, AppThemeId>((tp) => tp.themeId),
+    );
 
     return Container(
       decoration: BoxDecoration(
