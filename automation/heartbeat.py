@@ -55,7 +55,7 @@ PROFILE_BATCH_SIZE = 200
 PROFILE_SELECT_FIELDS = (
     "id,email,sender_name,status,subscription_status,last_check_in,timer_days,"
     "hmac_key_encrypted,warning_sent_at,push_66_sent_at,push_33_sent_at,"
-    "selected_theme,selected_soul_fire,created_at"
+    "selected_theme,selected_soul_fire,created_at,downgrade_email_pending"
 )
 
 REQUEST_TIMEOUT_SECONDS = 30
@@ -1882,6 +1882,71 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
                 print(f"Bot cleanup failed for {profile.get('id', '?')}: {exc}")
 
 
+def _build_downgrade_email(
+    sender_name: str,
+    had_audio: bool,
+    reason: str = "refund or expiration",
+) -> tuple[str, str, str]:
+    """Build downgrade notification email content.
+
+    Returns (subject, text, html).
+    """
+    text_preserved_line = (
+        "- Your text vault entries are preserved\n"
+        if had_audio
+        else "- All your existing vault entries are preserved\n"
+    )
+    text_audio_line = (
+        "- Audio vault entries have been removed (requires paid subscription)\n"
+        if had_audio
+        else ""
+    )
+    subject = "Afterword — Subscription update"
+    text = (
+        f"Hi {sender_name},\n\n"
+        f"Your Afterword subscription has been updated due to a {reason}. "
+        "Your account has been reverted to the free tier.\n\n"
+        "What this means:\n"
+        "- Your timer has been reset to the default 30 days\n"
+        "- Custom themes and styles have been reset to defaults\n"
+        f"{text_preserved_line}"
+        f"{text_audio_line}"
+        "\n\n"
+        "You can continue using Afterword on the free tier, or "
+        "resubscribe at any time to restore premium features.\n\n"
+        "— The Afterword Team\n\n"
+        "Afterword is a time-locked digital vault app. You are receiving "
+        "this email because you have an Afterword account.\n\n"
+        "To unsubscribe, reply to this email with subject 'Unsubscribe'."
+    )
+    safe_name = html_mod.escape(sender_name)
+    html_preserved_li = (
+        '<li style="margin-bottom:6px">Your text vault entries are preserved</li>'
+        if had_audio
+        else '<li style="margin-bottom:6px">All your existing vault entries are preserved</li>'
+    )
+    html_audio_li = (
+        '<li style="margin-bottom:6px">Audio vault entries have been removed (requires paid subscription)</li>'
+        if had_audio else ''
+    )
+    html = (
+        f'<p style="margin:0 0 16px">Hi {safe_name},</p>'
+        f'<p style="margin:0 0 16px">Your Afterword subscription has been updated due to a {reason}. '
+        'Your account has been reverted to the free tier.</p>'
+        '<p style="margin:0 0 8px"><strong>What this means:</strong></p>'
+        '<ul style="margin:0 0 16px;padding-left:20px;color:#333333">'
+        '<li style="margin-bottom:6px">Your timer has been reset to the default 30 days</li>'
+        '<li style="margin-bottom:6px">Custom themes and styles have been reset to defaults</li>'
+        f'{html_preserved_li}'
+        f'{html_audio_li}'
+        '</ul>'
+        '<p style="margin:0 0 24px">You can continue using Afterword on the free tier, or '
+        'resubscribe at any time to restore premium features.</p>'
+        '<p style="margin:0;color:#666666;font-size:13px">&mdash; The Afterword Team</p>'
+    )
+    return subject, text, html
+
+
 def handle_subscription_downgrade(
     client,
     profile: dict,
@@ -1895,25 +1960,35 @@ def handle_subscription_downgrade(
     Called when RevenueCat has already set subscription_status to 'free' but the
     profile still has pro/lifetime artifacts (custom timer, audio vaults, themes).
 
+    Uses a ``downgrade_email_pending`` flag to guarantee the notification email
+    is eventually delivered even if the first send attempt fails (transient
+    network error, Resend rate-limit, etc.).  Previous versions wiped all
+    premium indicators *before* attempting the email — if the email failed, the
+    next heartbeat run could no longer detect that a downgrade had occurred and
+    the email was permanently lost.
+
     Actions:
-      1. Reset timer_days to 30 (free default) — timer restarts fresh
-      2. Reset last_check_in to now() — user gets full 30 days
-      3. Clear warning timestamps
-      4. Reset theme and soul fire to free defaults
-      5. Delete all audio vault entries (audio requires pro/lifetime)
-      6. Send notification email to user
+      1. Compose email content BEFORE any DB changes (needs current indicators)
+      2. Reset timer_days to 30 (free default) — timer restarts fresh
+      3. Reset last_check_in to now() — user gets full 30 days
+      4. Clear warning timestamps
+      5. Reset theme and soul fire to free defaults
+      6. Delete all audio vault entries (audio requires pro/lifetime)
+      7. Send notification email to user
+      8. Clear downgrade_email_pending only on successful send
     """
     uid = profile["id"]
     email = profile.get("email")
     sender_name = profile.get("sender_name") or "Afterword"
     timer_days = int(profile.get("timer_days") or 30)
+    downgrade_email_pending = profile.get("downgrade_email_pending", False)
 
     # Detect if downgrade handling is needed:
     # subscription_status is already 'free' (set by RevenueCat webhook),
-    # but timer_days > 30 or custom theme/soul_fire is set
+    # but timer_days != 30 (custom timer) or custom theme/soul_fire is set
     selected_theme = profile.get("selected_theme")
     selected_soul_fire = profile.get("selected_soul_fire")
-    has_custom_timer = timer_days > 30
+    has_custom_timer = timer_days != 30
     FREE_THEMES = {"oledVoid", "midnightFrost", "shadowRose"}
     FREE_SOUL_FIRES = {"etherealOrb", "goldenPulse", "nebulaHeart"}
     has_custom_theme = selected_theme is not None and selected_theme not in FREE_THEMES
@@ -1946,11 +2021,50 @@ def handle_subscription_downgrade(
 
     needs_revert = has_pro_indicators or has_audio
 
+    # ── Retry path: indicators already wiped by a previous run, but email ──
+    # ── was never delivered.  The downgrade_email_pending flag persists    ──
+    # ── across runs so we can retry until the email finally goes through. ──
+    if not needs_revert and downgrade_email_pending:
+        if email:
+            subject, text, html = _build_downgrade_email(sender_name, had_audio=False)
+            try:
+                send_email(
+                    resend_key, from_email, email, subject, text, html,
+                    idempotency_key=f"downgrade-retry-{uid}-{now.date().isoformat()}",
+                    preheader=f"Hi {sender_name}, your Afterword subscription has changed — here is what happened to your account.",
+                )
+                client.table("profiles").update({
+                    "downgrade_email_pending": False,
+                }).eq("id", uid).execute()
+                print(f"Sent deferred downgrade notification to {uid}")
+            except Exception as exc:  # noqa: BLE001
+                print(f"Deferred downgrade email still failing for {uid}: {exc}")
+        else:
+            # No email address — clear the flag so we stop retrying
+            client.table("profiles").update({
+                "downgrade_email_pending": False,
+            }).eq("id", uid).execute()
+        return False  # nothing was reverted, don't skip remaining passes
+
+    # Nothing to revert and no pending email → user is already on free tier
     if not needs_revert:
         return False
 
+    # ── Fresh downgrade: compose email BEFORE wiping indicators ──
+    # Strong indicators: timer != 30 (impossible without pro) or audio entries
+    # (impossible without pro/lifetime). Theme/soul_fire alone are weak signals
+    # that can arise from bugs or testing — silently reset, no email.
+    is_genuine_downgrade = has_custom_timer or has_audio
+    email_needed = bool(email) and is_genuine_downgrade
+
+    email_content: tuple[str, str, str] | None = None
+    if email_needed:
+        email_content = _build_downgrade_email(
+            sender_name, had_audio=has_audio,
+        )
+
     # 1. Reset profile to free defaults
-    update_data = {
+    update_data: dict = {
         "timer_days": 30,
         "last_check_in": now.isoformat(),
         "warning_sent_at": None,
@@ -1959,6 +2073,9 @@ def handle_subscription_downgrade(
         "selected_theme": None,
         "selected_soul_fire": None,
     }
+    # Mark email as pending — will be cleared only after successful send
+    if email_needed:
+        update_data["downgrade_email_pending"] = True
     client.table("profiles").update(update_data).eq("id", uid).execute()
 
     # 2. Delete audio vault entries (audio requires pro/lifetime)
@@ -1979,73 +2096,9 @@ def handle_subscription_downgrade(
         if audio_entries:
             print(f"Deleted {len(audio_entries)} audio entries for downgraded user {uid}")
 
-    # 3. Send notification email ONLY for genuine downgrades.
-    # Strong indicators: timer > 30 (impossible without pro) or audio entries
-    # (impossible without pro/lifetime). Theme/soul_fire alone are weak signals
-    # that can arise from bugs or testing — silently reset, no email.
-    is_genuine_downgrade = has_custom_timer or has_audio
-    if email and is_genuine_downgrade:
-        reason = "refund or expiration"
-        audio_note = ""
-        if audio_entries:
-            audio_note = (
-                " Audio vault entries have been removed as they require "
-                "a paid subscription."
-            )
-
-        text_preserved_line = (
-            "- Your text vault entries are preserved\n"
-            if audio_entries
-            else "- All your existing vault entries are preserved\n"
-        )
-        text_audio_line = (
-            "- Audio vault entries have been removed (requires paid subscription)\n"
-            if audio_entries
-            else ""
-        )
-        subject = "Afterword — Subscription update"
-        text = (
-            f"Hi {sender_name},\n\n"
-            f"Your Afterword subscription has been updated due to a {reason}. "
-            "Your account has been reverted to the free tier.\n\n"
-            "What this means:\n"
-            "- Your timer has been reset to the default 30 days\n"
-            "- Custom themes and styles have been reset to defaults\n"
-            f"{text_preserved_line}"
-            f"{text_audio_line}"
-            "\n\n"
-            "You can continue using Afterword on the free tier, or "
-            "resubscribe at any time to restore premium features.\n\n"
-            "— The Afterword Team\n\n"
-            "Afterword is a time-locked digital vault app. You are receiving "
-            "this email because you have an Afterword account.\n\n"
-            "To unsubscribe, reply to this email with subject 'Unsubscribe'."
-        )
-        safe_name = html_mod.escape(sender_name)
-        html_preserved_li = (
-            '<li style="margin-bottom:6px">Your text vault entries are preserved</li>'
-            if audio_entries
-            else '<li style="margin-bottom:6px">All your existing vault entries are preserved</li>'
-        )
-        html_audio_li = (
-            '<li style="margin-bottom:6px">Audio vault entries have been removed (requires paid subscription)</li>'
-            if audio_entries else ''
-        )
-        html = (
-            f'<p style="margin:0 0 16px">Hi {safe_name},</p>'
-            f'<p style="margin:0 0 16px">Your Afterword subscription has been updated due to a {reason}. '
-            'Your account has been reverted to the free tier.</p>'
-            '<p style="margin:0 0 8px"><strong>What this means:</strong></p>'
-            '<ul style="margin:0 0 16px;padding-left:20px;color:#333333">'
-            '<li style="margin-bottom:6px">Your timer has been reset to the default 30 days</li>'
-            '<li style="margin-bottom:6px">Custom themes and styles have been reset to defaults</li>'
-            f'{html_preserved_li}'
-            f'{html_audio_li}'
-            '</ul>'
-            '<p style="margin:0 0 24px">You can continue using Afterword on the free tier, or '
-            'resubscribe at any time to restore premium features.</p>'
-            '<p style="margin:0;color:#666666;font-size:13px">&mdash; The Afterword Team</p>'
-        )
+    # 3. Send notification email
+    if email_content:
+        subject, text, html = email_content
         try:
             send_email(
                 resend_key,
@@ -2057,9 +2110,14 @@ def handle_subscription_downgrade(
                 idempotency_key=f"downgrade-{uid}-{now.date().isoformat()}",
                 preheader=f"Hi {sender_name}, your Afterword subscription has changed — here is what happened to your account.",
             )
+            # Email succeeded — clear the pending flag
+            client.table("profiles").update({
+                "downgrade_email_pending": False,
+            }).eq("id", uid).execute()
             print(f"Sent downgrade notification to {uid}")
         except Exception as exc:  # noqa: BLE001
-            print(f"Failed to send downgrade email to {uid}: {exc}")
+            # Email failed — downgrade_email_pending stays True for retry
+            print(f"Failed to send downgrade email to {uid}: {exc} — will retry next run")
 
     return True
 
@@ -2178,6 +2236,15 @@ def main() -> int:
 
           sender_name = profile.get("sender_name") or "Afterword"
           sub_status = (profile.get("subscription_status") or "free").lower()
+
+          # Clear stale downgrade flag when user re-subscribes
+          if sub_status in PAID_STATUSES and profile.get("downgrade_email_pending"):
+              try:
+                  client.table("profiles").update({
+                      "downgrade_email_pending": False,
+                  }).eq("id", user_id).execute()
+              except Exception:  # noqa: BLE001
+                  pass
 
           # ── PASS 0: Subscription downgrade → revert to free tier ──
           if sub_status == "free":

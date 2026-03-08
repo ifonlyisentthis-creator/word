@@ -403,6 +403,222 @@ class HeartbeatTests(unittest.TestCase):
         self.assertIsNone(client.profiles.updated_payload["selected_theme"])
         self.assertIsNone(client.profiles.updated_payload["selected_soul_fire"])
 
+    def test_downgrade_sets_pending_flag_when_email_needed(self):
+        """When a genuine downgrade is detected with an email address,
+        downgrade_email_pending must be set True in the wipe update."""
+        update_calls = []
+
+        class _TrackingProfilesQuery(_ProfilesQuery):
+            def update(self, payload):
+                update_calls.append(dict(payload))
+                return super().update(payload)
+
+        class _TrackingClient(_MinimalClient):
+            def __init__(self):
+                super().__init__()
+                self.profiles = _TrackingProfilesQuery()
+
+            def table(self, name):
+                if name == "profiles":
+                    return self.profiles
+                return super().table(name)
+
+        client = _TrackingClient()
+        profile = {
+            "id": "user-456",
+            "email": "user@example.com",
+            "sender_name": "Alice",
+            "timer_days": 60,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+
+        with (
+            patch.object(heartbeat, "delete_entry"),
+            patch.object(heartbeat, "send_email"),
+        ):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client,
+                profile=profile,
+                active_entries=[],
+                resend_key="rk",
+                from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        # First update (wipe) sets pending=True
+        self.assertTrue(update_calls[0].get("downgrade_email_pending"))
+
+    def test_downgrade_email_success_clears_pending_flag(self):
+        """Successful email send must clear downgrade_email_pending."""
+        update_calls = []
+
+        class _TrackingProfilesQuery(_ProfilesQuery):
+            def update(self, payload):
+                update_calls.append(dict(payload))
+                return super().update(payload)
+
+        class _TrackingClient(_MinimalClient):
+            def __init__(self):
+                super().__init__()
+                self.profiles = _TrackingProfilesQuery()
+
+            def table(self, name):
+                if name == "profiles":
+                    return self.profiles
+                return super().table(name)
+
+        client = _TrackingClient()
+        profile = {
+            "id": "user-789",
+            "email": "user@example.com",
+            "sender_name": "Bob",
+            "timer_days": 90,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+
+        with (
+            patch.object(heartbeat, "delete_entry"),
+            patch.object(heartbeat, "send_email"),  # succeeds (no exception)
+        ):
+            heartbeat.handle_subscription_downgrade(
+                client=client,
+                profile=profile,
+                active_entries=[],
+                resend_key="rk",
+                from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        # First update sets pending=True (wipe), second clears it (email success)
+        self.assertEqual(len(update_calls), 2)
+        self.assertTrue(update_calls[0].get("downgrade_email_pending"))
+        self.assertFalse(update_calls[1].get("downgrade_email_pending"))
+
+    def test_downgrade_email_failure_keeps_pending_flag(self):
+        """Failed email send must leave downgrade_email_pending=True for retry."""
+        update_calls = []
+
+        class _TrackingProfilesQuery(_ProfilesQuery):
+            def update(self, payload):
+                update_calls.append(dict(payload))
+                return super().update(payload)
+
+        class _TrackingClient(_MinimalClient):
+            def __init__(self):
+                super().__init__()
+                self.profiles = _TrackingProfilesQuery()
+
+            def table(self, name):
+                if name == "profiles":
+                    return self.profiles
+                return super().table(name)
+
+        client = _TrackingClient()
+        profile = {
+            "id": "user-fail",
+            "email": "user@example.com",
+            "sender_name": "Carol",
+            "timer_days": 45,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+
+        with (
+            patch.object(heartbeat, "delete_entry"),
+            patch.object(heartbeat, "send_email", side_effect=RuntimeError("Resend 500")),
+        ):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client,
+                profile=profile,
+                active_entries=[],
+                resend_key="rk",
+                from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        # Only the wipe update happened — no second update to clear flag
+        self.assertEqual(len(update_calls), 1)
+        self.assertTrue(update_calls[0].get("downgrade_email_pending"))
+
+    def test_downgrade_retry_sends_deferred_email(self):
+        """When indicators are gone but downgrade_email_pending is True,
+        the function must retry the email and clear the flag on success."""
+        update_calls = []
+
+        class _TrackingProfilesQuery(_ProfilesQuery):
+            def update(self, payload):
+                update_calls.append(dict(payload))
+                return super().update(payload)
+
+        class _TrackingClient(_MinimalClient):
+            def __init__(self):
+                super().__init__()
+                self.profiles = _TrackingProfilesQuery()
+
+            def table(self, name):
+                if name == "profiles":
+                    return self.profiles
+                return super().table(name)
+
+        client = _TrackingClient()
+        profile = {
+            "id": "user-retry",
+            "email": "user@example.com",
+            "sender_name": "Dan",
+            "timer_days": 30,  # already reset (no indicators)
+            "selected_theme": None,
+            "selected_soul_fire": None,
+            "downgrade_email_pending": True,  # left from failed previous run
+        }
+
+        with patch.object(heartbeat, "send_email") as mock_send:
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client,
+                profile=profile,
+                active_entries=[],
+                resend_key="rk",
+                from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        # Returns False — no indicators were reverted
+        self.assertFalse(reverted)
+        # Email was sent
+        mock_send.assert_called_once()
+        # Flag was cleared
+        self.assertEqual(len(update_calls), 1)
+        self.assertFalse(update_calls[0]["downgrade_email_pending"])
+
+    def test_downgrade_no_indicators_no_pending_returns_false(self):
+        """Free user with no indicators and no pending flag → skip entirely."""
+        client = _MinimalClient()
+        profile = {
+            "id": "user-free",
+            "email": "user@example.com",
+            "sender_name": "Eve",
+            "timer_days": 30,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+            "downgrade_email_pending": False,
+        }
+
+        reverted = heartbeat.handle_subscription_downgrade(
+            client=client,
+            profile=profile,
+            active_entries=[],
+            resend_key="rk",
+            from_email="no-reply@example.com",
+            now=heartbeat.datetime.now(heartbeat.timezone.utc),
+        )
+
+        self.assertFalse(reverted)
+        # No DB update should have happened
+        self.assertIsNone(client.profiles.updated_payload)
+
 
     # ── Security-specific tests ──
 
@@ -1154,6 +1370,78 @@ class HeartbeatTests(unittest.TestCase):
 
     # ── Subscription downgrade edge-case tests ──
 
+    def test_downgrade_short_timer_below_30_detected(self):
+        """timer_days=7 (below free default of 30) IS a premium feature.
+        Must be detected and reset to 30, with downgrade email sent."""
+        update_calls = []
+        sent_emails = []
+
+        class _TrackingProfilesQuery(_ProfilesQuery):
+            def update(self, payload):
+                update_calls.append(dict(payload))
+                return super().update(payload)
+
+        class _TrackingClient(_MinimalClient):
+            def __init__(self):
+                super().__init__()
+                self.profiles = _TrackingProfilesQuery()
+
+            def table(self, name):
+                if name == "profiles":
+                    return self.profiles
+                return super().table(name)
+
+        client = _TrackingClient()
+        profile = {
+            "id": "user-short-timer",
+            "email": "short@example.com",
+            "sender_name": "ShortTimer",
+            "timer_days": 7,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+
+        with patch.object(heartbeat, "send_email",
+                         side_effect=lambda *a, **kw: sent_emails.append(kw)):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=[],
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        self.assertEqual(len(sent_emails), 1)
+        # Wipe update resets timer to 30
+        self.assertEqual(update_calls[0]["timer_days"], 30)
+        # downgrade_email_pending set True in wipe, then cleared on success
+        self.assertTrue(update_calls[0].get("downgrade_email_pending"))
+        self.assertFalse(update_calls[1].get("downgrade_email_pending"))
+
+    def test_downgrade_timer_14_days_detected(self):
+        """timer_days=14 (between min and free default) IS a premium feature."""
+        client = _MinimalClient()
+        sent_emails = []
+
+        profile = {
+            "id": "user-14d",
+            "email": "t14@example.com",
+            "sender_name": "Timer14",
+            "timer_days": 14,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+
+        with patch.object(heartbeat, "send_email",
+                         side_effect=lambda *a, **kw: sent_emails.append(kw)):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=[],
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        self.assertTrue(reverted)
+        self.assertEqual(len(sent_emails), 1)
+
     def test_downgrade_pro_user_with_audio_deletes_audio(self):
         """Pro user (timer_days=60) with audio entries → audio deleted, email sent."""
         client = _MinimalClient()
@@ -1225,10 +1513,26 @@ class HeartbeatTests(unittest.TestCase):
 
     def test_downgrade_timer_only_no_audio_no_audio_deleted(self):
         """Pro user with custom timer but no audio → timer reset, no audio deletion, email sent."""
-        client = _MinimalClient()
+        update_calls = []
         deleted_entries = []
         sent_emails = []
 
+        class _TrackingProfilesQuery(_ProfilesQuery):
+            def update(self, payload):
+                update_calls.append(dict(payload))
+                return super().update(payload)
+
+        class _TrackingClient(_MinimalClient):
+            def __init__(self):
+                super().__init__()
+                self.profiles = _TrackingProfilesQuery()
+
+            def table(self, name):
+                if name == "profiles":
+                    return self.profiles
+                return super().table(name)
+
+        client = _TrackingClient()
         profile = {
             "id": "user-timer-only",
             "email": "timer@example.com",
@@ -1256,7 +1560,8 @@ class HeartbeatTests(unittest.TestCase):
         self.assertTrue(reverted)
         self.assertEqual(deleted_entries, [])
         self.assertEqual(len(sent_emails), 1)
-        self.assertEqual(client.profiles.updated_payload["timer_days"], 30)
+        # First update is the wipe
+        self.assertEqual(update_calls[0]["timer_days"], 30)
 
     def test_downgrade_already_free_defaults_returns_false(self):
         """User already at free defaults (timer=30, no themes, no audio) → no action."""
@@ -1475,10 +1780,26 @@ class HeartbeatTests(unittest.TestCase):
 
     def test_downgrade_multiple_audio_entries_all_deleted(self):
         """User with multiple audio entries → ALL audio entries deleted, single email."""
-        client = _MinimalClient()
+        update_calls = []
         deleted_entries = []
         sent_emails = []
 
+        class _TrackingProfilesQuery(_ProfilesQuery):
+            def update(self, payload):
+                update_calls.append(dict(payload))
+                return super().update(payload)
+
+        class _TrackingClient(_MinimalClient):
+            def __init__(self):
+                super().__init__()
+                self.profiles = _TrackingProfilesQuery()
+
+            def table(self, name):
+                if name == "profiles":
+                    return self.profiles
+                return super().table(name)
+
+        client = _TrackingClient()
         profile = {
             "id": "user-multi-audio",
             "email": "multi@example.com",
@@ -1509,9 +1830,10 @@ class HeartbeatTests(unittest.TestCase):
         self.assertTrue(reverted)
         self.assertEqual(sorted(deleted_entries), ["a1", "a2", "a3"])
         self.assertEqual(len(sent_emails), 1)
-        self.assertEqual(client.profiles.updated_payload["timer_days"], 30)
-        self.assertIsNone(client.profiles.updated_payload["selected_theme"])
-        self.assertIsNone(client.profiles.updated_payload["selected_soul_fire"])
+        # First update is the wipe
+        self.assertEqual(update_calls[0]["timer_days"], 30)
+        self.assertIsNone(update_calls[0]["selected_theme"])
+        self.assertIsNone(update_calls[0]["selected_soul_fire"])
 
 
 if __name__ == "__main__":
