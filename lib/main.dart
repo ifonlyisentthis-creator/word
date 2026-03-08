@@ -119,8 +119,9 @@ class _AfterwordAppState extends State<AfterwordApp> {
     // Remove native splash after first Flutter frame is painted
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FlutterNativeSplash.remove();
-      // Heavy network init AFTER UI is visible (RevenueCat + push + login)
-      Future<void>.delayed(const Duration(milliseconds: 900), _deferredInit);
+      // Start heavy network init immediately — runs during biometric flow
+      // so subscription status is synced before the user sees the home screen.
+      _deferredInit();
     });
   }
 

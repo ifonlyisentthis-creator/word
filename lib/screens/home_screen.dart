@@ -489,39 +489,49 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                   // Vault — View All always works, Add Entry disabled during grace
                   RepaintBoundary(
-                    child: _VaultSummaryCard(
-                      entryCount: controller.vaultEntryCount,
-                      isLoading: controller.isLoading,
-                      onViewAll: () {
-                        Navigator.push(
-                          context,
-                          PremiumPageRoute(
-                            page: MyVaultPage(
-                              userId: widget.userId,
-                              readOnly: isInGracePeriod,
-                            ),
-                          ),
-                        ).then((_) {
-                          if (context.mounted) {
-                            context.read<HomeController>().refreshVaultStatus();
-                          }
-                        });
-                      },
-                      onAdd: isInGracePeriod
-                          ? null
-                          : () async {
-                              final created = await openVaultEntryEditor(
-                                context,
-                                userId: widget.userId,
-                                isPro: isPro,
-                                isLifetime: isLifetime,
-                              );
-                              if (created && context.mounted) {
-                                context
-                                    .read<HomeController>()
-                                    .refreshVaultStatus();
+                    child: Builder(
+                      builder: (context) {
+                        final freeAtLimit = !isPro && controller.vaultEntryCount >= 3;
+                        return _VaultSummaryCard(
+                          entryCount: controller.vaultEntryCount,
+                          isLoading: controller.isLoading,
+                          disabledReason: isInGracePeriod
+                              ? null
+                              : freeAtLimit
+                                  ? 'Free plan allows up to 3 entries. Upgrade to add more.'
+                                  : null,
+                          onViewAll: () {
+                            Navigator.push(
+                              context,
+                              PremiumPageRoute(
+                                page: MyVaultPage(
+                                  userId: widget.userId,
+                                  readOnly: isInGracePeriod,
+                                ),
+                              ),
+                            ).then((_) {
+                              if (context.mounted) {
+                                context.read<HomeController>().refreshVaultStatus();
                               }
-                            },
+                            });
+                          },
+                          onAdd: isInGracePeriod || freeAtLimit
+                              ? null
+                              : () async {
+                                  final created = await openVaultEntryEditor(
+                                    context,
+                                    userId: widget.userId,
+                                    isPro: isPro,
+                                    isLifetime: isLifetime,
+                                  );
+                                  if (created && context.mounted) {
+                                    context
+                                        .read<HomeController>()
+                                        .refreshVaultStatus();
+                                  }
+                                },
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -1456,12 +1466,14 @@ class _VaultSummaryCard extends StatelessWidget {
     required this.isLoading,
     required this.onViewAll,
     this.onAdd,
+    this.disabledReason,
   });
 
   final int entryCount;
   final bool isLoading;
   final VoidCallback onViewAll;
   final VoidCallback? onAdd;
+  final String? disabledReason;
 
   @override
   Widget build(BuildContext context) {
@@ -1542,6 +1554,28 @@ class _VaultSummaryCard extends StatelessWidget {
                 label: const Text('Add Entry'),
               ),
             ),
+            if (disabledReason != null && onAdd == null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.lock_outline,
+                    size: 14,
+                    color: Colors.white38,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      disabledReason!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

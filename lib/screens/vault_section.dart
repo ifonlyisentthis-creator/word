@@ -111,6 +111,15 @@ Future<bool> openVaultEntryEditor(
 
   bool created = false;
 
+  // Preload entries so audioSecondsUsed is correct from the first frame,
+  // preventing the record button from briefly appearing enabled.
+  await controller.loadEntries();
+
+  if (!context.mounted) {
+    controller.dispose();
+    return false;
+  }
+
   try {
     final result = await showModalBottomSheet<bool>(
       context: context,
@@ -399,7 +408,7 @@ class _VaultSectionView extends StatelessWidget {
                         width: double.infinity,
 
                         child: OutlinedButton.icon(
-                          onPressed: controller.isLoading
+                          onPressed: controller.isLoading || (!isPro && activeEntries.length >= 3)
                               ? null
                               : () async {
                                   await _openEditor(context, controller);
@@ -424,7 +433,7 @@ class _VaultSectionView extends StatelessWidget {
                   width: double.infinity,
 
                   child: OutlinedButton.icon(
-                    onPressed: controller.isLoading
+                    onPressed: controller.isLoading || (!isPro && activeEntries.length >= 3)
                         ? null
                         : () async {
                             await _openEditor(context, controller);
@@ -435,6 +444,16 @@ class _VaultSectionView extends StatelessWidget {
                     label: const Text('Add Entry'),
                   ),
                 ),
+                if (!isPro && activeEntries.length >= 3) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Free plan allows up to 3 entries. Upgrade to add more.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white38,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ],
             ],
 
@@ -1442,6 +1461,18 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
                         const SizedBox(height: 12),
 
+                        if (!_audioUsageLoaded)
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          )
+                        else
                         Wrap(
                           spacing: 8,
 
@@ -1745,9 +1776,10 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
       return;
     }
 
-    _audioUsageLoaded = true;
-
-    unawaited(context.read<VaultController>().loadEntries());
+    final controller = context.read<VaultController>();
+    controller.loadEntries().then((_) {
+      if (mounted) setState(() => _audioUsageLoaded = true);
+    });
   }
 
   Future<void> _startRecording(int maxSeconds) async {
@@ -1960,6 +1992,7 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
       children: [
         StreamBuilder<PlayerState>(
           stream: _player.playerStateStream,
+          initialData: _player.playerState,
 
           builder: (context, snapshot) {
             final state = snapshot.data;
@@ -2023,6 +2056,7 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
 
         StreamBuilder<Duration?>(
           stream: _player.durationStream,
+          initialData: _player.duration,
 
           builder: (context, durationSnapshot) {
             final duration =
@@ -2031,6 +2065,7 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
 
             return StreamBuilder<Duration>(
               stream: _player.positionStream,
+              initialData: _player.position,
 
               builder: (context, positionSnapshot) {
                 final position = positionSnapshot.data ?? Duration.zero;

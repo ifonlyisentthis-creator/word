@@ -195,6 +195,11 @@ class SubscriptionDebugScreen extends StatelessWidget {
                     ),
                   ] else ...[
 
+                  // ── Feature comparison (above plans) ──
+                  _FeatureComparisonCard(),
+
+                  const SizedBox(height: 24),
+
                   Text(
 
                     'Available plans',
@@ -274,6 +279,40 @@ class SubscriptionDebugScreen extends StatelessWidget {
                               );
                             }
 
+                            // Pre-purchase warning: buying lifetime while a
+                            // subscription is active will NOT auto-cancel it.
+                            if (kind == _PlanKind.lifetime &&
+                                isPro &&
+                                beforeActiveSubs.isNotEmpty &&
+                                context.mounted) {
+                              final proceed = await showDialog<bool>(
+                                context: context,
+                                builder: (dlg) => AlertDialog(
+                                  title: const Text('Upgrade to Lifetime?'),
+                                  content: const Text(
+                                    'You have an active subscription. Google Play '
+                                    'does not automatically cancel subscriptions '
+                                    'when you buy a one-time product.\n\n'
+                                    'After purchasing Lifetime, you will need to '
+                                    'manually cancel your current subscription in '
+                                    'Google Play to avoid being charged twice.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(dlg, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () => Navigator.pop(dlg, true),
+                                      child: const Text('Continue'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (proceed != true) return;
+                              if (!context.mounted) return;
+                            }
+
                             debugPrint(
                               '[PAYWALL] Purchase attempt: id=${package.storeProduct.identifier} kind=$kind oldProductId=${oldProductId ?? "(none)"}',
                             );
@@ -330,10 +369,6 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
                   ],
                   ],
-
-                  // ── Feature comparison ──
-                  const SizedBox(height: 24),
-                  _FeatureComparisonCard(),
 
                   const SizedBox(height: 20),
 
@@ -751,7 +786,12 @@ class _PackageTile extends StatelessWidget {
 
     final product = package.storeProduct;
 
-    final title = product.title.isNotEmpty ? product.title : product.identifier;
+    // Google Play appends " (App Name)" to product titles — strip it.
+    var title = product.title.isNotEmpty ? product.title : product.identifier;
+    final parenIdx = title.lastIndexOf('(');
+    if (parenIdx > 0 && title.endsWith(')')) {
+      title = title.substring(0, parenIdx).trimRight();
+    }
 
     final description = product.description;
 
