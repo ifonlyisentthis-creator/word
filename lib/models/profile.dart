@@ -16,6 +16,7 @@ class Profile {
     this.push66SentAt,
     this.push33SentAt,
     this.protocolExecutedAt,
+    this.soulFireHaptics = false,
   });
 
   final String id;
@@ -34,6 +35,7 @@ class Profile {
   final DateTime? push66SentAt;
   final DateTime? push33SentAt;
   final DateTime? protocolExecutedAt;
+  final bool soulFireHaptics;
 
   factory Profile.fromMap(Map<String, dynamic> map) {
     return Profile(
@@ -69,6 +71,7 @@ class Profile {
       protocolExecutedAt: map['protocol_executed_at'] != null
           ? DateTime.parse(map['protocol_executed_at'] as String)
           : null,
+      soulFireHaptics: map['soul_fire_haptics'] == true,
     );
   }
 
@@ -86,6 +89,7 @@ class Profile {
     DateTime? push66SentAt,
     DateTime? push33SentAt,
     DateTime? protocolExecutedAt,
+    bool? soulFireHaptics,
   }) {
     return Profile(
       id: id,
@@ -104,6 +108,7 @@ class Profile {
       push66SentAt: push66SentAt ?? this.push66SentAt,
       push33SentAt: push33SentAt ?? this.push33SentAt,
       protocolExecutedAt: protocolExecutedAt ?? this.protocolExecutedAt,
+      soulFireHaptics: soulFireHaptics ?? this.soulFireHaptics,
     );
   }
 

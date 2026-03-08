@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,8 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/profile.dart';
 
 import 'account_service.dart';
-
-import 'notification_service.dart';
 
 import 'profile_service.dart' show ProfilePrefetch, ProfileService;
 
@@ -30,14 +26,10 @@ class HomeController extends ChangeNotifier {
   HomeController({
     required ProfileService profileService,
 
-    required NotificationService notificationService,
-
     required AccountService accountService,
 
     required ThemeProvider themeProvider,
   }) : _profileService = profileService,
-
-       _notificationService = notificationService,
 
        _accountService = accountService,
 
@@ -46,8 +38,6 @@ class HomeController extends ChangeNotifier {
   bool _isDisposed = false;
 
   final ProfileService _profileService;
-
-  final NotificationService _notificationService;
 
   final AccountService _accountService;
 
@@ -166,10 +156,6 @@ class HomeController extends ChangeNotifier {
       _errorMessage = null;
 
       await _fetchVaultEntryStatus();
-
-      if (ensured.status.toLowerCase() == 'active') {
-        unawaited(_scheduleReminders());
-      }
     } catch (error) {
       _errorMessage = 'Unable to load your timer. Please try again.';
     } finally {
@@ -206,8 +192,6 @@ class HomeController extends ChangeNotifier {
 
     try {
       await _accountService.deleteAccount(_user!.id);
-
-      try { await _notificationService.cancelAll(); } catch (_) {}
 
       _profile = null;
 
@@ -293,8 +277,6 @@ class HomeController extends ChangeNotifier {
       _profile = await _profileService.updateTimerDays(timerDays);
 
       _errorMessage = null;
-
-      await _scheduleReminders();
     } catch (_) {
       _errorMessage = 'Unable to update your timer.';
     } finally {
@@ -321,8 +303,6 @@ class HomeController extends ChangeNotifier {
       _errorMessage = null;
 
       notifyListeners();
-
-      await _scheduleReminders();
     } catch (_) {
       // Silent refresh — no error shown
     }
@@ -427,8 +407,6 @@ class HomeController extends ChangeNotifier {
 
       notifyListeners();
 
-      await _scheduleReminders();
-
       return CheckInResult.success;
     } catch (e) {
       debugPrint('manualCheckIn error: $e');
@@ -438,53 +416,6 @@ class HomeController extends ChangeNotifier {
       return CheckInResult.error;
     } finally {
       _setLoading(false);
-    }
-  }
-
-  Future<void> _scheduleReminders() async {
-    final profile = _profile;
-
-    if (profile == null || profile.status.toLowerCase() != 'active') {
-      if (kDebugMode) {
-        debugPrint('[NOTIF] Skipped: profile null or not active');
-      }
-      return;
-    }
-
-    // No notifications if vault is empty — timer has no effect
-    if (!_hasVaultEntries) {
-      if (kDebugMode) {
-        debugPrint('[NOTIF] Vault empty, cancelling notifications');
-      }
-      try {
-        await _notificationService.cancelAll();
-      } catch (_) {}
-      return;
-    }
-
-    try {
-      if (kDebugMode) {
-        debugPrint(
-          '[NOTIF] Server-authoritative reminder flow active. '
-          'Clearing any legacy local reminder notifications.',
-        );
-      }
-
-      await _notificationService.initialize();
-
-      await _notificationService.scheduleCheckInReminders(
-        profile.lastCheckIn,
-
-        profile.timerDays,
-
-        push66SentAt: profile.push66SentAt,
-
-        push33SentAt: profile.push33SentAt,
-      );
-
-      if (kDebugMode) debugPrint('[NOTIF] Reminders scheduled successfully');
-    } catch (e) {
-      if (kDebugMode) debugPrint('[NOTIF] Schedule failed: $e');
     }
   }
 
@@ -520,7 +451,6 @@ class HomeController extends ChangeNotifier {
       if (_hasVaultEntries && !hadEntries) {
         await refreshProfile();
       }
-      await _scheduleReminders();
     }
   }
 

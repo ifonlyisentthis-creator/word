@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/app_theme.dart';
+import '../services/soul_fire_haptics.dart';
 
 class SoulFireButton extends StatefulWidget {
   const SoulFireButton({
@@ -12,11 +13,13 @@ class SoulFireButton extends StatefulWidget {
     required this.enabled,
     required this.onConfirmed,
     this.styleId = SoulFireStyleId.etherealOrb,
+    this.hapticsEnabled = false,
   });
 
   final bool enabled;
   final VoidCallback onConfirmed;
   final SoulFireStyleId styleId;
+  final bool hapticsEnabled;
 
   @override
   State<SoulFireButton> createState() => _SoulFireButtonState();
@@ -44,6 +47,9 @@ class _SoulFireButtonState extends State<SoulFireButton>
   // Layer C: one-shot lock — once consumed, no second fire until full reset
   bool _confirmationLocked = false;
 
+  // Haptic milestone tracking for custom Soul Fire buzz
+  final Set<int> _firedHapticMilestones = {};
+
   @override
   void initState() {
     super.initState();
@@ -67,6 +73,14 @@ class _SoulFireButtonState extends State<SoulFireButton>
       duration: const Duration(milliseconds: 600),
     );
 
+    _holdController.addListener(() {
+      if (widget.hapticsEnabled && _holdController.isAnimating && _holdController.value > 0) {
+        SoulFireHaptics.onHoldProgress(
+          widget.styleId, _holdController.value, _firedHapticMilestones,
+        );
+      }
+    });
+
     _holdController.addStatusListener((status) {
       // ═══ MULTI-LAYER SAFETY GATE ═══
       // All 5 conditions must be true simultaneously:
@@ -86,7 +100,11 @@ class _SoulFireButtonState extends State<SoulFireButton>
               (_holdDuration.inMilliseconds * 0.80).round()) {
         _completed = true;
         _confirmationLocked = true;
-        HapticFeedback.heavyImpact();
+        if (widget.hapticsEnabled) {
+          SoulFireHaptics.onCompletion(widget.styleId);
+        } else {
+          HapticFeedback.heavyImpact();
+        }
         _flashController.forward(from: 0);
         widget.onConfirmed();
         Future.delayed(const Duration(milliseconds: 1400), () {
@@ -136,8 +154,13 @@ class _SoulFireButtonState extends State<SoulFireButton>
     _holdDelayTimer = Timer(const Duration(milliseconds: 120), () {
       if (_pointerStart != null && !_completed && _pointerIsDown) {
         _holdStartedAt = DateTime.now();
+        _firedHapticMilestones.clear();
         _holdController.forward(from: 0);
-        HapticFeedback.lightImpact();
+        if (widget.hapticsEnabled) {
+          SoulFireHaptics.onHoldStart(widget.styleId);
+        } else {
+          HapticFeedback.lightImpact();
+        }
       }
     });
   }

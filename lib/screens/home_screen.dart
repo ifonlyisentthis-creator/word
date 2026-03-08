@@ -20,8 +20,6 @@ import '../services/device_secret_service.dart';
 
 import '../services/home_controller.dart';
 
-import '../services/notification_service.dart';
-
 import '../services/profile_service.dart';
 
 import '../services/revenuecat_controller.dart';
@@ -69,8 +67,6 @@ class HomeScreen extends StatelessWidget {
 
       create: (ctx) => HomeController(
         profileService: ProfileService(Supabase.instance.client),
-
-        notificationService: NotificationService(),
 
         accountService: AccountService(
           client: Supabase.instance.client,
@@ -440,6 +436,9 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                                   styleId: context
                                       .watch<ThemeProvider>()
                                       .soulFireId,
+                                  hapticsEnabled: context
+                                      .watch<ThemeProvider>()
+                                      .soulFireHaptics,
                                   enabled:
                                       !isInGracePeriod &&
                                       !controller.isLoading &&

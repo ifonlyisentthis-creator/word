@@ -59,6 +59,15 @@ class CustomizationScreen extends StatelessWidget {
                       isUnlocked: id.isUnlocked(sub),
                       onTap: () => _selectSoulFire(context, id),
                     )),
+
+                const SizedBox(height: 20),
+
+                // ── Soul Fire Haptic Buzz toggle ──
+                _HapticsToggle(
+                  enabled: tp.soulFireHaptics,
+                  accent: tp.soulFireId.primaryColor,
+                  onChanged: () => _toggleHaptics(context),
+                ),
               ],
             ),
           ),
@@ -79,8 +88,14 @@ class CustomizationScreen extends StatelessWidget {
     await _persist(context, selectedSoulFire: id.key);
   }
 
+  void _toggleHaptics(BuildContext context) async {
+    final tp = context.read<ThemeProvider>();
+    final newValue = tp.toggleSoulFireHaptics();
+    await _persist(context, soulFireHaptics: newValue);
+  }
+
   Future<void> _persist(BuildContext context,
-      {String? selectedTheme, String? selectedSoulFire}) async {
+      {String? selectedTheme, String? selectedSoulFire, bool? soulFireHaptics}) async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
     try {
@@ -88,6 +103,7 @@ class CustomizationScreen extends StatelessWidget {
         userId,
         selectedTheme: selectedTheme,
         selectedSoulFire: selectedSoulFire,
+        soulFireHaptics: soulFireHaptics,
       );
     } catch (e) {
       debugPrint('Failed to save preferences: $e');
@@ -468,6 +484,80 @@ class _SoulFireCard extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Haptics toggle ───
+class _HapticsToggle extends StatelessWidget {
+  const _HapticsToggle({
+    required this.enabled,
+    required this.accent,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final Color accent;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onChanged,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0A0A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: enabled
+                ? accent.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.06),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              enabled ? Icons.vibration : Icons.phonelink_erase,
+              size: 22,
+              color: enabled ? accent : Colors.white38,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Soul Fire Buzz',
+                    style: TextStyle(
+                      color: enabled ? Colors.white : Colors.white70,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Unique haptic feedback for each Soul Fire',
+                    style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch.adaptive(
+              value: enabled,
+              onChanged: (_) => onChanged(),
+              activeThumbColor: accent,
+              activeTrackColor: accent.withValues(alpha: 0.3),
+            ),
+          ],
         ),
       ),
     );
