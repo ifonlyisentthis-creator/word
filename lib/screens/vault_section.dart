@@ -2004,9 +2004,10 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
                 processingState == ProcessingState.loading ||
                 processingState == ProcessingState.buffering;
 
-            final isPlaying = state?.playing ?? false;
+            final isCompleted =
+                processingState == ProcessingState.completed;
 
-            final isCompleted = processingState == ProcessingState.completed;
+            final isPlaying = (state?.playing ?? false) && !isCompleted;
 
             return Row(
               children: [
@@ -2027,7 +2028,6 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
                         : () async {
                             if (isCompleted) {
                               await _player.seek(Duration.zero);
-
                               await _player.play();
                             } else if (isPlaying) {
                               await _player.pause();

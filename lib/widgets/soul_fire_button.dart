@@ -697,183 +697,214 @@ class _OrbPainter extends CustomPainter {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 1c. NEBULA HEART (Free) — Magnetic Ferrofluid
-  //     A dark metallic sphere bristling with sharp spikes
-  //     that cluster around two slowly rotating magnetic
-  //     poles. Spikes rise and fall organically as the field
-  //     sweeps past. Bright white-hot tips. Visible dipole
-  //     field lines on hold. Spike storm burst on completion.
-  //     Colors: deep blue-black, orchid, teal, white-hot.
+  // 1c. NEBULA HEART (Free) — Cosmic Jellyfish
+  //     A bioluminescent deep-sea creature made of nebula gas.
+  //     Translucent dome pulses with internal light, trailing
+  //     stardust tentacles that flow downward and wave. Bio-
+  //     luminescent pulses travel down the tendrils. On hold
+  //     the bell contracts and tendrils curl. On completion a
+  //     bioluminescent shockwave radiates outward.
+  //     Colors: orchid, seafoam cyan, soft lilac, warm white.
   // ═══════════════════════════════════════════════════════
   void _paintNebulaHeart(
       Canvas canvas, Offset center, double r, double bs) {
     const orchid = Color(0xFFDA70D6);
-    const teal = Color(0xFF00BFA5);
-    const blueBlack = Color(0xFF060818);
-    const hotWhite = Color(0xFFF0F0FF);
+    const seafoam = Color(0xFF66FFCC);
+    const lilac = Color(0xFFB899E0);
+    const bellCore = Color(0xFFF0E8FF);
 
-    // Magnetic aura — shifts with pole orientation
-    final poleAngle = orbit * 2 * pi * 0.15;
-    for (int g = 0; g < 2; g++) {
-      final auraR = r * (1.6 + g * 0.35) * bs;
-      final auraA = (0.04 + hold * 0.08) / (1 + g);
-      final auraColor = g == 0 ? orchid : teal;
-      canvas.drawCircle(center, auraR, Paint()
-        ..shader = RadialGradient(colors: [
-          _lerpHold(auraColor, _amber).withValues(alpha: auraA),
-          Colors.transparent,
-        ]).createShader(Rect.fromCircle(center: center, radius: auraR)));
-    }
-
-    // Main body — dark metallic sphere
-    canvas.drawCircle(center, r * bs, Paint()
+    // Bioluminescent ambient haze
+    final pulseGlow = sin(breath * pi) * 0.03;
+    canvas.drawCircle(center, r * 1.8 * bs, Paint()
       ..shader = RadialGradient(colors: [
-        blueBlack,
-        _lerpHold(const Color(0xFF0C0A1E), const Color(0xFF0A0500)),
-        _lerpHold(const Color(0xFF1A1040), _amber).withValues(alpha: 0.55),
-      ], stops: const [0.0, 0.60, 1.0])
-          .createShader(Rect.fromCircle(center: center, radius: r)));
+        _lerpHold(orchid, _amber).withValues(alpha: 0.06 + hold * 0.10 + pulseGlow),
+        _lerpHold(seafoam, _gold).withValues(alpha: 0.02),
+        Colors.transparent,
+      ], stops: const [0.0, 0.5, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r * 1.8)));
 
-    // FERROFLUID SPIKES — sharp projections that cluster at magnetic poles
-    final spikeCount = 28 + (hold * 14).round();
-    for (int i = 0; i < spikeCount; i++) {
-      final angle = (i / spikeCount) * 2 * pi;
+    // Main body — translucent dome (jellyfish bell)
+    final bellSquash = 1.0 - hold * 0.12; // contracts on hold
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.scale(1.0, bellSquash);
+    canvas.drawCircle(Offset.zero, r * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        const Color(0xFF080412),
+        _lerpHold(const Color(0xFF120820), const Color(0xFF0A0500)),
+        _lerpHold(lilac, _amber).withValues(alpha: 0.40),
+      ], stops: const [0.0, 0.55, 1.0])
+          .createShader(Rect.fromCircle(center: Offset.zero, radius: r)));
+    canvas.restore();
 
-      // Two magnetic poles create a dipole field
-      final pole1 = (cos(angle - poleAngle) * 0.5 + 0.5);
-      final pole2 = (cos(angle - poleAngle - pi) * 0.5 + 0.5);
-      final field = max(pole1 * pole1, pole2 * pole2);
-
-      // Spike height: field strength + pulsation + hold amplification
-      final breathMod = sin(breath * pi + i * 0.4) * 0.12;
-      final spikeH = r * (0.04 + field * 0.32 + hold * field * 0.35
-          + breathMod * 0.08) * bs;
-      if (spikeH < r * 0.03) continue;
-
-      // Base on sphere surface
-      final bx = center.dx + cos(angle) * r * 0.90 * bs;
-      final by = center.dy + sin(angle) * r * 0.90 * bs;
-      // Tip
-      final tx = center.dx + cos(angle) * (r * 0.90 * bs + spikeH);
-      final ty = center.dy + sin(angle) * (r * 0.90 * bs + spikeH);
-
-      final sAlpha = (0.25 + field * 0.55 + hold * 0.20).clamp(0.0, 1.0);
-      final sWidth = 1.8 + field * 3.5 + hold * 2.0;
-
-      // Glow layer
-      canvas.drawLine(Offset(bx, by), Offset(tx, ty), Paint()
-        ..color = _lerpHold(orchid, _gold).withValues(alpha: sAlpha * 0.25)
-        ..strokeWidth = sWidth + 4
+    // INTERNAL LUMINOUS VEINS — radial lines inside the bell that pulse
+    for (int i = 0; i < 12; i++) {
+      final vAngle = (i / 12) * 2 * pi;
+      final vPulse = sin(breath * pi * 2 + i * 0.5) * 0.5 + 0.5;
+      final vLen = r * (0.3 + vPulse * 0.35 + hold * 0.15) * bs;
+      final vStart = center + Offset(cos(vAngle) * r * 0.10, sin(vAngle) * r * 0.10);
+      final vEnd = center + Offset(cos(vAngle) * vLen, sin(vAngle) * vLen * bellSquash);
+      final vAlpha = (0.04 + vPulse * 0.10 + hold * 0.12).clamp(0.0, 1.0);
+      final vColor = i.isEven
+          ? _lerpHold(orchid, _gold)
+          : _lerpHold(seafoam, _amber);
+      canvas.drawLine(vStart, vEnd, Paint()
+        ..color = vColor.withValues(alpha: vAlpha)
+        ..strokeWidth = 1.5 + vPulse * 1.5 + hold * 1.0
         ..strokeCap = StrokeCap.round);
-      // Sharp spike
-      canvas.drawLine(Offset(bx, by), Offset(tx, ty), Paint()
-        ..color = _lerpHold(teal, _warmWhite).withValues(alpha: sAlpha)
-        ..strokeWidth = max(sWidth * 0.35, 0.6)
+    }
+
+    // STARDUST TENTACLES — organic tendrils flowing downward
+    final tRng = Random(73);
+    for (int t = 0; t < 7; t++) {
+      final baseAngle = (t / 7) * pi * 1.2 + pi * 0.4; // mostly downward arc
+      final seed = tRng.nextDouble();
+      final tentPath = Path();
+      const steps = 28;
+      for (int j = 0; j <= steps; j++) {
+        final frac = j / steps;
+        // Tentacles hang downward with organic sway
+        final sway = sin(frac * pi * 3 + orbit * 2 * pi * 0.3 + t * 1.7) *
+            r * 0.12 * frac;
+        final curl = hold * sin(frac * pi * 2 + t * 0.8) * r * 0.08 * frac;
+        final tentLen = r * (0.5 + seed * 0.6 + hold * 0.3) * frac;
+        final tx = center.dx + cos(baseAngle) * r * 0.88 * bs +
+            cos(baseAngle + pi / 2) * (sway + curl) +
+            cos(baseAngle) * tentLen * 0.3;
+        final ty = center.dy + sin(baseAngle) * r * 0.88 * bs * bellSquash +
+            tentLen + sin(baseAngle + pi / 2) * (sway + curl) * 0.3;
+        if (j == 0) { tentPath.moveTo(tx, ty); }
+        else { tentPath.lineTo(tx, ty); }
+      }
+      final tAlpha = (0.06 + seed * 0.08 + hold * 0.14).clamp(0.0, 1.0);
+      final tColor = t % 3 == 0
+          ? _lerpHold(orchid, _gold)
+          : t % 3 == 1
+              ? _lerpHold(seafoam, _amber)
+              : _lerpHold(lilac, _warmWhite);
+      // Glow
+      canvas.drawPath(tentPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5 + hold * 2.5
+        ..color = tColor.withValues(alpha: tAlpha * 0.25)
         ..strokeCap = StrokeCap.round);
-      // White-hot tip
-      if (field > 0.4) {
-        canvas.drawCircle(Offset(tx, ty), 1.2 + field * 2.0 + hold * 1.5,
-            Paint()..color = _lerpHold(hotWhite, _warmWhite)
-                .withValues(alpha: sAlpha * 0.75));
+      // Core line
+      canvas.drawPath(tentPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0 + hold * 0.8
+        ..color = _lerpHold(bellCore, _warmWhite).withValues(alpha: tAlpha * 0.6)
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // BIO-LUMINESCENT PULSES — bright dots traveling down tentacles
+    for (int i = 0; i < 10; i++) {
+      final tIdx = i % 7;
+      final baseAngle = (tIdx / 7) * pi * 1.2 + pi * 0.4;
+      final phase = (orbit * (0.4 + tRng.nextDouble() * 0.3) + i * 0.29) % 1.0;
+      final px = center.dx + cos(baseAngle) * r * 0.88 * bs +
+          sin(phase * pi * 3 + orbit * 2 + i) * r * 0.06 * phase;
+      final py = center.dy + sin(baseAngle) * r * 0.88 * bs * bellSquash +
+          phase * r * (0.5 + tRng.nextDouble() * 0.4);
+      final fadeIn = (phase * 3).clamp(0.0, 1.0);
+      final fadeOut = ((1 - phase) * 2.5).clamp(0.0, 1.0);
+      final pAlpha = (fadeIn * fadeOut * (0.20 + hold * 0.40)).clamp(0.0, 1.0);
+      if (pAlpha > 0.02) {
+        final pColor = i.isEven ? seafoam : orchid;
+        canvas.drawCircle(Offset(px, py), 2.0 + hold * 1.5, Paint()
+          ..color = _lerpHold(pColor, _gold).withValues(alpha: pAlpha * 0.30));
+        canvas.drawCircle(Offset(px, py), 0.8 + hold * 0.5, Paint()
+          ..color = _lerpHold(bellCore, _warmWhite).withValues(alpha: pAlpha));
       }
     }
 
-    // SURFACE SHIMMER — metallic reflection band that rotates
-    canvas.drawCircle(center, r * 0.92 * bs, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = r * 0.10
-      ..shader = SweepGradient(colors: [
-        Colors.transparent,
-        _lerpHold(const Color(0xFF2A2848), _amber).withValues(alpha: 0.20),
-        Colors.transparent,
-        _lerpHold(const Color(0xFF2A2848), _amber).withValues(alpha: 0.12),
-        Colors.transparent,
-      ], stops: const [0.0, 0.15, 0.4, 0.65, 1.0],
-        transform: GradientRotation(poleAngle + pi * 0.5),
-      ).createShader(Rect.fromCircle(center: center, radius: r * 0.92)));
-
-    // DIPOLE FIELD LINES — visible on hold
+    // DOME MEMBRANE RIPPLES on hold — concentric arcs across the bell
     if (hold > 0.06) {
-      for (int i = 0; i < 8; i++) {
-        final fieldPath = Path();
-        final spread = (i - 3.5) * 0.12;
-        const steps = 36;
-        for (int j = 0; j <= steps; j++) {
-          final t = j / steps;
-          final theta = poleAngle + t * pi;
-          final dipoleR = r * (1.02 + sin(t * pi) *
-              (0.25 + (i - 3.5).abs() * 0.06) * hold + spread * 0.3) * bs;
-          final pt = center + Offset(cos(theta) * dipoleR, sin(theta) * dipoleR);
-          if (j == 0) { fieldPath.moveTo(pt.dx, pt.dy); }
-          else { fieldPath.lineTo(pt.dx, pt.dy); }
-        }
-        final fAlpha = (hold * 0.18 * (1 - (i - 3.5).abs() / 5)).clamp(0.0, 1.0);
-        canvas.drawPath(fieldPath, Paint()
+      for (int i = 0; i < 3; i++) {
+        final rpPhase = (orbit * 1.5 + i * 0.33) % 1.0;
+        final rpR = r * (0.20 + rpPhase * 0.65 * hold) * bs;
+        final rpAlpha = ((1 - rpPhase) * hold * 0.18).clamp(0.0, 1.0);
+        canvas.save();
+        canvas.translate(center.dx, center.dy);
+        canvas.scale(1.0, bellSquash);
+        canvas.drawCircle(Offset.zero, rpR, Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.6 + hold * 0.6
-          ..color = _lerpHold(orchid, _gold).withValues(alpha: fAlpha)
-          ..strokeCap = StrokeCap.round);
+          ..strokeWidth = 1.2 * (1 - rpPhase) + 0.3
+          ..color = _lerpHold(orchid, _gold).withValues(alpha: rpAlpha));
+        canvas.restore();
       }
     }
 
-    // Core glow
-    final coreR = r * (0.14 + breath * 0.04 + hold * 0.22);
+    // Core heart — pulsing bioluminescent center
+    final heartbeat = sin(breath * pi * 2) * 0.5 + 0.5;
+    final coreR = r * (0.12 + heartbeat * 0.06 + hold * 0.18);
+    canvas.drawCircle(center, coreR * 2.5, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(orchid, _gold).withValues(alpha: 0.10 + heartbeat * 0.06),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: center, radius: coreR * 2.5)));
     canvas.drawCircle(center, coreR, Paint()
       ..shader = RadialGradient(colors: [
-        _lerpHold(hotWhite, _warmWhite).withValues(alpha: 0.85),
+        _lerpHold(bellCore, _warmWhite).withValues(alpha: 0.85),
         _lerpHold(orchid, _amber).withValues(alpha: 0.30),
         Colors.transparent,
-      ], stops: const [0.0, 0.4, 1.0])
+      ], stops: const [0.0, 0.45, 1.0])
           .createShader(Rect.fromCircle(center: center, radius: coreR)));
 
-    // Specular — metallic top-left highlight
-    final specR = r * 0.28;
+    // Specular
+    final specR = r * 0.26;
     final specC = center + Offset(-r * 0.16, -r * 0.22);
     canvas.drawCircle(specC, specR, Paint()
       ..shader = RadialGradient(colors: [
-        Colors.white.withValues(alpha: 0.12 + hold * 0.06),
+        Colors.white.withValues(alpha: 0.10 + hold * 0.06),
         Colors.transparent,
       ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
 
-    // SPIKE STORM on completion — all spikes fire outward then dissolve
+    // BIOLUMINESCENT SHOCKWAVE on completion
     if (flash > 0) {
-      final burstR = r * (1.0 + flash * 1.8) * bs;
-      for (int i = 0; i < 24; i++) {
-        final a = (i / 24) * 2 * pi + flash * 0.25;
-        final start = center + Offset(cos(a) * r * 0.85, sin(a) * r * 0.85);
-        final end = center + Offset(cos(a) * burstR, sin(a) * burstR);
-        final bAlpha = ((1 - flash) * 0.55).clamp(0.0, 1.0);
-        // Glow
-        canvas.drawLine(start, end, Paint()
-          ..color = _lerpHold(orchid, _gold).withValues(alpha: bAlpha * 0.3)
-          ..strokeWidth = 4.0 * (1 - flash) + 1
-          ..strokeCap = StrokeCap.round);
-        // Sharp line
-        canvas.drawLine(start, end, Paint()
-          ..color = _lerpHold(teal, _warmWhite).withValues(alpha: bAlpha)
+      // Expanding rings of bio-light
+      for (int i = 0; i < 3; i++) {
+        final ringPhase = (flash + i * 0.10).clamp(0.0, 1.0);
+        final ringR = r * (0.3 + ringPhase * 1.6) * bs;
+        final ringAlpha = ((1 - ringPhase) * 0.40).clamp(0.0, 1.0);
+        final ringColor = i == 0 ? seafoam : i == 1 ? orchid : lilac;
+        canvas.drawCircle(center, ringR, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5 * (1 - ringPhase) + 0.5
+          ..color = _lerpHold(ringColor, _gold).withValues(alpha: ringAlpha));
+      }
+      // Tentacle-like rays shooting outward
+      for (int i = 0; i < 8; i++) {
+        final rayAngle = (i / 8) * 2 * pi + flash * 0.4;
+        final rayStart = center + Offset(cos(rayAngle) * r * 0.5, sin(rayAngle) * r * 0.5);
+        final rayEnd = center + Offset(
+          cos(rayAngle) * r * (0.5 + flash * 1.8),
+          sin(rayAngle) * r * (0.5 + flash * 1.8));
+        final rayAlpha = ((1 - flash) * 0.35).clamp(0.0, 1.0);
+        canvas.drawLine(rayStart, rayEnd, Paint()
+          ..color = _lerpHold(seafoam, _warmWhite).withValues(alpha: rayAlpha)
           ..strokeWidth = 1.5 * (1 - flash) + 0.3
           ..strokeCap = StrokeCap.round);
       }
       // Central flash
-      final fR = r * (0.4 + flash * 0.6) * bs;
+      final fR = r * (0.3 + flash * 0.6) * bs;
       canvas.drawCircle(center, fR, Paint()
         ..shader = RadialGradient(colors: [
-          _lerpHold(hotWhite, _warmWhite).withValues(alpha: (1 - flash) * 0.55),
+          _lerpHold(bellCore, _warmWhite).withValues(alpha: (1 - flash) * 0.55),
           Colors.transparent,
         ]).createShader(Rect.fromCircle(center: center, radius: fR)));
     }
 
-    // Metallic rim — sweeping gradient
+    // Translucent dome rim
     canvas.drawCircle(center, r * bs, Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5 + hold * 2.0 + breath * 0.5
+      ..strokeWidth = 1.2 + hold * 1.8 + breath * 0.4
       ..shader = SweepGradient(colors: [
         _lerpHold(orchid, _gold).withValues(alpha: 0.0),
-        _lerpHold(teal, _gold).withValues(alpha: 0.14 + hold * 0.22),
-        _lerpHold(orchid, _amber).withValues(alpha: 0.06),
+        _lerpHold(seafoam, _gold).withValues(alpha: 0.12 + hold * 0.18),
+        _lerpHold(lilac, _amber).withValues(alpha: 0.05),
         _lerpHold(orchid, _gold).withValues(alpha: 0.0),
       ], stops: const [0.0, 0.3, 0.7, 1.0],
-        transform: GradientRotation(poleAngle),
+        transform: GradientRotation(orbit * 2 * pi * 0.15),
       ).createShader(Rect.fromCircle(center: center, radius: r * bs)));
   }
 
@@ -1239,553 +1270,157 @@ class _OrbPainter extends CustomPainter {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 4. PLASMA CELL (Pro) — Symbiotic Binary
-  //     Two luminous sub-orbs orbit each other inside the
-  //     sphere, connected by stretching plasma bridges.
-  //     Interference patterns shimmer where halos overlap.
-  //     On hold, the pair spirals inward and bridges multiply.
-  //     On completion, they merge in a fusion explosion.
-  //     Colors: rose-pink, electric coral, warm ivory.
+  // 4. PLASMA CELL (Pro) — Living Aurora
+  //     Northern lights trapped inside a sphere. Vertical
+  //     curtains of shifting color wave and shimmer at
+  //     different depths. Charged particles rain downward
+  //     like luminous snow. Multiple aurora bands overlap.
+  //     On hold, aurora intensifies and bands merge.
+  //     On completion, coronal mass ejection shoots ribbons.
+  //     Colors: aurora green, magenta, electric violet, ice.
   //     ★ PERFORMANCE: No MaskFilter.blur.
   // ═══════════════════════════════════════════════════════
   void _paintPlasmaCell(
       Canvas canvas, Offset center, double r, double bs) {
-    const rosePink = Color(0xFFFF6B9D);
-    const coral = Color(0xFFFF7F7F);
-    const ivory = Color(0xFFFFF5EB);
-    const deepRose = Color(0xFF200A12);
-    const hotPink = Color(0xFFFF3388);
-    const peach = Color(0xFFFFAA85);
+    const auroraGreen = Color(0xFF40FF90);
+    const auroraMagenta = Color(0xFFFF40AA);
+    const auroraViolet = Color(0xFF8844FF);
+    const iceWhite = Color(0xFFE8F4FF);
+    const deepNight = Color(0xFF020810);
 
-    // Warm aura
-    canvas.drawCircle(center, r * 1.7 * bs, Paint()
+    // Atmospheric glow — faint aurora wash
+    canvas.drawCircle(center, r * 1.8 * bs, Paint()
       ..shader = RadialGradient(colors: [
-        _lerpHold(rosePink, _amber).withValues(alpha: 0.05 + hold * 0.10),
+        _lerpHold(auroraGreen, _amber).withValues(alpha: 0.05 + hold * 0.08),
+        _lerpHold(auroraViolet, _gold).withValues(alpha: 0.02),
         Colors.transparent,
-      ]).createShader(Rect.fromCircle(center: center, radius: r * 1.7)));
+      ], stops: const [0.0, 0.5, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r * 1.8)));
 
-    // Main body — deep rose-black sphere
+    // Main body — deep arctic night sky
     canvas.drawCircle(center, r * bs, Paint()
       ..shader = RadialGradient(colors: [
-        _lerpHold(deepRose, const Color(0xFF0A0500)),
-        _lerpHold(const Color(0xFF25080F), const Color(0xFF1A0800)),
-        _lerpHold(rosePink, _amber).withValues(alpha: 0.45),
+        deepNight,
+        _lerpHold(const Color(0xFF04081A), const Color(0xFF0A0500)),
+        _lerpHold(auroraViolet, _amber).withValues(alpha: 0.30),
       ], stops: const [0.0, 0.60, 1.0])
           .createShader(Rect.fromCircle(center: center, radius: r)));
 
-    // BINARY ORBIT — two sub-orbs circling each other
-    final orbitAngle = orbit * 2 * pi * 0.18;
-    final orbitDist = r * (0.32 - hold * 0.18) * bs; // spirals inward on hold
-    final orbA = center + Offset(cos(orbitAngle) * orbitDist,
-        sin(orbitAngle) * orbitDist);
-    final orbB = center + Offset(cos(orbitAngle + pi) * orbitDist,
-        sin(orbitAngle + pi) * orbitDist);
-    final subR = r * (0.16 + breath * 0.02) * bs;
-
-    // Sub-orb halos (interference zone where they overlap glows brighter)
-    final overlap = (1.0 - (orbA - orbB).distance / (subR * 4)).clamp(0.0, 1.0);
-    for (final orb in [orbA, orbB]) {
-      final isA = orb == orbA;
-      final haloColor = isA
-          ? _lerpHold(rosePink, _gold)
-          : _lerpHold(coral, _amber);
-      // Outer halo
-      canvas.drawCircle(orb, subR * 2.5, Paint()
-        ..shader = RadialGradient(colors: [
-          haloColor.withValues(alpha: 0.12 + hold * 0.10 + overlap * 0.08),
-          haloColor.withValues(alpha: 0.04),
-          Colors.transparent,
-        ], stops: const [0.0, 0.4, 1.0])
-            .createShader(Rect.fromCircle(center: orb, radius: subR * 2.5)));
-      // Body
-      canvas.drawCircle(orb, subR, Paint()
-        ..shader = RadialGradient(colors: [
-          _lerpHold(ivory, _warmWhite).withValues(alpha: 0.75),
-          haloColor.withValues(alpha: 0.45),
-          Colors.transparent,
-        ], stops: const [0.0, 0.5, 1.0])
-            .createShader(Rect.fromCircle(center: orb, radius: subR)));
-    }
-
-    // INTERFERENCE SHIMMER — bright zone at the midpoint between orbs
-    final midPt = Offset((orbA.dx + orbB.dx) / 2, (orbA.dy + orbB.dy) / 2);
-    final interR = subR * (0.8 + overlap * 1.2 + hold * 0.5);
-    final interAlpha = (0.06 + overlap * 0.18 + hold * 0.12).clamp(0.0, 1.0);
-    canvas.drawCircle(midPt, interR, Paint()
-      ..shader = RadialGradient(colors: [
-        _lerpHold(ivory, _warmWhite).withValues(alpha: interAlpha),
-        _lerpHold(hotPink, _gold).withValues(alpha: interAlpha * 0.3),
-        Colors.transparent,
-      ]).createShader(Rect.fromCircle(center: midPt, radius: interR)));
-
-    // PLASMA BRIDGES — stretching arcs connecting the two orbs
-    final bridgeCount = 3 + (hold * 4).round();
-    for (int i = 0; i < bridgeCount; i++) {
-      final spread = (i - (bridgeCount - 1) / 2.0) * 0.12;
-      final bridgePath = Path();
-      const steps = 24;
+    // AURORA CURTAINS — vertical bands of light that wave and shimmer
+    final aRng = Random(61);
+    for (int band = 0; band < 5; band++) {
+      final bandX = (band - 2) * r * 0.32 * bs; // spread across orb
+      final bandColor = band % 3 == 0
+          ? _lerpHold(auroraGreen, _gold)
+          : band % 3 == 1
+              ? _lerpHold(auroraMagenta, _amber)
+              : _lerpHold(auroraViolet, _warmWhite);
+      final bandAlpha = (0.05 + aRng.nextDouble() * 0.04 +
+          hold * 0.12 + breath * 0.02).clamp(0.0, 1.0);
+      final curtainPath = Path();
+      const steps = 20;
       for (int j = 0; j <= steps; j++) {
         final t = j / steps;
-        // Quadratic Bezier between orbA and orbB with perpendicular offset
-        final lerped = Offset(
-          orbA.dx + (orbB.dx - orbA.dx) * t,
-          orbA.dy + (orbB.dy - orbA.dy) * t,
-        );
-        // Perpendicular bulge — each bridge has different curvature
-        final perpAngle = orbitAngle + pi / 2;
-        final bulge = sin(t * pi) * r * (0.10 + spread + hold * 0.06);
-        // Add a living wave along the bridge
-        final wave = sin(t * pi * 4 + orbit * 8 + i * 1.5) * r * 0.03;
-        final pt = Offset(
-          lerped.dx + cos(perpAngle) * (bulge + wave),
-          lerped.dy + sin(perpAngle) * (bulge + wave),
-        );
-        if (j == 0) { bridgePath.moveTo(pt.dx, pt.dy); }
-        else { bridgePath.lineTo(pt.dx, pt.dy); }
+        // Vertical position within orb (top to bottom)
+        final y = center.dy - r * 0.75 * bs + t * r * 1.5 * bs;
+        // Horizontal wavering — organic curtain motion
+        final wave1 = sin(t * pi * 2 + orbit * 2 * pi * 0.25 + band * 1.4) *
+            r * 0.12 * (1 + hold * 0.5);
+        final wave2 = sin(t * pi * 4 + orbit * 2 * pi * 0.4 + band * 2.3) *
+            r * 0.05;
+        final x = center.dx + bandX + wave1 + wave2;
+        if (j == 0) { curtainPath.moveTo(x, y); }
+        else { curtainPath.lineTo(x, y); }
       }
-      final bColor = i.isEven
-          ? _lerpHold(rosePink, _gold)
-          : _lerpHold(peach, _amber);
-      final bAlpha = (0.08 + hold * 0.20).clamp(0.0, 1.0);
-      // Glow
-      canvas.drawPath(bridgePath, Paint()
+      // Broad glow
+      canvas.drawPath(curtainPath, Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.0 + hold * 3.0
-        ..color = bColor.withValues(alpha: bAlpha * 0.3)
+        ..strokeWidth = r * 0.18 + hold * r * 0.10
+        ..color = bandColor.withValues(alpha: bandAlpha * 0.20)
         ..strokeCap = StrokeCap.round);
-      // Core
-      canvas.drawPath(bridgePath, Paint()
+      // Inner bright core
+      canvas.drawPath(curtainPath, Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0 + hold * 1.0
-        ..color = _lerpHold(ivory, _warmWhite).withValues(alpha: bAlpha)
+        ..strokeWidth = r * 0.04 + hold * r * 0.03
+        ..color = _lerpHold(iceWhite, _warmWhite).withValues(alpha: bandAlpha * 0.40)
         ..strokeCap = StrokeCap.round);
     }
 
-    // ENERGY PARTICLES — bright motes traveling along bridges
-    for (int i = 0; i < 10; i++) {
-      final phase = (orbit * (1.2 + i * 0.13) + i * 0.37) % 1.0;
-      final t = phase;
-      final lerped = Offset(
-        orbA.dx + (orbB.dx - orbA.dx) * t,
-        orbA.dy + (orbB.dy - orbA.dy) * t,
-      );
-      final perpAngle = orbitAngle + pi / 2;
-      final bulge = sin(t * pi) * r * 0.10;
-      final pt = Offset(
-        lerped.dx + cos(perpAngle) * bulge,
-        lerped.dy + sin(perpAngle) * bulge,
-      );
-      final fadeIn = (phase * 4).clamp(0.0, 1.0);
-      final fadeOut = ((1 - phase) * 4).clamp(0.0, 1.0);
-      final pAlpha = (fadeIn * fadeOut * (0.30 + hold * 0.40)).clamp(0.0, 1.0);
+    // AURORA SHIMMER HIGHLIGHTS — bright nodes along curtain peaks
+    for (int i = 0; i < 8; i++) {
+      final band = i % 5;
+      final bandX = (band - 2) * r * 0.32 * bs;
+      final phase = (orbit * (0.3 + aRng.nextDouble() * 0.2) + i * 0.35) % 1.0;
+      final y = center.dy - r * 0.6 * bs + phase * r * 1.2 * bs;
+      final wave = sin(phase * pi * 2 + orbit * 2 * pi * 0.25 + band * 1.4) *
+          r * 0.12;
+      final x = center.dx + bandX + wave;
+      final dist = (Offset(x, y) - center).distance;
+      if (dist > r * 0.85) continue; // clip to orb
+      final nAlpha = (0.15 + hold * 0.25).clamp(0.0, 1.0);
+      final nColor = i.isEven ? auroraGreen : auroraMagenta;
+      canvas.drawCircle(Offset(x, y), 2.0 + hold * 1.5, Paint()
+        ..color = _lerpHold(nColor, _gold).withValues(alpha: nAlpha * 0.30));
+      canvas.drawCircle(Offset(x, y), 0.8 + hold * 0.5, Paint()
+        ..color = _lerpHold(iceWhite, _warmWhite).withValues(alpha: nAlpha));
+    }
+
+    // CHARGED PARTICLES — luminous snow falling downward
+    for (int i = 0; i < 14; i++) {
+      final seed = aRng.nextDouble();
+      final phase = (orbit * (0.25 + seed * 0.3) + seed * 3.0) % 1.0;
+      final xSpread = (seed - 0.5) * r * 1.4;
+      // Fall downward
+      final y = center.dy - r * 0.8 + phase * r * 1.6;
+      final x = center.dx + xSpread + sin(phase * pi * 2 + i * 1.3) * r * 0.04;
+      final dist = (Offset(x, y) - center).distance;
+      if (dist > r * 0.88) continue;
+      final fadeIn = (phase * 3).clamp(0.0, 1.0);
+      final fadeOut = ((1 - phase) * 2.5).clamp(0.0, 1.0);
+      final pAlpha = (fadeIn * fadeOut * (0.12 + hold * 0.30)).clamp(0.0, 1.0);
       if (pAlpha > 0.02) {
-        canvas.drawCircle(pt, 1.5 + hold * 1.0,
-            Paint()..color = _lerpHold(ivory, _warmWhite).withValues(alpha: pAlpha));
+        final pColor = i % 3 == 0 ? auroraGreen : i % 3 == 1 ? auroraMagenta : iceWhite;
+        canvas.drawCircle(Offset(x, y), 1.0 + seed * 1.0, Paint()
+          ..color = _lerpHold(pColor, _warmWhite).withValues(alpha: pAlpha));
       }
     }
 
-    // ORBITAL TRAIL — ghostly afterimage ring showing the orbit path
-    canvas.drawCircle(center, orbitDist, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.6 + hold * 0.8
-      ..color = _lerpHold(rosePink, _gold)
-          .withValues(alpha: 0.04 + hold * 0.08));
-
-    // TIDAL RIPPLES on hold — expanding rings from each sub-orb
-    if (hold > 0.08) {
-      for (final orb in [orbA, orbB]) {
-        for (int rp = 0; rp < 2; rp++) {
-          final rpPhase = (orbit * 1.8 + rp * 0.5) % 1.0;
-          final rpR = subR * (1.0 + rpPhase * 2.5 * hold);
-          final rpAlpha = ((1 - rpPhase) * hold * 0.22).clamp(0.0, 1.0);
-          canvas.drawCircle(orb, rpR, Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2 * (1 - rpPhase) + 0.3
-            ..color = _lerpHold(hotPink, _gold).withValues(alpha: rpAlpha));
+    // MAGNETIC FIELD ARCS on hold — curved lines showing magnetic geometry
+    if (hold > 0.06) {
+      for (int i = 0; i < 4; i++) {
+        final arcPath = Path();
+        final arcAngle = (i / 4) * pi + orbit * 2 * pi * 0.08;
+        const steps = 24;
+        for (int j = 0; j <= steps; j++) {
+          final t = j / steps;
+          final theta = -pi / 2 + t * pi; // top to bottom arc
+          final arcR = r * (0.50 + i * 0.10 + sin(t * pi) * 0.15 * hold) * bs;
+          final ax = center.dx + cos(arcAngle) * arcR * cos(theta);
+          final ay = center.dy + arcR * sin(theta);
+          if (j == 0) { arcPath.moveTo(ax, ay); }
+          else { arcPath.lineTo(ax, ay); }
         }
-      }
-    }
-
-    // Specular highlight
-    final specR = r * 0.26;
-    final specC = center + Offset(-r * 0.18, -r * 0.22);
-    canvas.drawCircle(specC, specR, Paint()
-      ..shader = RadialGradient(colors: [
-        Colors.white.withValues(alpha: 0.10 + hold * 0.06),
-        Colors.transparent,
-      ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
-
-    // FUSION EXPLOSION on completion — orbs merge at center
-    if (flash > 0) {
-      final mergeR = r * (0.2 + flash * 1.6) * bs;
-      // Brilliant merger flash
-      canvas.drawCircle(center, mergeR, Paint()
-        ..shader = RadialGradient(colors: [
-          _lerpHold(ivory, _warmWhite).withValues(alpha: (1 - flash) * 0.55),
-          _lerpHold(rosePink, _gold).withValues(alpha: (1 - flash) * 0.25),
-          Colors.transparent,
-        ]).createShader(Rect.fromCircle(center: center, radius: mergeR)));
-      // Twin expanding rings from merge point
-      for (int i = 0; i < 2; i++) {
-        final ringPhase = (flash + i * 0.12).clamp(0.0, 1.0);
-        final ringR = r * (0.3 + ringPhase * 1.5) * bs;
-        final ringAlpha = ((1 - ringPhase) * 0.40).clamp(0.0, 1.0);
-        final ringColor = i == 0 ? rosePink : coral;
-        canvas.drawCircle(center, ringR, Paint()
+        final arcAlpha = (hold * 0.16 * (1 - i * 0.15)).clamp(0.0, 1.0);
+        final arcColor = i.isEven ? auroraGreen : auroraViolet;
+        canvas.drawPath(arcPath, Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5 * (1 - ringPhase) + 0.5
-          ..color = _lerpHold(ringColor, _gold).withValues(alpha: ringAlpha));
+          ..strokeWidth = 0.6 + hold * 0.8
+          ..color = _lerpHold(arcColor, _gold).withValues(alpha: arcAlpha)
+          ..strokeCap = StrokeCap.round);
       }
     }
 
-    // Soft rose rim
-    canvas.drawCircle(center, r * bs, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5 + hold * 2.0 + breath * 0.5
-      ..color = _lerpHold(rosePink, _gold)
-          .withValues(alpha: 0.10 + hold * 0.22 + breath * 0.04));
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // 5. TOXIC CORE (Lifetime) — Gyroscopic Containment
-  //     Three luminous rings at orthogonal angles spin around
-  //     a volatile, pulsing energy core like a gyroscope.
-  //     Containment breaches create flares between ring gaps.
-  //     On hold, rings wobble and core destabilizes.
-  //     On completion, total breach then re-collapse.
-  //     Colors: molten orange, warning red, containment cyan.
-  // ═══════════════════════════════════════════════════════
-  void _paintToxicCore(
-      Canvas canvas, Offset center, double r, double bs) {
-    const moltenOrange = Color(0xFFFF6600);
-    const warningRed = Color(0xFFFF2200);
-    const containCyan = Color(0xFF00E5FF);
-    const coreWhite = Color(0xFFFFF8F0);
-
-    // Danger aura — pulsing warm glow
-    final dangerPulse = sin(breath * pi) * 0.04;
-    canvas.drawCircle(center, r * 1.8 * bs, Paint()
-      ..shader = RadialGradient(colors: [
-        _lerpHold(moltenOrange, _amber).withValues(alpha: 0.08 + hold * 0.14 + dangerPulse),
-        _lerpHold(warningRed, _gold).withValues(alpha: 0.03),
-        Colors.transparent,
-      ], stops: const [0.0, 0.45, 1.0])
-          .createShader(Rect.fromCircle(center: center, radius: r * 1.8)));
-
-    // Main body — dark containment vessel
-    canvas.drawCircle(center, r * bs, Paint()
-      ..shader = RadialGradient(colors: [
-        const Color(0xFF080808),
-        _lerpHold(const Color(0xFF100808), const Color(0xFF0A0500)),
-        _lerpHold(const Color(0xFF2A1208), _amber).withValues(alpha: 0.50),
-      ], stops: const [0.0, 0.55, 1.0])
-          .createShader(Rect.fromCircle(center: center, radius: r)));
-
-    // GYROSCOPIC RINGS — three containment rings at different angles
-    // Each ring is an ellipse (circle scaled on one axis) rotating independently
-    final wobble = hold * 0.15; // rings destabilize on hold
-    final ringConfigs = [
-      // [speed, tiltX, tiltY, color]
-      [0.20, 0.35 + wobble * sin(orbit * 5), 1.0, containCyan],
-      [0.14, 1.0, 0.30 + wobble * cos(orbit * 4.3), moltenOrange],
-      [0.17, 0.70 + wobble * sin(orbit * 6.1), 0.70 + wobble * cos(orbit * 3.7), warningRed],
-    ];
-
-    for (int ring = 0; ring < 3; ring++) {
-      final speed = ringConfigs[ring][0] as double;
-      final scaleX = ringConfigs[ring][1] as double;
-      final scaleY = ringConfigs[ring][2] as double;
-      final ringColor = ringConfigs[ring][3] as Color;
-      final rotation = orbit * 2 * pi * speed + ring * pi / 3;
-
-      final ringR = r * (0.82 + ring * 0.04) * bs;
-      final ringAlpha = (0.18 + hold * 0.28 + breath * 0.04).clamp(0.0, 1.0);
-      final ringWidth = 1.2 + hold * 1.8;
-
-      canvas.save();
-      canvas.translate(center.dx, center.dy);
-      canvas.rotate(rotation);
-      canvas.scale(scaleX, scaleY);
-
-      // Glow ring
-      canvas.drawCircle(Offset.zero, ringR, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = ringWidth + 4.0
-        ..color = _lerpHold(ringColor, _gold).withValues(alpha: ringAlpha * 0.20));
-      // Sharp ring
-      canvas.drawCircle(Offset.zero, ringR, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = ringWidth
-        ..color = _lerpHold(ringColor, _gold).withValues(alpha: ringAlpha));
-
-      // Ring nodes — bright points at cardinal positions
-      for (int n = 0; n < 4; n++) {
-        final nodeAngle = (n / 4) * 2 * pi;
-        final nodePos = Offset(cos(nodeAngle) * ringR, sin(nodeAngle) * ringR);
-        canvas.drawCircle(nodePos, 2.0 + hold * 1.5, Paint()
-          ..color = _lerpHold(coreWhite, _warmWhite).withValues(alpha: ringAlpha * 0.7));
-      }
-
-      canvas.restore();
-    }
-
-    // CONTAINMENT BREACHES — energy flares escaping between ring gaps
-    final breachCount = 4 + (hold * 8).round();
-    final bRng = Random(42);
-    for (int i = 0; i < breachCount; i++) {
-      final bAngle = (i / breachCount) * 2 * pi + orbit * 1.3 + bRng.nextDouble();
-      final bPhase = (orbit * (0.8 + bRng.nextDouble() * 0.6) + i * 0.31) % 1.0;
-      final bDist = r * (0.80 + bPhase * 0.5 * (0.3 + hold * 0.7)) * bs;
-      final bPos = center + Offset(cos(bAngle) * bDist, sin(bAngle) * bDist);
-      final fadeIn = (bPhase * 3).clamp(0.0, 1.0);
-      final fadeOut = ((1 - bPhase) * 2.5).clamp(0.0, 1.0);
-      final bAlpha = (fadeIn * fadeOut * (0.10 + hold * 0.50)).clamp(0.0, 1.0);
-      if (bAlpha > 0.02) {
-        // Flare glow
-        canvas.drawCircle(bPos, 3.0 + hold * 2.5, Paint()
-          ..color = _lerpHold(moltenOrange, _gold).withValues(alpha: bAlpha * 0.25));
-        // Bright spark
-        canvas.drawCircle(bPos, 1.0 + bRng.nextDouble() * 1.5, Paint()
-          ..color = _lerpHold(coreWhite, _warmWhite).withValues(alpha: bAlpha));
-      }
-    }
-
-    // VOLATILE CORE — pulsing dangerously, bigger pulse on hold
-    final coreR = r * (0.18 + breath * 0.05 + hold * 0.22 + dangerPulse * 2);
-    // Core outer glow
+    // Core — bright polar light source
+    final coreR = r * (0.10 + breath * 0.04 + hold * 0.16);
     canvas.drawCircle(center, coreR * 2.5, Paint()
       ..shader = RadialGradient(colors: [
-        _lerpHold(moltenOrange, _gold).withValues(alpha: 0.15 + hold * 0.12),
-        _lerpHold(warningRed, _amber).withValues(alpha: 0.05),
+        _lerpHold(auroraGreen, _gold).withValues(alpha: 0.08 + hold * 0.06),
         Colors.transparent,
       ]).createShader(Rect.fromCircle(center: center, radius: coreR * 2.5)));
-    // Core body
     canvas.drawCircle(center, coreR, Paint()
       ..shader = RadialGradient(colors: [
-        _lerpHold(coreWhite, _warmWhite).withValues(alpha: 0.90),
-        _lerpHold(moltenOrange, _gold).withValues(alpha: 0.50),
-        Colors.transparent,
-      ], stops: const [0.0, 0.45, 1.0])
-          .createShader(Rect.fromCircle(center: center, radius: coreR)));
-
-    // Specular
-    final specR = r * 0.22;
-    final specC = center + Offset(-r * 0.18, -r * 0.22);
-    canvas.drawCircle(specC, specR, Paint()
-      ..shader = RadialGradient(colors: [
-        Colors.white.withValues(alpha: 0.08 + hold * 0.05),
-        Colors.transparent,
-      ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
-
-    // WARNING PULSE RINGS on hold — concentric alarm waves
-    if (hold > 0.06) {
-      for (int i = 0; i < 3; i++) {
-        final pulsePhase = (orbit * 1.8 + i * 0.33) % 1.0;
-        final pulseR = r * (0.25 + pulsePhase * 0.65 * hold) * bs;
-        final pulseAlpha = ((1 - pulsePhase) * hold * 0.25).clamp(0.0, 1.0);
-        final pulseColor = i == 1 ? containCyan : warningRed;
-        canvas.drawCircle(center, pulseR, Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5 * (1 - pulsePhase) + 0.3
-          ..color = _lerpHold(pulseColor, _gold).withValues(alpha: pulseAlpha));
-      }
-    }
-
-    // TOTAL BREACH on completion — rings explode outward, core flashes
-    if (flash > 0) {
-      // Expanding containment rings shatter outward
-      for (int ring = 0; ring < 3; ring++) {
-        final shatterR = r * (0.85 + flash * 1.5 + ring * 0.1) * bs;
-        final shatterAlpha = ((1 - flash) * 0.45).clamp(0.0, 1.0);
-        final shatterColor = ring == 0 ? containCyan : ring == 1 ? moltenOrange : warningRed;
-        canvas.drawCircle(center, shatterR, Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5 * (1 - flash) + 0.3
-          ..color = _lerpHold(shatterColor, _gold).withValues(alpha: shatterAlpha));
-      }
-      // Core energy burst
-      final burstR = r * (0.3 + flash * 1.2) * bs;
-      canvas.drawCircle(center, burstR, Paint()
-        ..shader = RadialGradient(colors: [
-          _lerpHold(coreWhite, _warmWhite).withValues(alpha: (1 - flash) * 0.60),
-          _lerpHold(moltenOrange, _gold).withValues(alpha: (1 - flash) * 0.25),
-          Colors.transparent,
-        ]).createShader(Rect.fromCircle(center: center, radius: burstR)));
-    }
-
-    // Containment rim — alternating cyan/orange sweep
-    canvas.drawCircle(center, r * bs, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8 + hold * 2.5
-      ..shader = SweepGradient(colors: [
-        _lerpHold(containCyan, _gold).withValues(alpha: 0.0),
-        _lerpHold(containCyan, _gold).withValues(alpha: 0.18 + hold * 0.25),
-        _lerpHold(moltenOrange, _amber).withValues(alpha: 0.08),
-        _lerpHold(containCyan, _gold).withValues(alpha: 0.0),
-      ], stops: const [0.0, 0.3, 0.7, 1.0],
-        transform: GradientRotation(orbit * 2 * pi * 0.35),
-      ).createShader(Rect.fromCircle(center: center, radius: r * bs)));
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // 6. CRYSTAL ASCEND (Lifetime) — Sacred Geometry Bloom
-  //     Nested rotating polyhedra (triangle, square, pentagon,
-  //     hexagon) at different scales and speeds, each with
-  //     prismatic edges. Vertices glow and connect with light
-  //     beams. On hold, geometry unfolds/flowers outward.
-  //     On completion, all vertices burst with rainbow rays.
-  //     Colors: prismatic spectrum, ice-blue, violet, gold.
-  // ═══════════════════════════════════════════════════════
-  void _paintCrystalAscend(
-      Canvas canvas, Offset center, double r, double bs) {
-    const iceBlue = Color(0xFF87CEEB);
-    const crystalViolet = Color(0xFF9370DB);
-    const prismGold = Color(0xFFFFD700);
-    const deepCrystal = Color(0xFF0A1020);
-
-    // Prismatic aura — hue-shifting
-    final hueBase = orbit * 2 * pi;
-    final auraColor = HSLColor.fromAHSL(1, (hueBase * 180 / pi) % 360, 0.55, 0.60).toColor();
-    canvas.drawCircle(center, r * 1.7 * bs, Paint()
-      ..shader = RadialGradient(colors: [
-        _lerpHold(auraColor, _amber).withValues(alpha: 0.06 + hold * 0.12),
-        Colors.transparent,
-      ]).createShader(Rect.fromCircle(center: center, radius: r * 1.7)));
-
-    // Main body — deep crystal with glassy edge
-    canvas.drawCircle(center, r * bs, Paint()
-      ..shader = RadialGradient(colors: [
-        _lerpHold(deepCrystal, const Color(0xFF0A0500)),
-        _lerpHold(const Color(0xFF141830), const Color(0xFF1A0800)),
-        _lerpHold(iceBlue, _amber).withValues(alpha: 0.55),
-      ], stops: const [0.0, 0.55, 1.0])
-          .createShader(Rect.fromCircle(center: center, radius: r)));
-
-    // NESTED POLYHEDRA — 4 shapes rotating independently
-    // [sides, speed, scale, hueOffset]
-    final shapes = [
-      [3, 0.22, 0.28 + hold * 0.08, 0.0],    // triangle (innermost)
-      [4, -0.16, 0.42 + hold * 0.10, 90.0],   // square
-      [5, 0.12, 0.58 + hold * 0.12, 180.0],   // pentagon
-      [6, -0.09, 0.76 + hold * 0.14, 270.0],  // hexagon (outermost)
-    ];
-
-    // Collect all vertex positions for inter-shape light beams
-    final allVertices = <Offset>[];
-    final allHues = <double>[];
-
-    for (int s = 0; s < shapes.length; s++) {
-      final sides = (shapes[s][0] as int);
-      final speed = shapes[s][1] as double;
-      final scale = shapes[s][2] as double;
-      final hueOff = shapes[s][3] as double;
-
-      final rotation = orbit * 2 * pi * speed + breath * 0.15;
-      final shapeR = r * scale * bs;
-      final shapeAlpha = (0.15 + hold * 0.25 + breath * 0.03).clamp(0.0, 1.0);
-
-      final path = Path();
-      final vertices = <Offset>[];
-      for (int v = 0; v < sides; v++) {
-        final va = (v / sides) * 2 * pi + rotation;
-        final vp = center + Offset(cos(va) * shapeR, sin(va) * shapeR);
-        vertices.add(vp);
-        allVertices.add(vp);
-        final vHue = (hueOff + v * (360 / sides) + orbit * 60) % 360;
-        allHues.add(vHue);
-        if (v == 0) { path.moveTo(vp.dx, vp.dy); }
-        else { path.lineTo(vp.dx, vp.dy); }
-      }
-      path.close();
-
-      // Edge hue — shifts per shape
-      final edgeHue = (hueOff + orbit * 90) % 360;
-      final edgeColor = HSLColor.fromAHSL(1, edgeHue, 0.65, 0.65).toColor();
-
-      // Fill — very subtle prismatic
-      canvas.drawPath(path, Paint()
-        ..color = _lerpHold(edgeColor, _gold).withValues(alpha: shapeAlpha * 0.08));
-
-      // Edge glow
-      canvas.drawPath(path, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5 + hold * 2.0
-        ..color = _lerpHold(edgeColor, _gold).withValues(alpha: shapeAlpha * 0.25)
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round);
-      // Sharp edge
-      canvas.drawPath(path, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.8 + hold * 0.8
-        ..color = _lerpHold(edgeColor, _gold).withValues(alpha: shapeAlpha)
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round);
-
-      // Vertex dots — bright prismatic points
-      for (int v = 0; v < vertices.length; v++) {
-        final vHue = (hueOff + v * (360 / sides) + orbit * 60) % 360;
-        final vColor = HSLColor.fromAHSL(1, vHue, 0.7, 0.75).toColor();
-        // Glow
-        canvas.drawCircle(vertices[v], 3.0 + hold * 2.0, Paint()
-          ..color = _lerpHold(vColor, _gold).withValues(alpha: shapeAlpha * 0.30));
-        // Bright dot
-        canvas.drawCircle(vertices[v], 1.2 + hold * 0.8, Paint()
-          ..color = _lerpHold(vColor, _warmWhite).withValues(alpha: shapeAlpha * 0.85));
-      }
-    }
-
-    // INTER-SHAPE LIGHT BEAMS — connect nearest vertices between layers
-    if (hold > 0.04) {
-      final beamAlpha = (hold * 0.22).clamp(0.0, 1.0);
-      // Connect vertices of adjacent shapes
-      int idx = 0;
-      for (int s = 0; s < shapes.length - 1; s++) {
-        final sides1 = shapes[s][0] as int;
-        final sides2 = shapes[s + 1][0] as int;
-        final start1 = idx;
-        final start2 = idx + sides1;
-        // Connect each vertex of inner shape to nearest vertex of outer shape
-        for (int v = 0; v < sides1; v++) {
-          final from = allVertices[start1 + v];
-          // Find nearest vertex in next shape
-          var minDist = double.infinity;
-          var nearest = start2;
-          for (int w = 0; w < sides2; w++) {
-            final d = (from - allVertices[start2 + w]).distance;
-            if (d < minDist) { minDist = d; nearest = start2 + w; }
-          }
-          final to = allVertices[nearest];
-          final beamHue = (allHues[start1 + v] + allHues[nearest]) / 2;
-          final beamColor = HSLColor.fromAHSL(1, beamHue % 360, 0.6, 0.70).toColor();
-          canvas.drawLine(from, to, Paint()
-            ..color = _lerpHold(beamColor, _gold).withValues(alpha: beamAlpha)
-            ..strokeWidth = 0.5 + hold * 0.6
-            ..strokeCap = StrokeCap.round);
-        }
-        idx += sides1;
-      }
-    }
-
-    // ORBITING PRISMATIC MOTES — tiny spectrum particles circling the geometry
-    final gRng = Random(88);
-    for (int i = 0; i < 16; i++) {
-      final seed = gRng.nextDouble();
-      final moteAngle = orbit * 2 * pi * (0.15 + seed * 0.12) + i * (2 * pi / 16);
-      final moteDist = r * (0.30 + seed * 0.50 + sin(orbit * 4 + i) * 0.05) * bs;
-      final motePos = center + Offset(cos(moteAngle) * moteDist, sin(moteAngle) * moteDist);
-      final moteHue = (seed * 360 + orbit * 120) % 360;
-      final moteColor = HSLColor.fromAHSL(1, moteHue, 0.65, 0.75).toColor();
-      final moteAlpha = (0.15 + hold * 0.30 + breath * 0.05).clamp(0.0, 1.0);
-      canvas.drawCircle(motePos, 1.0 + seed * 1.0, Paint()
-        ..color = _lerpHold(moteColor, _gold).withValues(alpha: moteAlpha));
-    }
-
-    // Core — white with prismatic tint
-    final coreR = r * (0.14 + breath * 0.04 + hold * 0.18);
-    canvas.drawCircle(center, coreR, Paint()
-      ..shader = RadialGradient(colors: [
-        Colors.white.withValues(alpha: 0.85),
-        _lerpHold(auraColor, _gold).withValues(alpha: 0.30),
+        _lerpHold(iceWhite, _warmWhite).withValues(alpha: 0.80),
+        _lerpHold(auroraGreen, _amber).withValues(alpha: 0.30),
         Colors.transparent,
       ], stops: const [0.0, 0.45, 1.0])
           .createShader(Rect.fromCircle(center: center, radius: coreR)));
@@ -1795,60 +1430,534 @@ class _OrbPainter extends CustomPainter {
     final specC = center + Offset(-r * 0.16, -r * 0.20);
     canvas.drawCircle(specC, specR, Paint()
       ..shader = RadialGradient(colors: [
-        Colors.white.withValues(alpha: 0.14 + hold * 0.08),
+        Colors.white.withValues(alpha: 0.10 + hold * 0.06),
         Colors.transparent,
       ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
 
-    // RAINBOW VERTEX BURST on completion — all vertices shoot rays outward
+    // CORONAL MASS EJECTION on completion — aurora ribbons erupt outward
     if (flash > 0) {
-      for (int i = 0; i < allVertices.length; i++) {
-        final v = allVertices[i];
-        final dir = v - center;
-        final dirLen = dir.distance;
-        if (dirLen < 0.01) continue;
-        final norm = dir / dirLen;
-        final rayLen = r * (0.3 + flash * 1.2) * bs;
-        final rayEnd = v + norm * rayLen;
-        final rayHue = allHues[i];
-        final rayColor = HSLColor.fromAHSL(1, rayHue % 360, 0.75, 0.70).toColor();
-        final rayAlpha = ((1 - flash) * 0.50).clamp(0.0, 1.0);
-        canvas.drawLine(v, rayEnd, Paint()
-          ..color = _lerpHold(rayColor, _gold).withValues(alpha: rayAlpha)
-          ..strokeWidth = 2.0 * (1 - flash) + 0.3
+      // Ribbons shooting out in all directions
+      for (int i = 0; i < 6; i++) {
+        final ribAngle = (i / 6) * 2 * pi + flash * 0.5;
+        final ribColor = i % 3 == 0 ? auroraGreen : i % 3 == 1 ? auroraMagenta : auroraViolet;
+        final ribPath = Path();
+        const steps = 16;
+        for (int j = 0; j <= steps; j++) {
+          final t = j / steps;
+          final dist = r * (0.3 + t * flash * 1.6);
+          final wave = sin(t * pi * 3 + i * 1.5) * r * 0.08 * (1 - flash);
+          final rx = center.dx + cos(ribAngle) * dist + cos(ribAngle + pi / 2) * wave;
+          final ry = center.dy + sin(ribAngle) * dist + sin(ribAngle + pi / 2) * wave;
+          if (j == 0) { ribPath.moveTo(rx, ry); }
+          else { ribPath.lineTo(rx, ry); }
+        }
+        final ribAlpha = ((1 - flash) * 0.40).clamp(0.0, 1.0);
+        canvas.drawPath(ribPath, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0 * (1 - flash) + 0.5
+          ..color = _lerpHold(ribColor, _gold).withValues(alpha: ribAlpha * 0.30)
+          ..strokeCap = StrokeCap.round);
+        canvas.drawPath(ribPath, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0 * (1 - flash) + 0.3
+          ..color = _lerpHold(iceWhite, _warmWhite).withValues(alpha: ribAlpha)
           ..strokeCap = StrokeCap.round);
       }
-      // Central white flash
-      final burstR = r * (0.3 + flash * 0.7) * bs;
-      canvas.drawCircle(center, burstR, Paint()
+      // Central flash
+      final fR = r * (0.3 + flash * 0.5) * bs;
+      canvas.drawCircle(center, fR, Paint()
         ..shader = RadialGradient(colors: [
-          Colors.white.withValues(alpha: (1 - flash) * 0.55),
+          _lerpHold(iceWhite, _warmWhite).withValues(alpha: (1 - flash) * 0.55),
           Colors.transparent,
-        ]).createShader(Rect.fromCircle(center: center, radius: burstR)));
+        ]).createShader(Rect.fromCircle(center: center, radius: fR)));
+    }
+
+    // Aurora rim — shifting green/magenta sweep
+    canvas.drawCircle(center, r * bs, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2 + hold * 1.8 + breath * 0.4
+      ..shader = SweepGradient(colors: [
+        _lerpHold(auroraGreen, _gold).withValues(alpha: 0.0),
+        _lerpHold(auroraGreen, _gold).withValues(alpha: 0.12 + hold * 0.18),
+        _lerpHold(auroraMagenta, _amber).withValues(alpha: 0.06),
+        _lerpHold(auroraGreen, _gold).withValues(alpha: 0.0),
+      ], stops: const [0.0, 0.3, 0.65, 1.0],
+        transform: GradientRotation(orbit * 2 * pi * 0.20),
+      ).createShader(Rect.fromCircle(center: center, radius: r * bs)));
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 5. TOXIC CORE (Lifetime) — Volcanic Caldera
+  //     A molten lava lake viewed from above. Churning magma
+  //     with cooling dark crust that cracks to reveal glowing
+  //     orange beneath. Tectonic plates drift apart slowly.
+  //     Eruption sparks rise from crack lines. On hold, crust
+  //     breaks further and magma brightens. On completion,
+  //     full eruption — lava fountain outward burst.
+  //     Colors: molten orange, deep red, obsidian, hot white.
+  // ═══════════════════════════════════════════════════════
+  void _paintToxicCore(
+      Canvas canvas, Offset center, double r, double bs) {
+    const moltenOrange = Color(0xFFFF6600);
+    const deepRed = Color(0xFFCC2200);
+    const obsidian = Color(0xFF1A1008);
+    const hotWhite = Color(0xFFFFF0D0);
+
+    // Heat shimmer aura
+    final heatPulse = sin(breath * pi) * 0.03;
+    canvas.drawCircle(center, r * 1.8 * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(moltenOrange, _amber).withValues(alpha: 0.06 + hold * 0.12 + heatPulse),
+        _lerpHold(deepRed, _gold).withValues(alpha: 0.02),
+        Colors.transparent,
+      ], stops: const [0.0, 0.5, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r * 1.8)));
+
+    // Main body — dark obsidian crust over magma
+    canvas.drawCircle(center, r * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(obsidian, const Color(0xFF0A0500)),
+        _lerpHold(const Color(0xFF201008), const Color(0xFF180800)),
+        _lerpHold(moltenOrange, _amber).withValues(alpha: 0.35),
+      ], stops: const [0.0, 0.60, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r)));
+
+    // MAGMA GLOW UNDERNEATH — hot spots visible through crust
+    final mRng = Random(53);
+    for (int i = 0; i < 6; i++) {
+      final seed = mRng.nextDouble();
+      final magmaAngle = (i / 6) * 2 * pi + orbit * 2 * pi * 0.05 + seed * 0.5;
+      final magmaDist = r * (0.20 + seed * 0.45) * bs;
+      final magmaPos = center + Offset(
+        cos(magmaAngle) * magmaDist,
+        sin(magmaAngle) * magmaDist);
+      final magmaR = r * (0.08 + seed * 0.12 + hold * 0.06);
+      final magmaPulse = sin(breath * pi * 2 + i * 1.2) * 0.5 + 0.5;
+      final magmaAlpha = (0.06 + magmaPulse * 0.10 + hold * 0.18).clamp(0.0, 1.0);
+      canvas.drawCircle(magmaPos, magmaR, Paint()
+        ..shader = RadialGradient(colors: [
+          _lerpHold(hotWhite, _warmWhite).withValues(alpha: magmaAlpha * 0.7),
+          _lerpHold(moltenOrange, _gold).withValues(alpha: magmaAlpha * 0.4),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: magmaPos, radius: magmaR)));
+    }
+
+    // TECTONIC CRACKS — dark lines that reveal glowing magma beneath
+    for (int i = 0; i < 8; i++) {
+      final crackPath = Path();
+      final startAngle = (i / 8) * 2 * pi + orbit * 2 * pi * 0.03;
+      final startDist = r * (0.10 + mRng.nextDouble() * 0.15);
+      final endDist = r * (0.60 + mRng.nextDouble() * 0.28 + hold * 0.12);
+      const steps = 12;
+      for (int j = 0; j <= steps; j++) {
+        final t = j / steps;
+        final dist = startDist + (endDist - startDist) * t;
+        // Jagged crack path — irregular zigzag
+        final jag = sin(t * pi * 5 + i * 2.3 + orbit * 1.5) * r * 0.04 * (1 + hold * 0.5);
+        final angle = startAngle + jag / dist;
+        final pt = center + Offset(cos(angle) * dist * bs, sin(angle) * dist * bs);
+        if (j == 0) { crackPath.moveTo(pt.dx, pt.dy); }
+        else { crackPath.lineTo(pt.dx, pt.dy); }
+      }
+      final crackAlpha = (0.10 + hold * 0.25 + breath * 0.03).clamp(0.0, 1.0);
+      // Magma glow through crack
+      canvas.drawPath(crackPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0 + hold * 3.0
+        ..color = _lerpHold(moltenOrange, _gold).withValues(alpha: crackAlpha * 0.30)
+        ..strokeCap = StrokeCap.round);
+      // Bright crack core
+      canvas.drawPath(crackPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8 + hold * 1.2
+        ..color = _lerpHold(hotWhite, _warmWhite).withValues(alpha: crackAlpha * 0.6)
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // DRIFTING TECTONIC PLATES — dark arcs of cooled crust
+    for (int i = 0; i < 4; i++) {
+      final plateAngle = (i / 4) * 2 * pi + orbit * 2 * pi * 0.02;
+      final plateR = r * (0.55 + i * 0.08) * bs;
+      final arcStart = plateAngle - 0.4;
+      final arcSweep = 0.6 + mRng.nextDouble() * 0.3;
+      final platePath = Path();
+      const steps = 16;
+      for (int j = 0; j <= steps; j++) {
+        final a = arcStart + (j / steps) * arcSweep;
+        final pr = plateR + sin(j * 0.8 + orbit * 3) * r * 0.02;
+        final pt = center + Offset(cos(a) * pr, sin(a) * pr);
+        if (j == 0) { platePath.moveTo(pt.dx, pt.dy); }
+        else { platePath.lineTo(pt.dx, pt.dy); }
+      }
+      final plateAlpha = (0.08 + hold * 0.12).clamp(0.0, 1.0);
+      canvas.drawPath(platePath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * 0.06
+        ..color = _lerpHold(obsidian, const Color(0xFF0A0500))
+            .withValues(alpha: plateAlpha)
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // ERUPTION SPARKS — bright particles rising from cracks
+    for (int i = 0; i < 12; i++) {
+      final seed = mRng.nextDouble();
+      final phase = (orbit * (0.4 + seed * 0.3) + seed * 3.0) % 1.0;
+      final sparkAngle = (i / 12) * 2 * pi + seed * 0.5;
+      final sparkDist = r * (0.3 + seed * 0.4) * bs;
+      // Rise outward from crack positions
+      final sx = center.dx + cos(sparkAngle) * (sparkDist + phase * r * 0.5);
+      final sy = center.dy + sin(sparkAngle) * (sparkDist + phase * r * 0.5)
+          - phase * r * 0.3; // float upward
+      final dist = (Offset(sx, sy) - center).distance;
+      if (dist > r * 1.3) continue;
+      final fadeIn = (phase * 3).clamp(0.0, 1.0);
+      final fadeOut = ((1 - phase) * 2.0).clamp(0.0, 1.0);
+      final sAlpha = (fadeIn * fadeOut * (0.10 + hold * 0.40)).clamp(0.0, 1.0);
+      if (sAlpha > 0.02) {
+        final sColor = i.isEven ? moltenOrange : hotWhite;
+        canvas.drawCircle(Offset(sx, sy), 1.5 + seed * 1.5, Paint()
+          ..color = _lerpHold(sColor, _gold).withValues(alpha: sAlpha * 0.30));
+        canvas.drawCircle(Offset(sx, sy), 0.6 + seed * 0.6, Paint()
+          ..color = _lerpHold(hotWhite, _warmWhite).withValues(alpha: sAlpha));
+      }
+    }
+
+    // HEAT DISTORTION RINGS on hold
+    if (hold > 0.06) {
+      for (int i = 0; i < 3; i++) {
+        final rpPhase = (orbit * 1.5 + i * 0.33) % 1.0;
+        final rpR = r * (0.20 + rpPhase * 0.70 * hold) * bs;
+        final rpAlpha = ((1 - rpPhase) * hold * 0.20).clamp(0.0, 1.0);
+        final rpColor = i == 1 ? deepRed : moltenOrange;
+        canvas.drawCircle(center, rpR, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5 * (1 - rpPhase) + 0.3
+          ..color = _lerpHold(rpColor, _gold).withValues(alpha: rpAlpha));
+      }
+    }
+
+    // Volatile core — the magma heart
+    final coreR = r * (0.14 + breath * 0.05 + hold * 0.20 + heatPulse * 2);
+    canvas.drawCircle(center, coreR * 2.5, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(moltenOrange, _gold).withValues(alpha: 0.12 + hold * 0.10),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: center, radius: coreR * 2.5)));
+    canvas.drawCircle(center, coreR, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(hotWhite, _warmWhite).withValues(alpha: 0.90),
+        _lerpHold(moltenOrange, _gold).withValues(alpha: 0.45),
+        Colors.transparent,
+      ], stops: const [0.0, 0.45, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: coreR)));
+
+    // Specular
+    final specR = r * 0.22;
+    final specC = center + Offset(-r * 0.16, -r * 0.20);
+    canvas.drawCircle(specC, specR, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: 0.08 + hold * 0.05),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
+
+    // FULL ERUPTION on completion — lava fountain burst
+    if (flash > 0) {
+      // Radial lava streams
+      for (int i = 0; i < 10; i++) {
+        final eAngle = (i / 10) * 2 * pi + flash * 0.3;
+        final eStart = center + Offset(cos(eAngle) * r * 0.3, sin(eAngle) * r * 0.3);
+        final eEnd = center + Offset(
+          cos(eAngle) * r * (0.3 + flash * 1.8),
+          sin(eAngle) * r * (0.3 + flash * 1.8));
+        final eAlpha = ((1 - flash) * 0.45).clamp(0.0, 1.0);
+        canvas.drawLine(eStart, eEnd, Paint()
+          ..color = _lerpHold(moltenOrange, _gold).withValues(alpha: eAlpha * 0.35)
+          ..strokeWidth = 3.0 * (1 - flash) + 0.5
+          ..strokeCap = StrokeCap.round);
+        canvas.drawLine(eStart, eEnd, Paint()
+          ..color = _lerpHold(hotWhite, _warmWhite).withValues(alpha: eAlpha)
+          ..strokeWidth = 1.0 * (1 - flash) + 0.3
+          ..strokeCap = StrokeCap.round);
+      }
+      // Expanding heat wave
+      for (int i = 0; i < 2; i++) {
+        final ringPhase = (flash + i * 0.12).clamp(0.0, 1.0);
+        final ringR = r * (0.3 + ringPhase * 1.5) * bs;
+        final ringAlpha = ((1 - ringPhase) * 0.35).clamp(0.0, 1.0);
+        canvas.drawCircle(center, ringR, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5 * (1 - ringPhase) + 0.5
+          ..color = _lerpHold(moltenOrange, _gold).withValues(alpha: ringAlpha));
+      }
+      // Central eruption flash
+      final fR = r * (0.3 + flash * 0.7) * bs;
+      canvas.drawCircle(center, fR, Paint()
+        ..shader = RadialGradient(colors: [
+          _lerpHold(hotWhite, _warmWhite).withValues(alpha: (1 - flash) * 0.60),
+          _lerpHold(moltenOrange, _gold).withValues(alpha: (1 - flash) * 0.25),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: center, radius: fR)));
+    }
+
+    // Magma rim — deep orange/red sweep
+    canvas.drawCircle(center, r * bs, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5 + hold * 2.2
+      ..shader = SweepGradient(colors: [
+        _lerpHold(moltenOrange, _gold).withValues(alpha: 0.0),
+        _lerpHold(moltenOrange, _gold).withValues(alpha: 0.14 + hold * 0.22),
+        _lerpHold(deepRed, _amber).withValues(alpha: 0.06),
+        _lerpHold(moltenOrange, _gold).withValues(alpha: 0.0),
+      ], stops: const [0.0, 0.3, 0.7, 1.0],
+        transform: GradientRotation(orbit * 2 * pi * 0.12),
+      ).createShader(Rect.fromCircle(center: center, radius: r * bs)));
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 6. CRYSTAL ASCEND (Lifetime) — Ascending Double Helix
+  //     Two intertwined helical strands of crystalline light
+  //     spiral upward through the orb like luminous DNA.
+  //     Prismatic nodes at crossover points refract light
+  //     into rainbow beams. The helix rotates slowly. On
+  //     hold the helix tightens and nodes brighten. On
+  //     completion all nodes shatter into ascending diamond
+  //     particles. Colors: prismatic spectrum, ice, violet.
+  // ═══════════════════════════════════════════════════════
+  void _paintCrystalAscend(
+      Canvas canvas, Offset center, double r, double bs) {
+    const iceBlue = Color(0xFF87CEEB);
+    const crystalViolet = Color(0xFF9370DB);
+    const prismGold = Color(0xFFFFD700);
+    const deepCrystal = Color(0xFF0A1020);
+    const diamondWhite = Color(0xFFF0F4FF);
+
+    // Prismatic aura — hue-shifting
+    final hueBase = orbit * 2 * pi;
+    final auraColor = HSLColor.fromAHSL(1, (hueBase * 180 / pi) % 360, 0.55, 0.60).toColor();
+    canvas.drawCircle(center, r * 1.7 * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(auraColor, _amber).withValues(alpha: 0.05 + hold * 0.10),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: center, radius: r * 1.7)));
+
+    // Main body — deep crystal void
+    canvas.drawCircle(center, r * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(deepCrystal, const Color(0xFF0A0500)),
+        _lerpHold(const Color(0xFF141830), const Color(0xFF1A0800)),
+        _lerpHold(iceBlue, _amber).withValues(alpha: 0.45),
+      ], stops: const [0.0, 0.55, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r)));
+
+    // DOUBLE HELIX — two intertwined strands spiraling vertically
+    final helixRotation = orbit * 2 * pi * 0.15;
+    final helixTightness = 1.0 + hold * 0.6; // tightens on hold
+    const helixSteps = 32;
+    final nodePositions = <Offset>[];
+    final nodeHues = <double>[];
+
+    for (int strand = 0; strand < 2; strand++) {
+      final strandPath = Path();
+      final phaseOff = strand * pi; // 180° offset between strands
+      final strandColor = strand == 0
+          ? _lerpHold(iceBlue, _gold)
+          : _lerpHold(crystalViolet, _amber);
+      final strandAlpha = (0.10 + hold * 0.20 + breath * 0.03).clamp(0.0, 1.0);
+
+      for (int j = 0; j <= helixSteps; j++) {
+        final t = j / helixSteps;
+        // Vertical position (bottom to top within orb)
+        final y = center.dy + r * 0.75 * bs - t * r * 1.5 * bs;
+        // Helical x-offset: sinusoidal with tightening
+        final helixAngle = t * pi * 3 * helixTightness + helixRotation + phaseOff;
+        final helixRadius = r * (0.30 + sin(t * pi) * 0.15) * bs; // wider in middle
+        final x = center.dx + cos(helixAngle) * helixRadius;
+
+        if (j == 0) { strandPath.moveTo(x, y); }
+        else { strandPath.lineTo(x, y); }
+
+        // Mark crossover nodes — where strands cross (every ~half turn)
+        if (strand == 0 && j % 5 == 2 && j > 0 && j < helixSteps) {
+          nodePositions.add(Offset(center.dx, y)); // crossover at center x
+          final nodeHue = (t * 360 + orbit * 90) % 360;
+          nodeHues.add(nodeHue);
+        }
+      }
+
+      // Strand glow
+      canvas.drawPath(strandPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0 + hold * 2.5
+        ..color = strandColor.withValues(alpha: strandAlpha * 0.25)
+        ..strokeCap = StrokeCap.round);
+      // Strand core
+      canvas.drawPath(strandPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0 + hold * 0.8
+        ..color = _lerpHold(diamondWhite, _warmWhite).withValues(alpha: strandAlpha * 0.60)
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // CROSSOVER BRIDGES — horizontal rungs connecting the two strands
+    for (int j = 0; j <= helixSteps; j += 4) {
+      if (j == 0 || j >= helixSteps) continue;
+      final t = j / helixSteps;
+      final y = center.dy + r * 0.75 * bs - t * r * 1.5 * bs;
+      final helixAngle = t * pi * 3 * helixTightness + helixRotation;
+      final helixRadius = r * (0.30 + sin(t * pi) * 0.15) * bs;
+      final x1 = center.dx + cos(helixAngle) * helixRadius;
+      final x2 = center.dx + cos(helixAngle + pi) * helixRadius;
+      final bridgeHue = (t * 360 + orbit * 90) % 360;
+      final bridgeColor = HSLColor.fromAHSL(1, bridgeHue, 0.65, 0.70).toColor();
+      final bridgeAlpha = (0.08 + hold * 0.18).clamp(0.0, 1.0);
+      // Glow
+      canvas.drawLine(Offset(x1, y), Offset(x2, y), Paint()
+        ..color = _lerpHold(bridgeColor, _gold).withValues(alpha: bridgeAlpha * 0.25)
+        ..strokeWidth = 2.5 + hold * 2.0
+        ..strokeCap = StrokeCap.round);
+      // Core
+      canvas.drawLine(Offset(x1, y), Offset(x2, y), Paint()
+        ..color = _lerpHold(diamondWhite, _warmWhite).withValues(alpha: bridgeAlpha)
+        ..strokeWidth = 0.6 + hold * 0.5
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // PRISMATIC NODES — bright rainbow points at crossover positions
+    for (int i = 0; i < nodePositions.length; i++) {
+      final np = nodePositions[i];
+      final dist = (np - center).distance;
+      if (dist > r * 0.85) continue;
+      final nHue = nodeHues[i];
+      final nColor = HSLColor.fromAHSL(1, nHue, 0.70, 0.75).toColor();
+      final nAlpha = (0.20 + hold * 0.35 + breath * 0.05).clamp(0.0, 1.0);
+      // Glow
+      canvas.drawCircle(np, 3.5 + hold * 2.5, Paint()
+        ..color = _lerpHold(nColor, _gold).withValues(alpha: nAlpha * 0.25));
+      // Bright node
+      canvas.drawCircle(np, 1.5 + hold * 1.0, Paint()
+        ..color = _lerpHold(nColor, _warmWhite).withValues(alpha: nAlpha * 0.85));
+    }
+
+    // PRISMATIC LIGHT BEAMS on hold — refracted rays from nodes
+    if (hold > 0.06) {
+      for (int i = 0; i < nodePositions.length; i++) {
+        final np = nodePositions[i];
+        final dist = (np - center).distance;
+        if (dist > r * 0.80) continue;
+        // Short rays shooting left and right
+        for (int side = 0; side < 2; side++) {
+          final rayDir = side == 0 ? -1.0 : 1.0;
+          final rayLen = r * 0.20 * hold;
+          final rayEnd = np + Offset(rayDir * rayLen, 0);
+          final rayHue = (nodeHues[i] + side * 60) % 360;
+          final rayColor = HSLColor.fromAHSL(1, rayHue, 0.75, 0.70).toColor();
+          final rayAlpha = (hold * 0.25).clamp(0.0, 1.0);
+          canvas.drawLine(np, rayEnd, Paint()
+            ..color = _lerpHold(rayColor, _gold).withValues(alpha: rayAlpha)
+            ..strokeWidth = 0.5 + hold * 0.5
+            ..strokeCap = StrokeCap.round);
+        }
+      }
+    }
+
+    // ASCENDING DIAMOND PARTICLES — tiny prisms floating upward
+    final gRng = Random(88);
+    for (int i = 0; i < 12; i++) {
+      final seed = gRng.nextDouble();
+      final phase = (orbit * (0.3 + seed * 0.25) + seed * 3.0) % 1.0;
+      final xSpread = (seed - 0.5) * r * 1.0;
+      final y = center.dy + r * 0.6 - phase * r * 1.8;
+      final x = center.dx + xSpread + sin(phase * pi * 2 + i * 1.5) * r * 0.06;
+      final pDist = (Offset(x, y) - center).distance;
+      if (pDist > r * 0.88) continue;
+      final fadeIn = (phase * 3).clamp(0.0, 1.0);
+      final fadeOut = ((1 - phase) * 2.5).clamp(0.0, 1.0);
+      final pAlpha = (fadeIn * fadeOut * (0.12 + hold * 0.30)).clamp(0.0, 1.0);
+      if (pAlpha > 0.02) {
+        final pHue = (seed * 360 + orbit * 120) % 360;
+        final pColor = HSLColor.fromAHSL(1, pHue, 0.65, 0.75).toColor();
+        canvas.drawCircle(Offset(x, y), 1.0 + seed * 1.0, Paint()
+          ..color = _lerpHold(pColor, _gold).withValues(alpha: pAlpha));
+      }
+    }
+
+    // Core — white with prismatic tint
+    final coreR = r * (0.12 + breath * 0.04 + hold * 0.16);
+    canvas.drawCircle(center, coreR, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: 0.85),
+        _lerpHold(auraColor, _gold).withValues(alpha: 0.30),
+        Colors.transparent,
+      ], stops: const [0.0, 0.45, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: coreR)));
+
+    // Specular
+    final specR = r * 0.22;
+    final specC = center + Offset(-r * 0.14, -r * 0.18);
+    canvas.drawCircle(specC, specR, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: 0.12 + hold * 0.06),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
+
+    // DIAMOND SHATTER on completion — nodes burst into ascending particles
+    if (flash > 0) {
+      for (int i = 0; i < nodePositions.length; i++) {
+        final np = nodePositions[i];
+        // Expanding sparkle ring from each node
+        final burstR = r * 0.08 + flash * r * 0.5;
+        final burstAlpha = ((1 - flash) * 0.40).clamp(0.0, 1.0);
+        final burstHue = nodeHues[i];
+        final burstColor = HSLColor.fromAHSL(1, burstHue, 0.70, 0.70).toColor();
+        canvas.drawCircle(np, burstR, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5 * (1 - flash) + 0.3
+          ..color = _lerpHold(burstColor, _gold).withValues(alpha: burstAlpha));
+      }
+      // Ascending diamond shower
+      for (int i = 0; i < 12; i++) {
+        final dAngle = (i / 12) * 2 * pi + flash * 0.8;
+        final dDist = r * (0.2 + flash * 1.2);
+        final dPos = center + Offset(
+          cos(dAngle) * dDist * 0.6,
+          -flash * r * 0.5 + sin(dAngle) * dDist * 0.3);
+        final dAlpha = ((1 - flash) * 0.45).clamp(0.0, 1.0);
+        final dHue = (i * 30.0 + orbit * 90) % 360;
+        final dColor = HSLColor.fromAHSL(1, dHue, 0.70, 0.70).toColor();
+        canvas.drawCircle(dPos, 1.5 * (1 - flash) + 0.5, Paint()
+          ..color = _lerpHold(dColor, _warmWhite).withValues(alpha: dAlpha));
+      }
+      // Central white flash
+      final fR = r * (0.3 + flash * 0.5) * bs;
+      canvas.drawCircle(center, fR, Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: (1 - flash) * 0.50),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(center: center, radius: fR)));
     }
 
     // Prismatic rim — spectrum sweep
     canvas.drawCircle(center, r * bs, Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2 + hold * 2.0
+      ..strokeWidth = 1.2 + hold * 1.8
       ..shader = SweepGradient(colors: [
         _lerpHold(iceBlue, _gold).withValues(alpha: 0.0),
-        _lerpHold(crystalViolet, _amber).withValues(alpha: 0.15 + hold * 0.22),
-        _lerpHold(prismGold, _gold).withValues(alpha: 0.10 + hold * 0.15),
+        _lerpHold(crystalViolet, _amber).withValues(alpha: 0.12 + hold * 0.20),
+        _lerpHold(prismGold, _gold).withValues(alpha: 0.08 + hold * 0.12),
         _lerpHold(iceBlue, _gold).withValues(alpha: 0.0),
       ], stops: const [0.0, 0.3, 0.65, 1.0],
-        transform: GradientRotation(orbit * 2 * pi * 0.8),
+        transform: GradientRotation(orbit * 2 * pi * 0.6),
       ).createShader(Rect.fromCircle(center: center, radius: r * bs)));
   }
 
   // ═══════════════════════════════════════════════════════
-  // 7. INFINITY WELL (Pro) — Tesseract Projection
-  //     A true 4D hypercube rotating through 3D→2D space.
-  //     16 vertices connected by 32 edges, color-coded by
-  //     dimension (X=pink, Y=blue, Z=violet, W=cyan).
-  //     Rotates in XW and YZ planes simultaneously, creating
-  //     impossible folding geometry. Edge-traveling particles.
-  //     Square-shaped dimensional ripples on hold.
-  //     Dimensional collapse/rebirth on completion.
+  // 7. INFINITY WELL (Pro) — Möbius Infinity
+  //     A glowing infinity symbol (lemniscate) that rotates
+  //     in 3D with particles flowing along its surface like
+  //     a river of light. One loop passes in front, the other
+  //     behind, creating depth. Trailing light echoes follow.
+  //     On hold the figure tightens and glows brighter.
+  //     On completion the infinity unravels into a spiral.
   //     Colors: deep violet, neon pink, electric blue, cyan.
   // ═══════════════════════════════════════════════════════
   void _paintInfinityWell(
@@ -1879,110 +1988,166 @@ class _OrbPainter extends CustomPainter {
       ], stops: const [0.0, 0.65, 1.0])
           .createShader(Rect.fromCircle(center: center, radius: r)));
 
-    // TESSERACT — 4D hypercube projected to 2D
-    // 16 vertices: all combinations of (±1, ±1, ±1, ±1)
-    final rotSpeed = 0.12 + hold * 0.08;
-    final aXW = orbit * 2 * pi * rotSpeed;
-    final aYZ = orbit * 2 * pi * rotSpeed * 0.7 + pi * 0.3;
-    final aXY = orbit * 2 * pi * rotSpeed * 0.4;
+    // LEMNISCATE (∞) — parametric infinity curve rotating in 3D
+    final infRotation = orbit * 2 * pi * 0.12;
+    final infScale = r * (0.55 - hold * 0.08) * bs; // tightens on hold
+    final tilt3D = orbit * 2 * pi * 0.07; // slow 3D rotation
+    const infSteps = 64;
 
-    final projected = <Offset>[];
-    for (int i = 0; i < 16; i++) {
-      var x = ((i & 1) == 0) ? -1.0 : 1.0;
-      var y = ((i & 2) == 0) ? -1.0 : 1.0;
-      var z = ((i & 4) == 0) ? -1.0 : 1.0;
-      var w = ((i & 8) == 0) ? -1.0 : 1.0;
+    // Compute lemniscate points with 3D depth
+    final infPoints = <Offset>[];
+    final infDepths = <double>[]; // z-depth for front/back ordering
+    for (int j = 0; j <= infSteps; j++) {
+      final t = (j / infSteps) * 2 * pi;
+      // Lemniscate of Bernoulli: x = cos(t) / (1+sin²(t)), y = sin(t)cos(t) / (1+sin²(t))
+      final denom = 1.0 + sin(t) * sin(t);
+      final lx = cos(t) / denom;
+      final ly = sin(t) * cos(t) / denom;
 
-      // Rotate XW plane
-      final nx = x * cos(aXW) - w * sin(aXW);
-      final nw = x * sin(aXW) + w * cos(aXW);
-      x = nx; w = nw;
-      // Rotate YZ plane
-      final ny = y * cos(aYZ) - z * sin(aYZ);
-      final nz = y * sin(aYZ) + z * cos(aYZ);
-      y = ny; z = nz;
-      // Rotate XY plane
-      final nx2 = x * cos(aXY) - y * sin(aXY);
-      final ny2 = x * sin(aXY) + y * cos(aXY);
-      x = nx2; y = ny2;
+      // Apply 3D rotation around Y axis for depth effect
+      final z3d = lx * sin(tilt3D);
+      final x3d = lx * cos(tilt3D);
 
-      // Perspective projection 4D → 2D
-      const camDist = 3.5;
-      final pw = 1.0 / (camDist - w);
-      final pz = 1.0 / (camDist - z * 0.3);
-      final scale = r * 0.34 * bs * pw * pz;
-      projected.add(center + Offset(x * scale, y * scale));
+      // Apply main rotation
+      final rx = x3d * cos(infRotation) - ly * sin(infRotation);
+      final ry = x3d * sin(infRotation) + ly * cos(infRotation);
+
+      infPoints.add(center + Offset(rx * infScale, ry * infScale));
+      infDepths.add(z3d);
     }
 
-    // Build edge list: vertices differing by exactly 1 bit = adjacent
-    final edges = <List<int>>[];
-    for (int i = 0; i < 16; i++) {
-      for (int j = i + 1; j < 16; j++) {
-        final xor = i ^ j;
-        if (xor != 0 && (xor & (xor - 1)) == 0) {
-          edges.add([i, j, xor]);
-        }
+    // Draw trailing echoes — ghostly past positions
+    for (int echo = 2; echo >= 1; echo--) {
+      final echoPath = Path();
+      final echoRot = infRotation - echo * 0.15;
+      final echoAlpha = (0.03 + hold * 0.04) / echo;
+      for (int j = 0; j <= infSteps; j++) {
+        final t = (j / infSteps) * 2 * pi;
+        final denom = 1.0 + sin(t) * sin(t);
+        final lx = cos(t) / denom;
+        final ly = sin(t) * cos(t) / denom;
+        final x3d = lx * cos(tilt3D);
+        final rx = x3d * cos(echoRot) - ly * sin(echoRot);
+        final ry = x3d * sin(echoRot) + ly * cos(echoRot);
+        final pt = center + Offset(rx * infScale, ry * infScale);
+        if (j == 0) { echoPath.moveTo(pt.dx, pt.dy); }
+        else { echoPath.lineTo(pt.dx, pt.dy); }
+      }
+      final echoColor = echo == 1 ? deepViolet : neonPink;
+      canvas.drawPath(echoPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0 + hold * 1.5
+        ..color = _lerpHold(echoColor, _gold).withValues(alpha: echoAlpha)
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // Draw the main infinity — back half first, then front half
+    // Split at crossover point (where z crosses zero)
+    final backPath = Path();
+    final frontPath = Path();
+    var backStarted = false;
+    var frontStarted = false;
+    for (int j = 0; j <= infSteps; j++) {
+      final pt = infPoints[j];
+      final depth = infDepths[j];
+      if (depth <= 0) {
+        if (!backStarted) { backPath.moveTo(pt.dx, pt.dy); backStarted = true; }
+        else { backPath.lineTo(pt.dx, pt.dy); }
+      } else {
+        if (!frontStarted) { frontPath.moveTo(pt.dx, pt.dy); frontStarted = true; }
+        else { frontPath.lineTo(pt.dx, pt.dy); }
       }
     }
 
-    // Draw edges — colored by dimension
-    final edgeAlpha = (0.15 + hold * 0.30 + breath * 0.03).clamp(0.0, 1.0);
-    for (final edge in edges) {
-      final a = projected[edge[0]];
-      final b = projected[edge[1]];
-      final dim = edge[2];
+    final lineAlpha = (0.14 + hold * 0.28 + breath * 0.03).clamp(0.0, 1.0);
 
-      final Color edgeColor;
-      if (dim == 1) { edgeColor = _lerpHold(neonPink, _gold); }
-      else if (dim == 2) { edgeColor = _lerpHold(electricBlue, _amber); }
-      else if (dim == 4) { edgeColor = _lerpHold(deepViolet, _warmWhite); }
-      else { edgeColor = _lerpHold(dimensionCyan, _gold); }
-
-      // Glow
-      canvas.drawLine(a, b, Paint()
-        ..color = edgeColor.withValues(alpha: edgeAlpha * 0.22)
-        ..strokeWidth = 3.0 + hold * 2.5
+    // Back half — dimmer (behind)
+    if (backStarted) {
+      canvas.drawPath(backPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5 + hold * 3.0
+        ..color = _lerpHold(deepViolet, _gold).withValues(alpha: lineAlpha * 0.15)
         ..strokeCap = StrokeCap.round);
-      // Sharp edge
-      canvas.drawLine(a, b, Paint()
-        ..color = edgeColor.withValues(alpha: edgeAlpha)
-        ..strokeWidth = 0.7 + hold * 0.8
+      canvas.drawPath(backPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0 + hold * 0.8
+        ..color = _lerpHold(electricBlue, _warmWhite).withValues(alpha: lineAlpha * 0.50)
         ..strokeCap = StrokeCap.round);
     }
 
-    // Vertex dots — bright points at each 4D corner
-    for (int i = 0; i < projected.length; i++) {
-      final v = projected[i];
-      if ((v - center).distance > r * 1.5) continue;
-      canvas.drawCircle(v, 2.2 + hold * 1.5, Paint()
-        ..color = _lerpHold(dimensionCyan, _gold)
-            .withValues(alpha: edgeAlpha * 0.28));
-      canvas.drawCircle(v, 0.9 + hold * 0.5, Paint()
-        ..color = Colors.white.withValues(alpha: edgeAlpha * 0.80));
+    // Front half — brighter (in front)
+    if (frontStarted) {
+      canvas.drawPath(frontPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4.0 + hold * 3.5
+        ..color = _lerpHold(neonPink, _gold).withValues(alpha: lineAlpha * 0.22)
+        ..strokeCap = StrokeCap.round);
+      canvas.drawPath(frontPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2 + hold * 1.0
+        ..color = _lerpHold(dimensionCyan, _warmWhite).withValues(alpha: lineAlpha * 0.70)
+        ..strokeCap = StrokeCap.round);
     }
 
-    // EDGE TRAVELERS — bright particles moving along tesseract edges
+    // FLOWING PARTICLES — light motes traveling along the infinity curve
     final tRng = Random(77);
     for (int i = 0; i < 14; i++) {
-      final eIdx = (i * 3 + (orbit * 40).floor()) % edges.length;
-      final edge = edges[eIdx];
-      final a = projected[edge[0]];
-      final b = projected[edge[1]];
-      final phase = (orbit * (1.5 + tRng.nextDouble() * 0.8) + i * 0.27) % 1.0;
-      final pt = Offset(
-        a.dx + (b.dx - a.dx) * phase,
-        a.dy + (b.dy - a.dy) * phase,
-      );
-      final pAlpha = (0.22 + hold * 0.40).clamp(0.0, 1.0);
-      canvas.drawCircle(pt, 1.5 + hold * 1.0, Paint()
+      final phase = (orbit * (0.5 + tRng.nextDouble() * 0.4) + i * (1.0 / 14)) % 1.0;
+      final idx = (phase * infSteps).floor().clamp(0, infSteps);
+      final pt = infPoints[idx];
+      final depth = infDepths[idx];
+      final dist = (pt - center).distance;
+      if (dist > r * 1.2) continue;
+      final brightness = depth > 0 ? 1.0 : 0.5; // front particles brighter
+      final pAlpha = ((0.20 + hold * 0.35) * brightness).clamp(0.0, 1.0);
+      final pColor = i.isEven ? dimensionCyan : neonPink;
+      canvas.drawCircle(pt, 2.0 + hold * 1.5, Paint()
+        ..color = _lerpHold(pColor, _gold).withValues(alpha: pAlpha * 0.25));
+      canvas.drawCircle(pt, 0.8 + hold * 0.5, Paint()
         ..color = Colors.white.withValues(alpha: pAlpha));
     }
 
-    // Core — bright dimensional singularity
+    // CROSSOVER GLOW — bright node where the loops cross
+    final crossAlpha = (0.12 + hold * 0.25 + sin(breath * pi) * 0.04).clamp(0.0, 1.0);
+    canvas.drawCircle(center, r * 0.08 + hold * r * 0.06, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: crossAlpha * 0.8),
+        _lerpHold(dimensionCyan, _warmWhite).withValues(alpha: crossAlpha * 0.3),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: center, radius: r * 0.12)));
+
+    // DIMENSIONAL RIPPLES on hold — expanding figure-8 shaped waves
+    if (hold > 0.06) {
+      for (int i = 0; i < 3; i++) {
+        final rpPhase = (orbit * 1.5 + i * 0.33) % 1.0;
+        final rpScale = infScale * (1.0 + rpPhase * 0.6 * hold);
+        final rpPath = Path();
+        for (int j = 0; j <= 32; j++) {
+          final t = (j / 32) * 2 * pi;
+          final denom = 1.0 + sin(t) * sin(t);
+          final lx = cos(t) / denom;
+          final ly = sin(t) * cos(t) / denom;
+          final rx = lx * cos(infRotation) - ly * sin(infRotation);
+          final ry = lx * sin(infRotation) + ly * cos(infRotation);
+          final pt = center + Offset(rx * rpScale, ry * rpScale);
+          if (j == 0) { rpPath.moveTo(pt.dx, pt.dy); }
+          else { rpPath.lineTo(pt.dx, pt.dy); }
+        }
+        final rpAlpha = ((1 - rpPhase) * hold * 0.18).clamp(0.0, 1.0);
+        final rpColor = i.isEven ? neonPink : electricBlue;
+        canvas.drawPath(rpPath, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0 * (1 - rpPhase) + 0.3
+          ..color = _lerpHold(rpColor, _gold).withValues(alpha: rpAlpha)
+          ..strokeCap = StrokeCap.round);
+      }
+    }
+
+    // Core — bright singularity at crossover
     final coreR = r * (0.08 + breath * 0.03 + hold * 0.14);
     canvas.drawCircle(center, coreR * 2.5, Paint()
       ..shader = RadialGradient(colors: [
-        _lerpHold(dimensionCyan, _warmWhite).withValues(alpha: 0.10 + hold * 0.08),
+        _lerpHold(dimensionCyan, _warmWhite).withValues(alpha: 0.08 + hold * 0.06),
         Colors.transparent,
       ]).createShader(Rect.fromCircle(center: center, radius: coreR * 2.5)));
     canvas.drawCircle(center, coreR, Paint()
@@ -2002,49 +2167,34 @@ class _OrbPainter extends CustomPainter {
         Colors.transparent,
       ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
 
-    // SQUARE-SHAPED DIMENSIONAL RIPPLES on hold
-    if (hold > 0.06) {
-      for (int i = 0; i < 3; i++) {
-        final rpPhase = (orbit * 1.6 + i * 0.33) % 1.0;
-        final rpR = r * (0.15 + rpPhase * 0.70 * hold) * bs;
-        final rpAlpha = ((1 - rpPhase) * hold * 0.22).clamp(0.0, 1.0);
-        final rpPath = Path();
-        for (int v = 0; v < 4; v++) {
-          final va = (v / 4) * 2 * pi + aXY + pi / 4;
-          final vp = center + Offset(cos(va) * rpR, sin(va) * rpR);
-          if (v == 0) { rpPath.moveTo(vp.dx, vp.dy); }
-          else { rpPath.lineTo(vp.dx, vp.dy); }
-        }
-        rpPath.close();
-        final rpColor = i.isEven ? neonPink : electricBlue;
-        canvas.drawPath(rpPath, Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2 * (1 - rpPhase) + 0.3
-          ..color = _lerpHold(rpColor, _gold).withValues(alpha: rpAlpha)
-          ..strokeJoin = StrokeJoin.round);
-      }
-    }
-
-    // DIMENSIONAL COLLAPSE on completion
+    // INFINITY UNRAVEL on completion — loops spiral outward
     if (flash > 0) {
-      // Vertices converge then explode outward
-      for (int i = 0; i < projected.length; i++) {
-        final v = projected[i];
-        final dir = v - center;
-        final t = flash < 0.5 ? 1.0 - flash * 2 : (flash - 0.5) * 2;
-        final flashPt = flash < 0.5
-            ? center + dir * t
-            : center + dir * t * 2.0;
-        final fAlpha = ((1 - flash) * 0.55).clamp(0.0, 1.0);
-        canvas.drawCircle(flashPt, 2.0 * (1 - flash) + 0.5, Paint()
-          ..color = _lerpHold(dimensionCyan, _warmWhite)
-              .withValues(alpha: fAlpha));
+      // Expanding spiral fragments
+      for (int i = 0; i < 10; i++) {
+        final fragAngle = (i / 10) * 2 * pi + flash * pi;
+        final fragDist = r * (0.2 + flash * 1.5);
+        final fragStart = center + Offset(
+          cos(fragAngle) * fragDist * 0.3,
+          sin(fragAngle) * fragDist * 0.3);
+        final fragEnd = center + Offset(
+          cos(fragAngle) * fragDist,
+          sin(fragAngle) * fragDist);
+        final fragAlpha = ((1 - flash) * 0.45).clamp(0.0, 1.0);
+        final fragColor = i.isEven ? neonPink : electricBlue;
+        canvas.drawLine(fragStart, fragEnd, Paint()
+          ..color = _lerpHold(fragColor, _gold).withValues(alpha: fragAlpha * 0.30)
+          ..strokeWidth = 3.0 * (1 - flash) + 0.5
+          ..strokeCap = StrokeCap.round);
+        canvas.drawLine(fragStart, fragEnd, Paint()
+          ..color = _lerpHold(dimensionCyan, _warmWhite).withValues(alpha: fragAlpha)
+          ..strokeWidth = 1.0 * (1 - flash) + 0.3
+          ..strokeCap = StrokeCap.round);
       }
       // Central white flash
-      final fR = r * (0.5 * (1 - flash)) * bs;
+      final fR = r * (0.4 * (1 - flash)) * bs;
       canvas.drawCircle(center, fR, Paint()
         ..shader = RadialGradient(colors: [
-          Colors.white.withValues(alpha: (1 - flash) * 0.80),
+          Colors.white.withValues(alpha: (1 - flash) * 0.75),
           _lerpHold(deepViolet, _warmWhite).withValues(alpha: (1 - flash) * 0.25),
           Colors.transparent,
         ]).createShader(Rect.fromCircle(center: center, radius: fR)));
@@ -2056,11 +2206,11 @@ class _OrbPainter extends CustomPainter {
       ..strokeWidth = 1.5 + hold * 2.0
       ..shader = SweepGradient(colors: [
         _lerpHold(neonPink, _gold).withValues(alpha: 0.0),
-        _lerpHold(electricBlue, _gold).withValues(alpha: 0.14 + hold * 0.22),
+        _lerpHold(electricBlue, _gold).withValues(alpha: 0.12 + hold * 0.20),
         _lerpHold(deepViolet, _amber).withValues(alpha: 0.05),
         _lerpHold(neonPink, _gold).withValues(alpha: 0.0),
       ], stops: const [0.0, 0.3, 0.65, 1.0],
-        transform: GradientRotation(orbit * 2 * pi * 0.25),
+        transform: GradientRotation(orbit * 2 * pi * 0.20),
       ).createShader(Rect.fromCircle(center: center, radius: r * bs)));
   }
 
