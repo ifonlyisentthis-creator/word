@@ -1584,85 +1584,84 @@ def process_expired_entries(
                 pass
             print(f"SEND FAILED (prepare) entry {entry_id} user {user_id}: {type(exc).__name__}: {exc}")
 
-    # ── Phase 2: Batch-send all prepared emails in a single API call ──
+    # ── Phase 2+3: Send in chunks, mark entries as sent after each chunk ──
+    # Each chunk is up to RESEND_BATCH_LIMIT (100) emails via Resend batch API.
+    # Entries are marked "sent" IMMEDIATELY after their chunk succeeds, so they
+    # can never be re-claimed by claim_entry_for_sending on retry.  This
+    # eliminates all duplicate-email risk regardless of idempotency key expiry.
     if prepared_sends:
-        batch_payloads = [p for _, _, _, _, _, p in prepared_sends]
-        batch_entry_ids = [eid for eid, _, _, _, _, _ in prepared_sends]
+        all_entry_ids = [eid for eid, _, _, _, _, _ in prepared_sends]
 
-        # Stable idempotency key: based on sorted entry IDs so resending
-        # the same set of entries is a no-op (prevents duplicate emails).
+        # Stable idempotency key base: hash of sorted entry IDs
         entry_hash = hashlib.md5(
-            "|".join(sorted(batch_entry_ids)).encode()
+            "|".join(sorted(all_entry_ids)).encode()
         ).hexdigest()[:16]
-        batch_idem_key = f"unlock-batch-{user_id}-{entry_hash}"
+        idem_base = f"unlock-batch-{user_id}-{entry_hash}"
 
-        batch_ok = False
-        try:
-            print(f"User {user_id}: sending batch of {len(batch_payloads)} emails")
-            send_batch_emails(resend_key, batch_payloads, idempotency_key=batch_idem_key)
-            batch_ok = True
-        except Exception as batch_exc:  # noqa: BLE001
-            print(f"BATCH SEND FAILED for user {user_id} ({len(batch_payloads)} emails): "
-                  f"{type(batch_exc).__name__}: {batch_exc}")
-            print(f"User {user_id}: falling back to individual sends...")
+        total_chunks = (len(prepared_sends) + RESEND_BATCH_LIMIT - 1) // RESEND_BATCH_LIMIT
+        print(f"User {user_id}: sending {len(prepared_sends)} emails in {total_chunks} chunk(s)")
 
-        # ── Phase 2b: Fallback — send individually if batch failed ──
-        if not batch_ok:
-            succeeded_ids: set[str] = set()
-            for entry_id, entry_title, recip, vlink, skey, payload in prepared_sends:
-                try:
-                    send_unlock_email(
-                        recip,
-                        entry_id,
-                        sender_name,
-                        entry_title,
-                        vlink,
-                        skey,
-                        resend_key,
-                        from_email,
-                    )
-                    succeeded_ids.add(entry_id)
-                except Exception as ind_exc:  # noqa: BLE001
-                    print(f"INDIVIDUAL SEND ALSO FAILED for entry {entry_id}: "
-                          f"{type(ind_exc).__name__}: {ind_exc}")
-            if succeeded_ids:
-                print(f"User {user_id}: individual fallback sent {len(succeeded_ids)}/{len(prepared_sends)}")
-            # Update prepared_sends to only include those that succeeded
-            if not succeeded_ids:
-                # Total failure — release all locks for retry next cycle
-                for eid in batch_entry_ids:
+        for chunk_start in range(0, len(prepared_sends), RESEND_BATCH_LIMIT):
+            # Early bail if Resend quota was hit by a previous chunk / email
+            if _resend_quota_exhausted:
+                for eid in all_entry_ids[chunk_start:]:
                     try:
                         release_entry_lock(client, eid)
                     except Exception:  # noqa: BLE001
                         pass
-                return had_send, input_send_count
+                break
 
-            # Release locks for entries that failed individually
-            for eid in batch_entry_ids:
-                if eid not in succeeded_ids:
-                    try:
-                        release_entry_lock(client, eid)
-                    except Exception:  # noqa: BLE001
-                        pass
+            chunk = prepared_sends[chunk_start : chunk_start + RESEND_BATCH_LIMIT]
+            chunk_payloads = [p for _, _, _, _, _, p in chunk]
+            chunk_idx = chunk_start // RESEND_BATCH_LIMIT
+            chunk_key = idem_base if total_chunks == 1 else f"{idem_base}-{chunk_idx}"
 
-            # Filter prepared_sends to only succeeded entries
-            prepared_sends = [(eid, t, r, v, s, p) for eid, t, r, v, s, p in prepared_sends if eid in succeeded_ids]
-
-        # ── Phase 3: Mark all successfully sent entries + push notifications ──
-        for entry_id, entry_title, *_ in prepared_sends:
             try:
-                if not mark_entry_sent(client, entry_id, now):
-                    print(f"WARNING: mark_entry_sent returned False for {entry_id}, retrying")
-                    mark_entry_sent(client, entry_id, now)
-            except Exception as mark_exc:  # noqa: BLE001
-                print(f"Failed to mark entry {entry_id} as sent: {mark_exc}")
-            had_send = True
-            try:
-                send_executed_push(
-                    client, profile["id"], entry_id, entry_title, fcm_ctx,
+                response = _post_json_with_retries(
+                    "https://api.resend.com/emails/batch",
+                    headers={
+                        "Authorization": f"Bearer {resend_key}",
+                        "Content-Type": "application/json",
+                    },
+                    payload=chunk_payloads,
+                    idempotency_key=chunk_key,
                 )
-            except Exception as push_exc:  # noqa: BLE001
-                print(f"Push executed failed for entry {entry_id}: {push_exc}")
+                if response.status_code >= 400:
+                    _mark_resend_quota_exhausted(response)
+                    raise RuntimeError(
+                        f"Resend batch error (chunk {chunk_idx}): "
+                        f"{response.status_code} {response.text}"
+                    )
+            except Exception as chunk_exc:  # noqa: BLE001
+                print(f"CHUNK {chunk_idx} FAILED for user {user_id}: "
+                      f"{type(chunk_exc).__name__}: {chunk_exc}")
+                # Release THIS chunk + all remaining chunks for retry next cycle
+                for eid in all_entry_ids[chunk_start:]:
+                    try:
+                        release_entry_lock(client, eid)
+                    except Exception:  # noqa: BLE001
+                        pass
+                break
+
+            # ── Chunk succeeded — mark entries as sent IMMEDIATELY ──
+            for entry_id, entry_title, *_ in chunk:
+                try:
+                    if not mark_entry_sent(client, entry_id, now):
+                        print(f"WARNING: mark_entry_sent returned False for {entry_id}, retrying")
+                        mark_entry_sent(client, entry_id, now)
+                except Exception as mark_exc:  # noqa: BLE001
+                    print(f"Failed to mark entry {entry_id} as sent: {mark_exc}")
+                had_send = True
+                try:
+                    send_executed_push(
+                        client, profile["id"], entry_id, entry_title, fcm_ctx,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+
+            # Throttle between chunks to respect Resend rate limits
+            if chunk_start + RESEND_BATCH_LIMIT < len(prepared_sends):
+                time.sleep(RESEND_INTER_CHUNK_DELAY)
 
     return had_send, input_send_count
 
