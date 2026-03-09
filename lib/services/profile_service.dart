@@ -84,12 +84,10 @@ class ProfileService {
     String userId, {
     String? selectedTheme,
     String? selectedSoulFire,
-    bool? soulFireHaptics,
   }) async {
     final params = <String, dynamic>{'target_user_id': userId};
     if (selectedTheme != null) params['p_theme'] = selectedTheme;
     if (selectedSoulFire != null) params['p_soul_fire'] = selectedSoulFire;
-    if (soulFireHaptics != null) params['p_haptics'] = soulFireHaptics;
     final response =
         await _client.rpc('update_preferences', params: params).single();
     return Profile.fromMap(response);

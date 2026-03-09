@@ -1,10 +1,14 @@
 import 'dart:async';
 
+import 'dart:convert';
+
 import 'dart:math';
 
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:just_audio/just_audio.dart';
 
@@ -1010,6 +1014,56 @@ class _VaultEntryTile extends StatelessWidget {
   }
 }
 
+/// Persists and restores vault entry drafts so users don't lose work
+/// when navigating away from the entry sheet.
+class _VaultDraftStorage {
+  _VaultDraftStorage._();
+  static const _storage = FlutterSecureStorage();
+  static const _key = 'vault_entry_draft';
+
+  static Future<Map<String, dynamic>?> load() async {
+    try {
+      final raw = await _storage.read(key: _key);
+      if (raw == null || raw.isEmpty) return null;
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> save({
+    required String title,
+    required String recipient,
+    required String body,
+    required String actionType,
+    required String dataType,
+  }) async {
+    // Don't save empty drafts
+    if (title.isEmpty && recipient.isEmpty && body.isEmpty) {
+      await clear();
+      return;
+    }
+    try {
+      await _storage.write(
+        key: _key,
+        value: jsonEncode({
+          'title': title,
+          'recipient': recipient,
+          'body': body,
+          'actionType': actionType,
+          'dataType': dataType,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  static Future<void> clear() async {
+    try {
+      await _storage.delete(key: _key);
+    } catch (_) {}
+  }
+}
+
 class VaultEntrySheet extends StatefulWidget {
   const VaultEntrySheet({
     super.key,
@@ -1058,6 +1112,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
   int _recordSeconds = 0;
 
   bool _isRecording = false;
+  bool _isPaused = false;
 
   String? _recordedFilePath;
 
@@ -1068,6 +1123,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
   bool _isSaving = false;
   bool _consentChecked = false;
   bool _audioUsageLoaded = false;
+  bool _savedSuccessfully = false;
 
   String? _saveError;
 
@@ -1089,16 +1145,59 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     _dataType = widget.entry?.dataType ?? VaultDataType.text;
 
+    // Restore draft only for new entries (not editing existing ones)
+    if (widget.entry == null) {
+      _restoreDraft();
+    }
+
     if (_dataType == VaultDataType.audio) {
       _ensureAudioUsageLoaded();
     }
   }
 
+  Future<void> _restoreDraft() async {
+    final draft = await _VaultDraftStorage.load();
+    if (draft == null || !mounted) return;
+    // Only restore if the controllers are still at their default (empty) values
+    if (_titleController.text.isEmpty) {
+      _titleController.text = (draft['title'] as String?) ?? '';
+    }
+    if (_recipientController.text.isEmpty) {
+      _recipientController.text = (draft['recipient'] as String?) ?? '';
+    }
+    if (_bodyController.text.isEmpty) {
+      _bodyController.text = (draft['body'] as String?) ?? '';
+    }
+    final savedAction = draft['actionType'] as String?;
+    if (savedAction == 'destroy' && widget.isPro) {
+      setState(() => _actionType = VaultActionType.destroy);
+    }
+    final savedDataType = draft['dataType'] as String?;
+    if (savedDataType == 'audio' && widget.isPro) {
+      setState(() => _dataType = VaultDataType.audio);
+      _ensureAudioUsageLoaded();
+    }
+  }
+
+  void _saveDraftOnClose() {
+    // Don't save draft if saving succeeded or editing an existing entry
+    if (_savedSuccessfully || widget.entry != null) return;
+    unawaited(_VaultDraftStorage.save(
+      title: _titleController.text,
+      recipient: _recipientController.text,
+      body: _bodyController.text,
+      actionType: _actionType == VaultActionType.destroy ? 'destroy' : 'send',
+      dataType: _dataType == VaultDataType.audio ? 'audio' : 'text',
+    ));
+  }
+
   @override
   void dispose() {
+    _saveDraftOnClose();
+
     _recordTimer?.cancel();
 
-    if (_isRecording && _recorder != null) {
+    if ((_isRecording || _isPaused) && _recorder != null) {
       unawaited(_recorder!.stop());
     }
 
@@ -1476,66 +1575,115 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                         else
                         Wrap(
                           spacing: 8,
-
                           runSpacing: 8,
-
                           children: [
-                            FilledButton.icon(
-                              onPressed: _isSaving || !hasRemainingSeconds
-                                  ? null
-                                  : () async {
-                                      if (_isRecording) {
-                                        await _stopRecording(
-                                          reachedLimit: false,
-                                        );
-                                      } else {
+                            // ── Record / Stop button ──
+                            if (!_isRecording && !_isPaused)
+                              FilledButton.icon(
+                                onPressed: _isSaving || !hasRemainingSeconds
+                                    ? null
+                                    : () async {
+                                        // Guard: if there is already a recording,
+                                        // ask user to confirm before overwriting.
+                                        if (hasNewRecording || hasExistingAudio) {
+                                          final confirmed = await _confirmReRecord(context);
+                                          if (!confirmed || !mounted) return;
+                                        }
                                         await _startRecording(remainingSeconds);
-                                      }
-                                    },
-
-                              icon: Icon(
-                                _isRecording
-                                    ? Icons.stop_circle_outlined
-                                    : Icons.mic_none,
+                                      },
+                                icon: const Icon(Icons.mic_none),
+                                label: const Text('Record'),
                               ),
 
-                              label: Text(_isRecording ? 'Stop' : 'Record'),
-                            ),
+                            // ── Pause / Resume button (while recording) ──
+                            if (_isRecording)
+                              FilledButton.icon(
+                                onPressed: _isSaving
+                                    ? null
+                                    : () async {
+                                        await _pauseRecording();
+                                      },
+                                icon: const Icon(Icons.pause_circle_outlined),
+                                label: const Text('Pause'),
+                              ),
 
-                            if (!_isRecording && hasNewRecording)
+                            if (_isPaused)
+                              FilledButton.icon(
+                                onPressed: _isSaving
+                                    ? null
+                                    : () async {
+                                        await _resumeRecording(remainingSeconds);
+                                      },
+                                icon: const Icon(Icons.play_circle_outlined),
+                                label: const Text('Resume'),
+                              ),
+
+                            // ── Stop button (while recording or paused) ──
+                            if (_isRecording || _isPaused)
+                              FilledButton.tonalIcon(
+                                onPressed: _isSaving
+                                    ? null
+                                    : () async {
+                                        await _stopRecording(reachedLimit: false);
+                                      },
+                                icon: const Icon(Icons.stop_circle_outlined),
+                                label: const Text('Done'),
+                              ),
+
+                            // ── Discard button (after recording) ──
+                            if (!_isRecording && !_isPaused && hasNewRecording)
                               TextButton.icon(
                                 onPressed: _isSaving
                                     ? null
                                     : () async {
                                         await _discardRecording();
                                       },
-
                                 icon: const Icon(Icons.delete_outline),
-
                                 label: const Text('Discard'),
                               ),
                           ],
                         ),
 
-                        if (_isRecording || recordedSeconds != null) ...[
+                        // ── Recording status indicator ──
+                        if (_isRecording || _isPaused || recordedSeconds != null) ...[
                           const SizedBox(height: 8),
-
-                          Text(
-                            _isRecording
-                                ? 'Recording: ${_formatSeconds(_recordSeconds)}'
-                                : '${hasNewRecording ? 'New recording' : 'Recording'}: ${_formatSeconds(recordedSeconds ?? 0)}',
-
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: Colors.white70),
+                          Row(
+                            children: [
+                              if (_isRecording)
+                                Container(
+                                  width: 8, height: 8,
+                                  margin: const EdgeInsets.only(right: 8),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.redAccent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                )
+                              else if (_isPaused)
+                                Container(
+                                  width: 8, height: 8,
+                                  margin: const EdgeInsets.only(right: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade300,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              Text(
+                                _isRecording
+                                    ? 'Recording: ${_formatSeconds(_recordSeconds)}'
+                                    : _isPaused
+                                        ? 'Paused: ${_formatSeconds(_recordSeconds)}'
+                                        : '${hasNewRecording ? 'New recording' : 'Recording'}: ${_formatSeconds(recordedSeconds ?? 0)}',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: Colors.white70),
+                              ),
+                            ],
                           ),
                         ],
 
-                        if (hasExistingAudio && !hasNewRecording) ...[
+                        if (hasExistingAudio && !hasNewRecording && !_isRecording && !_isPaused) ...[
                           const SizedBox(height: 4),
-
                           Text(
                             'Current recording: ${_formatSeconds(existingAudioSeconds)}',
-
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: Colors.white60),
                           ),
@@ -1543,10 +1691,8 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
                         if (_audioError != null) ...[
                           const SizedBox(height: 8),
-
                           Text(
                             _audioError!,
-
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: Theme.of(context).colorScheme.error,
@@ -1668,7 +1814,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                   width: double.infinity,
 
                   child: FilledButton.icon(
-                    onPressed: _isSaving || _isRecording || !_consentChecked
+                    onPressed: _isSaving || _isRecording || _isPaused || !_consentChecked
                         ? null
                         : () async {
                             await _handleSave(context);
@@ -1725,6 +1871,9 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
     if (!mounted) return;
 
     if (success) {
+      _savedSuccessfully = true;
+      unawaited(_VaultDraftStorage.clear());
+
       setState(() {
         _isSaving = false;
       });
@@ -1751,7 +1900,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
       return;
     }
 
-    if (_isRecording) {
+    if (_isRecording || _isPaused) {
       await _stopRecording(reachedLimit: false);
     }
 
@@ -1783,8 +1932,32 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
     });
   }
 
+  Future<bool> _confirmReRecord(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Replace recording?'),
+        content: const Text(
+          'Starting a new recording will replace the existing one. '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Replace'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
   Future<void> _startRecording(int maxSeconds) async {
-    if (_isRecording) return;
+    if (_isRecording || _isPaused) return;
 
     setState(() {
       _audioError = null;
@@ -1802,6 +1975,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
       return;
     }
 
+    // Discard any previous recording file before starting fresh
     await _discardRecording();
 
     final directory = await getTemporaryDirectory();
@@ -1835,6 +2009,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     setState(() {
       _isRecording = true;
+      _isPaused = false;
 
       _recordSeconds = 0;
 
@@ -1852,6 +2027,9 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
         return;
       }
 
+      // Don't tick while paused — timer stays alive so we can resume
+      if (_isPaused) return;
+
       setState(() {
         _recordSeconds += 1;
       });
@@ -1859,6 +2037,34 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
       if (_recordSeconds >= maxSeconds) {
         await _stopRecording(reachedLimit: true);
       }
+    });
+  }
+
+  Future<void> _pauseRecording() async {
+    if (!_isRecording || _isPaused) return;
+    try {
+      await _rec.pause();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _isRecording = false;
+      _isPaused = true;
+    });
+  }
+
+  Future<void> _resumeRecording(int maxSeconds) async {
+    if (!_isPaused) return;
+    try {
+      await _rec.resume();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _isRecording = true;
+      _isPaused = false;
     });
   }
 
@@ -1877,6 +2083,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     setState(() {
       _isRecording = false;
+      _isPaused = false;
 
       _recordedFilePath = effectivePath;
 
@@ -1897,7 +2104,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
   Future<void> _discardRecording() async {
     _recordTimer?.cancel();
 
-    if (_isRecording) {
+    if (_isRecording || _isPaused) {
       try {
         await _rec.stop();
       } catch (_) {}
@@ -1915,6 +2122,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     setState(() {
       _isRecording = false;
+      _isPaused = false;
 
       _recordSeconds = 0;
 
@@ -1946,6 +2154,8 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
   late final AudioPlayer _player;
 
   String? _error;
+  bool _ready = false;
+  bool _actionInProgress = false;
 
   @override
   void initState() {
@@ -1959,6 +2169,8 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
   Future<void> _loadAudio() async {
     try {
       await _player.setFilePath(widget.audioPath);
+      if (!mounted) return;
+      setState(() => _ready = true);
     } catch (_) {
       if (!mounted) return;
 
@@ -1975,6 +2187,26 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
     super.dispose();
   }
 
+  Future<void> _handlePlayPause() async {
+    if (_actionInProgress) return;
+    _actionInProgress = true;
+    try {
+      final state = _player.playerState;
+      final isCompleted =
+          state.processingState == ProcessingState.completed;
+      if (isCompleted) {
+        await _player.seek(Duration.zero);
+        await _player.play();
+      } else if (state.playing) {
+        await _player.pause();
+      } else {
+        await _player.play();
+      }
+    } finally {
+      _actionInProgress = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
@@ -1983,6 +2215,19 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
 
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
           color: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+
+    if (!_ready) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       );
     }
@@ -2025,16 +2270,7 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
 
                     onPressed: isBuffering
                         ? null
-                        : () async {
-                            if (isCompleted) {
-                              await _player.seek(Duration.zero);
-                              await _player.play();
-                            } else if (isPlaying) {
-                              await _player.pause();
-                            } else {
-                              await _player.play();
-                            }
-                          },
+                        : _handlePlayPause,
 
                     icon: Icon(
                       isPlaying ? Icons.pause_circle_filled : Icons.play_circle,

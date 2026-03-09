@@ -244,10 +244,40 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ status: "ignored", event_type: eventType });
   }
 
-  // ── 5. Resolve current subscription status from RevenueCat ──
+  // ── 5. Collect all candidate user IDs ──
+  // RevenueCat may send an anonymous ID, original ID, or aliases.
+  // We try all of them to find the matching Supabase profile.
+  const candidateIds: string[] = [appUserId];
+  if (event.original_app_user_id && event.original_app_user_id !== appUserId) {
+    candidateIds.push(event.original_app_user_id);
+  }
+  if (event.aliases && Array.isArray(event.aliases)) {
+    for (const alias of event.aliases) {
+      if (alias && !candidateIds.includes(alias)) {
+        candidateIds.push(alias);
+      }
+    }
+  }
+  // Filter to only UUID-shaped strings (Supabase profile IDs are UUIDs)
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const validUserIds = candidateIds.filter((id) => uuidPattern.test(id));
+
+  if (validUserIds.length === 0) {
+    console.log(
+      `[sync-subscription] ${eventType}: no UUID-shaped IDs found in candidates: ${candidateIds.join(", ")}`,
+    );
+    return jsonResponse({
+      status: "skipped",
+      reason: "no valid Supabase user ID found",
+      event_type: eventType,
+    });
+  }
+
+  // ── 6. Resolve current subscription status from RevenueCat ──
   // We ALWAYS re-query RevenueCat rather than trusting the webhook payload,
   // because the webhook may arrive out of order or be replayed.
   // The GET /subscribers endpoint gives us the authoritative current state.
+  // Try with the primary app_user_id first (RevenueCat knows this ID).
   let newStatus: string;
   try {
     newStatus = await resolveSubscriptionStatus(rcSecret, entitlementId, appUserId);
@@ -257,17 +287,29 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "RevenueCat lookup failed", detail: msg }, 502);
   }
 
-  // ── 6. Update Supabase ──
-  try {
-    await updateSubscriptionStatus(supabaseUrl, serviceRoleKey, appUserId, newStatus);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error(`[sync-subscription] DB update failed for ${appUserId}: ${msg}`);
-    return jsonResponse({ error: "Database update failed", detail: msg }, 500);
+  // ── 7. Update Supabase — try each valid UUID until one matches ──
+  let updatedUserId: string | null = null;
+  for (const userId of validUserIds) {
+    try {
+      await updateSubscriptionStatus(supabaseUrl, serviceRoleKey, userId, newStatus);
+      updatedUserId = userId;
+      break; // Success — stop trying
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.log(`[sync-subscription] Update attempt for ${userId} failed: ${msg}`);
+    }
+  }
+
+  if (!updatedUserId) {
+    console.error(
+      `[sync-subscription] DB update failed for all candidate IDs: ${validUserIds.join(", ")}`,
+    );
+    return jsonResponse({ error: "Database update failed for all candidate IDs" }, 500);
   }
 
   console.log(
-    `[sync-subscription] ${eventType} → ${appUserId} → ${newStatus}`,
+    `[sync-subscription] ${eventType} → ${updatedUserId} → ${newStatus}` +
+      (updatedUserId !== appUserId ? ` (resolved from ${appUserId})` : ""),
   );
 
   // ── 7. Return success ──

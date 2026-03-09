@@ -436,7 +436,6 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                                   final tp = context.watch<ThemeProvider>();
                                   return SoulFireButton(
                                   styleId: tp.soulFireId,
-                                  hapticsEnabled: tp.soulFireHaptics,
                                   enabled:
                                       !isInGracePeriod &&
                                       !controller.isLoading &&

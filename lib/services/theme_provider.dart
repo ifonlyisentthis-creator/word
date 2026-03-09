@@ -11,17 +11,14 @@ class ThemeProvider extends ChangeNotifier {
   static const _keyTheme = 'cached_theme';
   static const _keySoulFire = 'cached_soul_fire';
   static const _keySub = 'cached_sub_status';
-  static const _keyHaptics = 'cached_soul_fire_haptics';
 
   AppThemeId _themeId = AppThemeId.oledVoid;
   SoulFireStyleId _soulFireId = SoulFireStyleId.etherealOrb;
   String _subscriptionStatus = 'free';
-  bool _soulFireHaptics = false;
 
   AppThemeId get themeId => _themeId;
   SoulFireStyleId get soulFireId => _soulFireId;
   String get subscriptionStatus => _subscriptionStatus;
-  bool get soulFireHaptics => _soulFireHaptics;
 
   AppThemeData get themeData => AppThemeData.fromId(_themeId);
   ThemeData get flutterTheme => themeData.toFlutterTheme();
@@ -33,9 +30,7 @@ class ThemeProvider extends ChangeNotifier {
       final cachedTheme = await _storage.read(key: _keyTheme);
       final cachedSf = await _storage.read(key: _keySoulFire);
       final cachedSub = await _storage.read(key: _keySub) ?? 'free';
-      final cachedHaptics = await _storage.read(key: _keyHaptics);
       _subscriptionStatus = cachedSub;
-      _soulFireHaptics = cachedHaptics == 'true';
       if (cachedTheme != null) {
         try {
           final parsed = AppThemeId.values.firstWhere((e) => e.key == cachedTheme);
@@ -61,7 +56,6 @@ class ThemeProvider extends ChangeNotifier {
         _storage.write(key: _keyTheme, value: _themeId.key),
         _storage.write(key: _keySoulFire, value: _soulFireId.key),
         _storage.write(key: _keySub, value: _subscriptionStatus),
-        _storage.write(key: _keyHaptics, value: _soulFireHaptics.toString()),
       ]);
     } catch (_) {}
   }
@@ -72,7 +66,6 @@ class ThemeProvider extends ChangeNotifier {
     final oldSub = _subscriptionStatus;
     final oldTheme = _themeId;
     final oldSf = _soulFireId;
-    final oldHaptics = _soulFireHaptics;
 
     _subscriptionStatus = profile.subscriptionStatus;
 
@@ -111,12 +104,9 @@ class ThemeProvider extends ChangeNotifier {
       _soulFireId = SoulFireStyleId.etherealOrb;
     }
 
-    _soulFireHaptics = profile.soulFireHaptics;
-
     if (_subscriptionStatus != oldSub ||
         _themeId != oldTheme ||
-        _soulFireId != oldSf ||
-        _soulFireHaptics != oldHaptics) {
+        _soulFireId != oldSf) {
       notifyListeners();
       _saveToCache();
     }
@@ -142,14 +132,6 @@ class ThemeProvider extends ChangeNotifier {
     return true;
   }
 
-  /// Toggle Soul Fire haptic feedback on/off. Returns the new value.
-  bool toggleSoulFireHaptics() {
-    _soulFireHaptics = !_soulFireHaptics;
-    notifyListeners();
-    _saveToCache();
-    return _soulFireHaptics;
-  }
-
   /// If subscription downgrades, revert to free defaults.
   void enforceSubscriptionLimits(String newStatus) {
     _subscriptionStatus = newStatus;
@@ -169,7 +151,6 @@ class ThemeProvider extends ChangeNotifier {
     _themeId = AppThemeId.oledVoid;
     _soulFireId = SoulFireStyleId.etherealOrb;
     _subscriptionStatus = 'free';
-    _soulFireHaptics = false;
     notifyListeners();
     _saveToCache();
   }

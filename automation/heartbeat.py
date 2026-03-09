@@ -70,6 +70,10 @@ MAX_RUNTIME_SECONDS = 5.5 * 3600  # 5h30m — exit gracefully before GH Actions 
 
 RESEND_INTER_CHUNK_DELAY = 0.15  # seconds between batch chunks to respect rate limits
 
+REVENUECAT_ENTITLEMENT_ID = "AfterWord Pro"
+
+RC_VERIFY_RATE_LIMIT_DELAY = 0.12  # seconds between RC API calls to stay under 10 req/s
+
 _HTTP_SESSION: requests.Session | None = None
 
 
@@ -1947,6 +1951,78 @@ def _build_downgrade_email(
     return subject, text, html
 
 
+def verify_subscription_with_revenuecat(
+    rc_api_secret: str,
+    user_id: str,
+    entitlement_id: str = REVENUECAT_ENTITLEMENT_ID,
+) -> str | None:
+    """Query RevenueCat REST API to get the authoritative subscription status.
+
+    Returns 'free', 'pro', or 'lifetime'.  Returns None on API error so the
+    caller can fall back to the DB value without incorrectly downgrading.
+
+    This is the server-side safety net: even if the client never syncs and
+    the webhook never fires, the heartbeat will catch subscription changes.
+    """
+    session = _get_http_session()
+    url = f"https://api.revenuecat.com/v1/subscribers/{requests.utils.quote(user_id, safe='')}"
+    try:
+        resp = session.get(
+            url,
+            headers={
+                "Authorization": f"Bearer {rc_api_secret}",
+                "Content-Type": "application/json",
+            },
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"RC verify failed for {user_id}: {type(exc).__name__}: {exc}")
+        return None
+
+    if resp.status_code == 404:
+        # User not known to RevenueCat → free
+        return "free"
+
+    if not resp.ok:
+        print(f"RC verify HTTP {resp.status_code} for {user_id}: {resp.text[:200]}")
+        return None
+
+    try:
+        data = resp.json()
+    except Exception:  # noqa: BLE001
+        return None
+
+    subscriber = data.get("subscriber") or {}
+    entitlements_raw = subscriber.get("entitlements") or {}
+
+    now_dt = datetime.now(timezone.utc)
+    active_entitlements = []
+    for key, ent in entitlements_raw.items():
+        if not isinstance(ent, dict):
+            continue
+        expires = ent.get("expires_date")
+        if expires is None:
+            active_entitlements.append((key, ent))  # lifetime / non-expiring
+        elif isinstance(expires, str):
+            try:
+                if datetime.fromisoformat(expires.replace("Z", "+00:00")) > now_dt:
+                    active_entitlements.append((key, ent))
+            except (ValueError, TypeError):
+                pass
+
+    has_entitlement = any(k == entitlement_id for k, _ in active_entitlements)
+    is_lifetime = any(
+        (ent.get("product_identifier") or "").lower().find("lifetime") >= 0
+        for _, ent in active_entitlements
+    )
+
+    if is_lifetime:
+        return "lifetime"
+    if has_entitlement:
+        return "pro"
+    return "free"
+
+
 def handle_subscription_downgrade(
     client,
     profile: dict,
@@ -2138,7 +2214,9 @@ def main() -> int:
 
     firebase_sa_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 
-
+    rc_api_secret = os.getenv("REVENUECAT_API_SECRET", "")
+    if not rc_api_secret:
+        print("WARNING: REVENUECAT_API_SECRET not set — server-side subscription verification disabled")
 
     client = create_client(supabase_url, supabase_key)
 
@@ -2236,6 +2314,29 @@ def main() -> int:
 
           sender_name = profile.get("sender_name") or "Afterword"
           sub_status = (profile.get("subscription_status") or "free").lower()
+
+          # ── PRE-PASS: Server-side RC subscription verification ──
+          # Query RevenueCat directly to get authoritative status.
+          # This catches upgrades, downgrades, renewals, and cancellations
+          # even when the client is logged out, phone destroyed, or webhook failed.
+          if rc_api_secret:
+              try:
+                  rc_status = verify_subscription_with_revenuecat(
+                      rc_api_secret, user_id,
+                  )
+                  if rc_status is not None and rc_status != sub_status:
+                      print(f"RC verify: user {user_id} DB={sub_status} RC={rc_status} — updating DB")
+                      try:
+                          client.table("profiles").update({
+                              "subscription_status": rc_status,
+                          }).eq("id", user_id).execute()
+                          sub_status = rc_status
+                          profile["subscription_status"] = rc_status
+                      except Exception as db_exc:  # noqa: BLE001
+                          print(f"Failed to update subscription for {user_id}: {db_exc}")
+                  time.sleep(RC_VERIFY_RATE_LIMIT_DELAY)
+              except Exception as rc_exc:  # noqa: BLE001
+                  print(f"RC verify error for {user_id}: {rc_exc}")
 
           # Clear stale downgrade flag when user re-subscribes
           if sub_status in PAID_STATUSES and profile.get("downgrade_email_pending"):
