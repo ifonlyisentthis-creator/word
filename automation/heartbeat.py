@@ -2319,24 +2319,48 @@ def main() -> int:
           # Query RevenueCat directly to get authoritative status.
           # This catches upgrades, downgrades, renewals, and cancellations
           # even when the client is logged out, phone destroyed, or webhook failed.
+          #
+          # SCALABILITY: At 0.12s per RC call, verifying every user is too slow
+          # at scale (1M users = 33 hours). We only verify users where a mismatch
+          # is plausible:
+          #   - Paid users → catch cancellations, expirations, refunds
+          #   - Free users with pro indicators → catch missed webhook upgrades
+          #   - Users with pending downgrade email → confirm still free
+          # Free users with NO pro indicators are the vast majority and need no
+          # verification — they were never paid or have already been downgraded.
           if rc_api_secret:
-              try:
-                  rc_status = verify_subscription_with_revenuecat(
-                      rc_api_secret, user_id,
-                  )
-                  if rc_status is not None and rc_status != sub_status:
-                      print(f"RC verify: user {user_id} DB={sub_status} RC={rc_status} — updating DB")
-                      try:
-                          client.table("profiles").update({
-                              "subscription_status": rc_status,
-                          }).eq("id", user_id).execute()
-                          sub_status = rc_status
-                          profile["subscription_status"] = rc_status
-                      except Exception as db_exc:  # noqa: BLE001
-                          print(f"Failed to update subscription for {user_id}: {db_exc}")
-                  time.sleep(RC_VERIFY_RATE_LIMIT_DELAY)
-              except Exception as rc_exc:  # noqa: BLE001
-                  print(f"RC verify error for {user_id}: {rc_exc}")
+              selected_theme = profile.get("selected_theme")
+              selected_soul_fire = profile.get("selected_soul_fire")
+              _FREE_THEMES = {"oledVoid", "midnightFrost", "shadowRose", None}
+              _FREE_SF = {"etherealOrb", "goldenPulse", "nebulaHeart", None}
+              has_pro_indicators = (
+                  int(profile.get("timer_days") or 30) != 30
+                  or selected_theme not in _FREE_THEMES
+                  or selected_soul_fire not in _FREE_SF
+              )
+              needs_rc_verify = (
+                  sub_status in PAID_STATUSES  # paid → catch cancellations
+                  or has_pro_indicators         # free + pro artifacts → missed webhook
+                  or profile.get("downgrade_email_pending")  # pending email → confirm status
+              )
+              if needs_rc_verify:
+                  try:
+                      rc_status = verify_subscription_with_revenuecat(
+                          rc_api_secret, user_id,
+                      )
+                      if rc_status is not None and rc_status != sub_status:
+                          print(f"RC verify: user {user_id} DB={sub_status} RC={rc_status} — updating DB")
+                          try:
+                              client.table("profiles").update({
+                                  "subscription_status": rc_status,
+                              }).eq("id", user_id).execute()
+                              sub_status = rc_status
+                              profile["subscription_status"] = rc_status
+                          except Exception as db_exc:  # noqa: BLE001
+                              print(f"Failed to update subscription for {user_id}: {db_exc}")
+                      time.sleep(RC_VERIFY_RATE_LIMIT_DELAY)
+                  except Exception as rc_exc:  # noqa: BLE001
+                      print(f"RC verify error for {user_id}: {rc_exc}")
 
           # Clear stale downgrade flag when user re-subscribes
           if sub_status in PAID_STATUSES and profile.get("downgrade_email_pending"):

@@ -113,6 +113,86 @@ GRANT EXECUTE ON FUNCTION public.update_preferences(uuid, text, text) TO authent
 
 ALTER TABLE profiles DROP COLUMN IF EXISTS soul_fire_haptics;
 
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  3. FIX edge_set_subscription_status — raise on 0-row update           ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+-- The webhook alias fallback tries multiple UUIDs. If UPDATE matches 0 rows
+-- (no profile for that UUID), the old version silently succeeds, so the
+-- fallback stops at the wrong UUID. The fix: raise an exception when no
+-- profile matches, so the webhook can try the next candidate.
+
+CREATE OR REPLACE FUNCTION public.edge_set_subscription_status(
+  target_user_id uuid, new_status text
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  old_role text;
+  rows_affected int;
+BEGIN
+  IF new_status NOT IN ('free', 'pro', 'lifetime') THEN
+    RAISE EXCEPTION 'invalid subscription status: %', new_status;
+  END IF;
+  old_role := COALESCE(current_setting('request.jwt.claim.role', true), '');
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
+  UPDATE profiles
+    SET subscription_status = new_status,
+        downgrade_email_pending = CASE
+          WHEN new_status IN ('pro', 'lifetime') THEN false
+          ELSE downgrade_email_pending
+        END
+    WHERE id = target_user_id;
+  GET DIAGNOSTICS rows_affected = ROW_COUNT;
+  PERFORM set_config('request.jwt.claim.role', old_role, true);
+  IF rows_affected = 0 THEN
+    RAISE EXCEPTION 'profile not found for user %', target_user_id;
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.edge_set_subscription_status(uuid, text) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.edge_set_subscription_status(uuid, text) TO service_role;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  4. FIX guard_preferences_on_downgrade — include ALL premium keys      ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+-- The original trigger was missing velvetAbyss, obsidianPrism (themes) and
+-- infinityWell, phantomPulse (soul fires). A downgraded user could keep
+-- these premium selections.
+
+CREATE OR REPLACE FUNCTION public.guard_preferences_on_downgrade()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF new.subscription_status IS DISTINCT FROM old.subscription_status THEN
+    -- Reset PRO themes if no longer qualified
+    IF new.selected_theme IN ('obsidianSteel','midnightEmber','deepOcean','velvetAbyss')
+       AND new.subscription_status NOT IN ('pro','lifetime') THEN
+      new.selected_theme := NULL;
+    END IF;
+    -- Reset LIFETIME themes if no longer qualified
+    IF new.selected_theme IN ('auroraNight','cosmicDusk','obsidianPrism')
+       AND new.subscription_status <> 'lifetime' THEN
+      new.selected_theme := NULL;
+    END IF;
+    -- Reset PRO soul fires if no longer qualified
+    IF new.selected_soul_fire IN ('voidPortal','plasmaBurst','plasmaCell','infinityWell')
+       AND new.subscription_status NOT IN ('pro','lifetime') THEN
+      new.selected_soul_fire := NULL;
+    END IF;
+    -- Reset LIFETIME soul fires if no longer qualified
+    IF new.selected_soul_fire IN ('toxicCore','crystalAscend','phantomPulse')
+       AND new.subscription_status <> 'lifetime' THEN
+      new.selected_soul_fire := NULL;
+    END IF;
+  END IF;
+  RETURN new;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS profiles_guard_preferences ON profiles;
+CREATE TRIGGER profiles_guard_preferences
+BEFORE UPDATE ON profiles
+FOR EACH ROW EXECUTE FUNCTION public.guard_preferences_on_downgrade();
+
 -- ============================================================================
 -- END OF v45 SQL
 -- ============================================================================
