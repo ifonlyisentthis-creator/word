@@ -137,6 +137,9 @@ class _MinimalClient:
 
 
 class HeartbeatTests(unittest.TestCase):
+    def setUp(self):
+        heartbeat._resend_quota_exhausted = False
+
     def test_build_timer_state_uses_utc_deadline_and_stage_triggers(self):
         last_check_in = datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc)
         now = datetime(2026, 2, 5, 2, 0, tzinfo=timezone.utc)
@@ -250,7 +253,7 @@ class HeartbeatTests(unittest.TestCase):
             ),
             patch.object(heartbeat, "compute_hmac_signature", return_value="sig-1"),
             patch.object(heartbeat, "build_unlock_email_payload", return_value={"mock": True}) as mock_build,
-            patch.object(heartbeat, "send_batch_emails", return_value=[{"id": "r1"}]) as mock_batch,
+            patch.object(heartbeat, "_post_json_with_retries", return_value=_DummyResponse(200, '{"data": [{"id": "r1"}]}')) as mock_post,
             patch.object(heartbeat, "mark_entry_sent", return_value=True) as mock_mark_sent,
             patch.object(heartbeat, "send_executed_push", return_value=True),
         ):
@@ -269,7 +272,7 @@ class HeartbeatTests(unittest.TestCase):
         self.assertTrue(had_send)
         self.assertEqual(input_send_count, 1)
         mock_build.assert_called_once()
-        mock_batch.assert_called_once()
+        mock_post.assert_called_once()
         mock_mark_sent.assert_called_once_with(client, "entry-1", now)
 
     def test_process_expired_entries_destroy_path_deletes_without_grace_flag(self):
@@ -681,7 +684,7 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "compute_hmac_signature", return_value="CORRECT_SIGNATURE"),
             patch.object(heartbeat, "release_entry_lock") as mock_release,
             patch.object(heartbeat, "delete_entry") as mock_delete,
-            patch.object(heartbeat, "send_batch_emails") as mock_batch,
+            patch.object(heartbeat, "_post_json_with_retries") as mock_post,
         ):
             had_send, input_send_count = heartbeat.process_expired_entries(
                 client=object(), profile=profile, entries=entries,
@@ -693,7 +696,7 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(input_send_count, 1)
         mock_delete.assert_not_called()  # CRITICAL: send entries must NEVER be deleted
         mock_release.assert_called_once()  # Lock released for retry
-        mock_batch.assert_not_called()
+        mock_post.assert_not_called()
 
     def test_process_expired_entries_rejects_empty_recipient(self):
         """Entry with no recipient is preserved (not deleted), not sent."""
@@ -721,7 +724,7 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "compute_hmac_signature", return_value="sig"),
             patch.object(heartbeat, "release_entry_lock") as mock_release,
             patch.object(heartbeat, "delete_entry") as mock_delete,
-            patch.object(heartbeat, "send_batch_emails") as mock_batch,
+            patch.object(heartbeat, "_post_json_with_retries") as mock_post,
         ):
             had_send, input_send_count = heartbeat.process_expired_entries(
                 client=object(), profile=profile, entries=entries,
@@ -733,7 +736,7 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(input_send_count, 1)
         mock_delete.assert_not_called()  # CRITICAL: send entries must NEVER be deleted
         mock_release.assert_called_once()  # Lock released for retry
-        mock_batch.assert_not_called()
+        mock_post.assert_not_called()
 
     def test_extract_server_ciphertext_from_envelope(self):
         envelope = '{"v":1,"server":"server_ct","device":"device_ct"}'
@@ -833,7 +836,7 @@ class HeartbeatTests(unittest.TestCase):
                          side_effect=lambda _c, e: deleted_ids.append(e["id"])),
             patch.object(heartbeat, "release_entry_lock",
                          side_effect=lambda _c, eid: released_ids.append(eid)),
-            patch.object(heartbeat, "send_batch_emails") as mock_batch,
+            patch.object(heartbeat, "_post_json_with_retries") as mock_post,
             patch.object(heartbeat, "send_executed_push", return_value=True),
         ):
             had_send, input_send_count = heartbeat.process_expired_entries(
@@ -849,7 +852,7 @@ class HeartbeatTests(unittest.TestCase):
         # Send entries are RELEASED (preserved for retry), NOT deleted
         self.assertEqual(sorted(released_ids),
                          [f"send-{i}" for i in range(6)])
-        mock_batch.assert_not_called()
+        mock_post.assert_not_called()
 
     def test_hybrid_send_destroy_successful_sends_with_destroys(self):
         """Mixed vault: 2 send + 1 destroy. Sends succeed, destroy deleted.
@@ -882,7 +885,7 @@ class HeartbeatTests(unittest.TestCase):
                              "p1|r1": "sig1", "p2|r2": "sig2",
                          }.get(msg, "nomatch")),
             patch.object(heartbeat, "build_unlock_email_payload", return_value={"mock": True}),
-            patch.object(heartbeat, "send_batch_emails", return_value=[{"id": "r1"}, {"id": "r2"}]) as mock_batch,
+            patch.object(heartbeat, "_post_json_with_retries", return_value=_DummyResponse(200, '{"data": [{"id": "r1"}, {"id": "r2"}]}')) as mock_post,
             patch.object(heartbeat, "mark_entry_sent", return_value=True),
             patch.object(heartbeat, "delete_entry",
                          side_effect=lambda _c, e: deleted_ids.append(e["id"])),
@@ -897,8 +900,8 @@ class HeartbeatTests(unittest.TestCase):
         self.assertTrue(had_send)
         self.assertEqual(input_send_count, 2)
         self.assertEqual(deleted_ids, ["d1"])  # Only destroy entry deleted
-        mock_batch.assert_called_once()  # Single batch call for both send entries
-        self.assertEqual(len(mock_batch.call_args[0][1]), 2)  # 2 payloads in batch
+        mock_post.assert_called_once()  # Single batch call for both send entries
+        self.assertEqual(len(mock_post.call_args.kwargs["payload"]), 2)  # 2 payloads in batch
 
     def test_null_hmac_key_sends_zero_preserves_all(self):
         """When hmac_key_encrypted is None, ALL send entries must be preserved."""
@@ -917,7 +920,7 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "release_entry_lock",
                          side_effect=lambda _c, eid: released_ids.append(eid)),
             patch.object(heartbeat, "delete_entry") as mock_delete,
-            patch.object(heartbeat, "send_batch_emails") as mock_batch,
+            patch.object(heartbeat, "_post_json_with_retries") as mock_post,
         ):
             had_send, input_send_count = heartbeat.process_expired_entries(
                 client=object(), profile=profile, entries=entries,
@@ -929,7 +932,7 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(input_send_count, 3)
         mock_delete.assert_not_called()  # ZERO deletions
         self.assertEqual(sorted(released_ids), ["e-0", "e-1", "e-2"])
-        mock_batch.assert_not_called()
+        mock_post.assert_not_called()
 
 
     def test_email_validation_regex(self):
@@ -977,7 +980,7 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "compute_hmac_signature", return_value="sig"),
             patch.object(heartbeat, "release_entry_lock") as mock_release,
             patch.object(heartbeat, "delete_entry") as mock_delete,
-            patch.object(heartbeat, "send_batch_emails") as mock_batch,
+            patch.object(heartbeat, "_post_json_with_retries") as mock_post,
         ):
             had_send, input_send_count = heartbeat.process_expired_entries(
                 client=object(), profile=profile, entries=entries,
@@ -989,7 +992,7 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(input_send_count, 1)
         mock_delete.assert_not_called()
         mock_release.assert_called_once()
-        mock_batch.assert_not_called()
+        mock_post.assert_not_called()
 
     def test_data_key_decryption_failure_preserves_entry(self):
         """If data key decryption throws, entry is preserved, not deleted."""
@@ -1029,7 +1032,7 @@ class HeartbeatTests(unittest.TestCase):
             patch.object(heartbeat, "compute_hmac_signature", return_value="sig"),
             patch.object(heartbeat, "release_entry_lock") as mock_release,
             patch.object(heartbeat, "delete_entry") as mock_delete,
-            patch.object(heartbeat, "send_batch_emails") as mock_batch,
+            patch.object(heartbeat, "_post_json_with_retries") as mock_post,
         ):
             had_send, input_send_count = heartbeat.process_expired_entries(
                 client=object(), profile=profile, entries=entries,
@@ -1041,7 +1044,7 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(input_send_count, 1)
         mock_delete.assert_not_called()
         mock_release.assert_called_once()
-        mock_batch.assert_not_called()
+        mock_post.assert_not_called()
 
     def test_multiple_send_entries_all_sent_different_recipients(self):
         """4 send entries with 2 different emails — ALL must be sent via single batch."""
@@ -1088,8 +1091,8 @@ class HeartbeatTests(unittest.TestCase):
                              f"p{i}|r{i}": f"sig{i}" for i in range(4)
                          }.get(msg, "nomatch")),
             patch.object(heartbeat, "build_unlock_email_payload", side_effect=_track_build),
-            patch.object(heartbeat, "send_batch_emails",
-                         return_value=[{"id": f"r{i}"} for i in range(4)]) as mock_batch,
+            patch.object(heartbeat, "_post_json_with_retries",
+                         return_value=_DummyResponse(200, '{"data": []}')) as mock_post,
             patch.object(heartbeat, "mark_entry_sent", return_value=True),
             patch.object(heartbeat, "send_executed_push", return_value=True),
         ):
@@ -1103,8 +1106,8 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(input_send_count, 4)
         self.assertEqual(built_payloads, ["a@x.com", "a@x.com", "b@y.com", "b@y.com"])
         # Single batch call with all 4 payloads (no rate-limit issues)
-        mock_batch.assert_called_once()
-        self.assertEqual(len(mock_batch.call_args[0][1]), 4)
+        mock_post.assert_called_once()
+        self.assertEqual(len(mock_post.call_args.kwargs["payload"]), 4)
 
     def test_batch_send_failure_releases_all_locks(self):
         """If the batch API call fails, all prepared entry locks are released."""
@@ -1144,10 +1147,8 @@ class HeartbeatTests(unittest.TestCase):
                          }.get(msg, "nomatch")),
             patch.object(heartbeat, "build_unlock_email_payload",
                          return_value={"to": ["u@x.com"], "headers": {}}),
-            patch.object(heartbeat, "send_batch_emails",
-                         side_effect=RuntimeError("Resend batch error: 429")),
-            patch.object(heartbeat, "send_unlock_email",
-                         side_effect=RuntimeError("Individual send also failed")),
+            patch.object(heartbeat, "_post_json_with_retries",
+                         return_value=_DummyResponse(429, '{"message": "rate limited"}')),
             patch.object(heartbeat, "release_entry_lock",
                          side_effect=lambda _c, eid: released_ids.append(eid)),
             patch.object(heartbeat, "mark_entry_sent") as mock_mark,
@@ -1160,7 +1161,7 @@ class HeartbeatTests(unittest.TestCase):
 
         self.assertFalse(had_send)
         self.assertEqual(input_send_count, 3)
-        # All 3 locks released after both batch AND individual fallback failed
+        # All 3 locks released after batch failed
         self.assertEqual(sorted(released_ids), ["s-0", "s-1", "s-2"])
         mock_mark.assert_not_called()
 

@@ -1645,12 +1645,19 @@ def process_expired_entries(
 
             # ── Chunk succeeded — mark entries as sent IMMEDIATELY ──
             for entry_id, entry_title, *_ in chunk:
-                try:
-                    if not mark_entry_sent(client, entry_id, now):
-                        print(f"WARNING: mark_entry_sent returned False for {entry_id}, retrying")
-                        mark_entry_sent(client, entry_id, now)
-                except Exception as mark_exc:  # noqa: BLE001
-                    print(f"Failed to mark entry {entry_id} as sent: {mark_exc}")
+                marked = False
+                for _mark_attempt in range(3):
+                    try:
+                        if mark_entry_sent(client, entry_id, now):
+                            marked = True
+                            break
+                    except Exception as mark_exc:  # noqa: BLE001
+                        if _mark_attempt == 2:
+                            print(f"Failed to mark entry {entry_id} as sent after 3 attempts: {mark_exc}")
+                    if _mark_attempt < 2:
+                        time.sleep(1)
+                if not marked:
+                    print(f"WARNING: Could not mark entry {entry_id} as sent — will be requeued")
                 had_send = True
                 try:
                     send_executed_push(
