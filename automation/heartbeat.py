@@ -2352,8 +2352,8 @@ def main() -> int:
           # This catches upgrades, downgrades, renewals, and cancellations
           # even when the client is logged out, phone destroyed, or webhook failed.
           #
-          # SCALABILITY: At 0.12s per RC call, verifying every user is too slow
-          # at scale (1M users = 33 hours). We only verify users where a mismatch
+          # SCALABILITY: At ~1.1s per RC call (rate-limited to ~60 req/min),
+          # verifying every user is too slow at scale. We only verify users where a mismatch
           # is plausible:
           #   - Paid users → catch cancellations, expirations, refunds
           #   - Free users with pro indicators → catch missed webhook upgrades
