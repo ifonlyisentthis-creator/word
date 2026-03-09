@@ -72,9 +72,27 @@ RESEND_INTER_CHUNK_DELAY = 0.15  # seconds between batch chunks to respect rate 
 
 REVENUECAT_ENTITLEMENT_ID = "AfterWord Pro"
 
-RC_VERIFY_RATE_LIMIT_DELAY = 0.12  # seconds between RC API calls to stay under 10 req/s
+RC_VERIFY_RATE_LIMIT_DELAY = 1.1  # seconds between RC API calls — RC V1 limit is ~60 req/min
+RC_429_BACKOFF_SECONDS = 30       # pause when RC returns 429 (rate limited)
 
 _HTTP_SESSION: requests.Session | None = None
+_resend_quota_exhausted = False  # set True when Resend daily limit (100/day free) is hit
+
+
+def _mark_resend_quota_exhausted(response: "requests.Response") -> bool:
+    """Check if a Resend response indicates the daily quota is exhausted.
+
+    When the free-tier limit (100 emails/day) is reached, Resend returns 429.
+    We detect this and set a module flag so all subsequent sends in the same
+    run short-circuit immediately instead of wasting retries.  Pending flags
+    (downgrade_email_pending, entry locks) ensure delivery next heartbeat run.
+    """
+    global _resend_quota_exhausted
+    if response.status_code == 429:
+        _resend_quota_exhausted = True
+        print("Resend rate/quota limit hit — skipping remaining emails this run")
+        return True
+    return False
 
 
 def _get_http_session() -> requests.Session:
@@ -615,6 +633,8 @@ def send_email(
     idempotency_key: str | None = None,
     preheader: str = "",
 ) -> None:
+    if _resend_quota_exhausted:
+        raise RuntimeError("Resend daily quota exhausted — email deferred to next run")
 
     formatted_from = _format_from_address(from_email)
     reply_to_email = _extract_email_address(from_email)
@@ -654,7 +674,7 @@ def send_email(
     )
 
     if response.status_code >= 400:
-
+        _mark_resend_quota_exhausted(response)
         raise RuntimeError(f"Resend error: {response.status_code} {response.text}")
 
 
@@ -1148,6 +1168,8 @@ def send_unlock_email(
     from_email: str,
 ) -> None:
     """Send a single unlock email.  Kept for backward compatibility / simple cases."""
+    if _resend_quota_exhausted:
+        raise RuntimeError("Resend daily quota exhausted — email deferred to next run")
     payload = build_unlock_email_payload(
         recipient_email, entry_id, sender_name, entry_title,
         viewer_link, security_key, from_email,
@@ -1162,6 +1184,7 @@ def send_unlock_email(
         idempotency_key=f"unlock-{entry_id}",
     )
     if response.status_code >= 400:
+        _mark_resend_quota_exhausted(response)
         raise RuntimeError(f"Resend error: {response.status_code} {response.text}")
 
 
@@ -1186,6 +1209,8 @@ def send_batch_emails(
     """
     if not payloads:
         return []
+    if _resend_quota_exhausted:
+        raise RuntimeError("Resend daily quota exhausted — batch deferred to next run")
 
     all_results: list[dict] = []
     for chunk_idx in range(0, len(payloads), RESEND_BATCH_LIMIT):
@@ -1209,6 +1234,7 @@ def send_batch_emails(
         )
 
         if response.status_code >= 400:
+            _mark_resend_quota_exhausted(response)
             raise RuntimeError(
                 f"Resend batch error (chunk {chunk_idx // RESEND_BATCH_LIMIT}): "
                 f"{response.status_code} {response.text}"
@@ -1982,6 +2008,12 @@ def verify_subscription_with_revenuecat(
     if resp.status_code == 404:
         # User not known to RevenueCat → free
         return "free"
+
+    if resp.status_code == 429:
+        # Rate-limited — back off so subsequent calls in this batch succeed
+        print(f"RC verify 429 rate-limited for {user_id} — backing off {RC_429_BACKOFF_SECONDS}s")
+        time.sleep(RC_429_BACKOFF_SECONDS)
+        return None
 
     if not resp.ok:
         print(f"RC verify HTTP {resp.status_code} for {user_id}: {resp.text[:200]}")
