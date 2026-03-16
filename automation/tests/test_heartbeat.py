@@ -2061,5 +2061,232 @@ class HeartbeatTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+    # ── Decryption failure triggers tamper notification ──
+
+    def test_decryption_failure_triggers_tamper_notification(self):
+        """When AES-GCM decryption fails, _try_send_tampering_notification must be called."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {"id": "tamper-1", "action_type": "send", "title": "Tampered",
+             "payload_encrypted": "p1", "recipient_email_encrypted": "corrupt",
+             "data_key_encrypted": "dk1", "hmac_signature": "sig"},
+        ]
+        profile = {
+            "id": "user-tamper",
+            "email": "owner@example.com",
+            "sender_name": "Bob",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+
+        call_count = {"decrypt": 0}
+
+        def _decrypt_side_effect(encoded, secret):
+            call_count["decrypt"] += 1
+            if call_count["decrypt"] == 1:
+                return b"h" * 32  # HMAC key
+            raise ValueError("AES-GCM authentication failed")
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "extract_server_ciphertext", side_effect=lambda v: v),
+            patch.object(heartbeat, "decrypt_with_server_secret",
+                         side_effect=_decrypt_side_effect),
+            patch.object(heartbeat, "compute_hmac_signature", return_value="sig"),
+            patch.object(heartbeat, "release_entry_lock") as mock_release,
+            patch.object(heartbeat, "delete_entry") as mock_delete,
+            patch.object(heartbeat, "_try_send_tampering_notification") as mock_tamper,
+        ):
+            had_send, input_send_count = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertFalse(had_send, "Decryption failure must block delivery")
+        mock_delete.assert_not_called()
+        mock_release.assert_called_once()
+        mock_tamper.assert_called_once()
+        # Verify decryption_failures count was passed
+        self.assertEqual(
+            mock_tamper.call_args.kwargs["decryption_failures"], 1,
+        )
+
+    # ── Multiple HMAC mismatches all delivered ──
+
+    def test_multiple_hmac_mismatches_all_delivered(self):
+        """3 entries all with HMAC mismatch (key rotation) — ALL must be delivered
+        when AES-GCM decryption succeeds for each."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {"id": f"rot-{i}", "action_type": "send", "title": f"Entry {i}",
+             "payload_encrypted": f"p{i}", "recipient_email_encrypted": f"r{i}",
+             "data_key_encrypted": f"dk{i}", "hmac_signature": "OLD_SIG"}
+            for i in range(3)
+        ]
+        profile = {
+            "id": "user-multi-rot",
+            "sender_name": "Charlie",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+
+        call_count = {"decrypt": 0}
+        emails = ["a@x.com", "b@x.com", "c@x.com"]
+
+        def _decrypt_side_effect(encoded, secret):
+            call_count["decrypt"] += 1
+            if call_count["decrypt"] == 1:
+                return b"h" * 32  # HMAC key
+            idx = call_count["decrypt"] - 2
+            if idx % 2 == 0:
+                return emails[idx // 2].encode("utf-8")
+            return b"k" * 32
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "extract_server_ciphertext", side_effect=lambda v: v),
+            patch.object(heartbeat, "decrypt_with_server_secret",
+                         side_effect=_decrypt_side_effect),
+            patch.object(heartbeat, "compute_hmac_signature", return_value="NEW_SIG"),
+            patch.object(heartbeat, "build_unlock_email_payload", return_value={"mock": True}),
+            patch.object(heartbeat, "_post_json_with_retries",
+                         return_value=_DummyResponse(200, '{"data": [{"id":"r"}]}')),
+            patch.object(heartbeat, "mark_entry_sent", return_value=True),
+            patch.object(heartbeat, "delete_entry") as mock_delete,
+            patch.object(heartbeat, "release_entry_lock") as mock_release,
+            patch.object(heartbeat, "send_executed_push", return_value=True),
+        ):
+            had_send, input_send_count = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        self.assertTrue(had_send, "ALL entries must be delivered despite HMAC mismatches")
+        self.assertEqual(input_send_count, 3)
+        mock_delete.assert_not_called()
+        mock_release.assert_not_called()
+
+    # ── FCM push payload includes Android tag ──
+
+    def test_fcm_push_payload_has_android_tag(self):
+        """send_push_v1 must include android.notification.tag from data['type']."""
+        captured = {}
+
+        def _capture_post(url, *, headers, payload, **kwargs):
+            captured.update(payload)
+            return _DummyResponse(200, '{"name": "projects/p/messages/m"}')
+
+        with patch.object(heartbeat, "_post_json_with_retries", side_effect=_capture_post):
+            heartbeat.send_push_v1(
+                project_id="proj",
+                access_token="tok",
+                fcm_token="device-token",
+                title="Test",
+                body="Body",
+                data={"type": "warning_33"},
+            )
+
+        msg = captured.get("message", {})
+        self.assertEqual(msg["android"]["notification"]["tag"], "warning_33")
+        self.assertEqual(msg["data"]["type"], "warning_33")
+
+    # ── Push 66 and 33 get different tags ──
+
+    def test_push_66_and_33_use_different_tags(self):
+        """66% and 33% pushes must use different push_stage values to avoid
+        device-side notification collapsing."""
+        captured_data = []
+
+        def _capture_push(client, user_id, fcm_ctx, title, body, data=None):
+            captured_data.append(data)
+            return True
+
+        with patch.object(heartbeat, "_send_push_to_user", side_effect=_capture_push):
+            heartbeat.send_warning_push(
+                object(), "u1", "Alice", datetime(2026, 3, 1, tzinfo=timezone.utc),
+                {"project_id": "p", "access_token": "t"},
+                now_utc=datetime(2026, 2, 20, tzinfo=timezone.utc),
+                push_stage="warning_66",
+            )
+            heartbeat.send_warning_push(
+                object(), "u1", "Alice", datetime(2026, 3, 1, tzinfo=timezone.utc),
+                {"project_id": "p", "access_token": "t"},
+                now_utc=datetime(2026, 2, 25, tzinfo=timezone.utc),
+                push_stage="warning_33",
+            )
+
+        self.assertEqual(len(captured_data), 2)
+        self.assertEqual(captured_data[0]["type"], "warning_66")
+        self.assertEqual(captured_data[1]["type"], "warning_33")
+        self.assertNotEqual(captured_data[0]["type"], captured_data[1]["type"])
+
+    # ── Paid user with default timer NOT downgraded ──
+
+    def test_paid_user_default_timer_not_downgraded(self):
+        """A pro user with timer_days=30 (never changed) must NOT be downgraded.
+        handle_subscription_downgrade only fires when sub_status is already 'free'."""
+        profile = {
+            "id": "user-pro-default",
+            "email": "pro@example.com",
+            "sender_name": "ProUser",
+            "subscription_status": "pro",
+            "timer_days": 30,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+            "downgrade_email_pending": False,
+        }
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        result = heartbeat.handle_subscription_downgrade(
+            client=object(), profile=profile, active_entries=[],
+            resend_key="rk", from_email="f@x.com", now=now,
+        )
+        # handle_subscription_downgrade checks for pro artifacts on a free user.
+        # A pro user has NO artifacts to revert (timer_days=30 is the default).
+        self.assertFalse(result, "Pro user with default timer must NOT trigger downgrade")
+
+    # ── Free user with pro timer IS downgraded ──
+
+    def test_free_user_custom_timer_is_downgraded(self):
+        """A free user with timer_days=90 (pro artifact) MUST be downgraded."""
+        profile = {
+            "id": "user-free-custom",
+            "email": "ex@example.com",
+            "sender_name": "ExPro",
+            "subscription_status": "free",
+            "timer_days": 90,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+            "downgrade_email_pending": False,
+        }
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+
+        update_calls = []
+
+        class _FakeTable:
+            def __init__(self):
+                self._chain = {}
+            def table(self, name):
+                return self
+            def update(self, data):
+                update_calls.append(data)
+                return self
+            def eq(self, *a):
+                return self
+            def execute(self):
+                return type("R", (), {"data": [], "count": 0})()
+            def select(self, *a, **kw):
+                return self
+
+        with patch.object(heartbeat, "send_email"):
+            result = heartbeat.handle_subscription_downgrade(
+                client=_FakeTable(), profile=profile, active_entries=[],
+                resend_key="rk", from_email="f@x.com", now=now,
+            )
+
+        self.assertTrue(result, "Free user with custom timer MUST be downgraded")
+        # First update call should reset timer_days to 30
+        self.assertEqual(update_calls[0]["timer_days"], 30)
+
+
 if __name__ == "__main__":
     unittest.main()

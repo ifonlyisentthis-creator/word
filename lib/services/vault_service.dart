@@ -344,14 +344,13 @@ class VaultService {
     String userId,
     SecretKey hmacKey,
   ) async {
-    final response = await _client
-        .from('profiles')
-        .select('hmac_key_encrypted')
-        .eq('id', userId)
-        .maybeSingle();
-    if (response == null || response['hmac_key_encrypted'] != null) {
-      return;
-    }
+    // ALWAYS sync the current local HMAC key to the server profile.
+    // After device change, app reinstall, or secure-storage wipe the local
+    // key may differ from the profile copy.  Writing on every entry
+    // create/update guarantees the server always has the key that was used
+    // for the most recent HMAC signature.  AES-GCM on the server side is
+    // the authoritative tamper check; the HMAC is an advisory integrity
+    // layer that must never block delivery due to stale keys.
     final encrypted = await _serverCryptoService.encryptKey(hmacKey);
     await _client
         .from('profiles')
@@ -359,7 +358,7 @@ class VaultService {
         .eq('id', userId);
 
     // SAFETY: Verify the write actually persisted. If this is null,
-    // the heartbeat will be unable to send entries to beneficiaries.
+    // the heartbeat will be unable to verify HMAC signatures.
     final verify = await _client
         .from('profiles')
         .select('hmac_key_encrypted')

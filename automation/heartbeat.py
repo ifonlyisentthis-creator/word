@@ -799,13 +799,15 @@ def send_push_v1(
 
     url = f"https://fcm.googleapis.com/v1/projects/{project_id}/messages:send"
 
+    notification: dict = {"title": title, "body": body}
+
     payload: dict = {
 
         "message": {
 
             "token": fcm_token,
 
-            "notification": {"title": title, "body": body},
+            "notification": notification,
 
         }
 
@@ -814,6 +816,13 @@ def send_push_v1(
     if data:
 
         payload["message"]["data"] = data
+
+    # Android notification tag prevents device-side collapsing between
+    # different push types (66%, 33%, warning, executed).
+    tag = (data or {}).get("type") or "afterword"
+    payload["message"]["android"] = {
+        "notification": {"tag": tag},
+    }
 
 
 
@@ -980,6 +989,7 @@ def send_warning_push(
     *,
     now_utc: datetime | None = None,
     remaining_fraction: float = 1.0,
+    push_stage: str = "warning",
 ) -> bool:
     """Returns True if push was actually delivered to at least one device."""
     if fcm_ctx is None:
@@ -1014,7 +1024,7 @@ def send_warning_push(
         client, user_id, fcm_ctx,
         title="Afterword — check in now",
         body=f"Hi {sender_name}, {urgency} Open the app to check in.",
-        data={"type": "warning"},
+        data={"type": push_stage},
     )
 
 
@@ -2516,7 +2526,17 @@ def main() -> int:
                           rc_api_secret, user_id,
                       )
                       if rc_status is not None and rc_status != sub_status:
-                          print(f"RC verify: user {user_id} DB={sub_status} RC={rc_status} — updating DB")
+                          # Safety audit: log paid→free transitions prominently
+                          if sub_status in PAID_STATUSES and rc_status == "free":
+                              print(
+                                  f"RC DOWNGRADE: user {user_id} was {sub_status} "
+                                  f"in DB but RC says free — applying downgrade. "
+                                  f"Pro indicators: timer={profile.get('timer_days')}, "
+                                  f"theme={profile.get('selected_theme')}, "
+                                  f"soul_fire={profile.get('selected_soul_fire')}"
+                              )
+                          else:
+                              print(f"RC verify: user {user_id} DB={sub_status} RC={rc_status} — updating DB")
                           try:
                               client.table("profiles").update({
                                   "subscription_status": rc_status,
@@ -2734,6 +2754,8 @@ def main() -> int:
 
                       remaining_fraction=timer_state.remaining_fraction,
 
+                      push_stage="warning_66",
+
                   )
 
               except Exception as exc:  # noqa: BLE001
@@ -2773,6 +2795,8 @@ def main() -> int:
                       now_utc=now,
 
                       remaining_fraction=timer_state.remaining_fraction,
+
+                      push_stage="warning_33",
 
                   )
 
