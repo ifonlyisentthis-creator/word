@@ -476,10 +476,10 @@ packages:
     dependency: transitive
     description:
       name: google_sign_in_web
-      sha256: dac0676af14b96b11691cc3c3e152415a896a38f1224269241d7cc294bdb9102
+      sha256: d473003eeca892f96a01a64fc803378be765071cb0c265ee872c7f8683245d14
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.2"
+    version: "1.1.3"
   gotrue:
     dependency: transitive
     description:
@@ -900,18 +900,18 @@ packages:
     dependency: "direct main"
     description:
       name: purchases_flutter
-      sha256: "3074eb68e8766bceabfbd7e8f5281304e0bb2e1f70004a5ad97747125117493d"
+      sha256: "88bd00ac44273d4782abc09453dffd8314be39764bc8f67f68a26325ea68b91f"
       url: "https://pub.dev"
     source: hosted
-    version: "9.13.1"
+    version: "9.14.0"
   purchases_ui_flutter:
     dependency: "direct main"
     description:
       name: purchases_ui_flutter
-      sha256: "0204e28b7775cb701c5a3abb4be59ea0744a884256e9d89afe0a8a140fc255bb"
+      sha256: edb15ab48fca177af0bd949aa20939aeafcaf90719903d52f3015ed1414a87f7
       url: "https://pub.dev"
     source: hosted
-    version: "9.13.1"
+    version: "9.14.0"
   realtime_client:
     dependency: transitive
     description:

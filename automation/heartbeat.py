@@ -1451,6 +1451,65 @@ def heal_inconsistent_profiles(client, now: datetime) -> None:
     # which runs at the end of main(). No separate startup sweep needed.
 
 
+def _try_send_tampering_notification(
+    client,
+    profile: dict,
+    resend_key: str,
+    from_email: str,
+    decryption_failures: int,
+    now: datetime,
+) -> None:
+    """Best-effort email to user when AES-GCM decryption fails on their entries.
+
+    This indicates genuine data corruption or tampering — NOT a simple HMAC key
+    rotation.  AES-GCM is authenticated encryption; if the ciphertext or tag was
+    modified, decryption raises an error.  This is the only scenario where we
+    alert the user.
+    """
+    uid = profile.get("id", "?")
+    email = profile.get("email")
+    sender_name = profile.get("sender_name") or "Afterword"
+    if not email:
+        return
+
+    subject = "Afterword — Important Security Notice"
+    text = (
+        f"Hi {sender_name},\n\n"
+        f"Our system detected that {decryption_failures} vault "
+        f"{'entry has' if decryption_failures == 1 else 'entries have'} "
+        f"data that could not be verified.\n\n"
+        f"This may indicate data corruption.  The affected "
+        f"{'entry was' if decryption_failures == 1 else 'entries were'} "
+        f"preserved and will not be sent until the issue is resolved.\n\n"
+        f"If you recently restored your account on a new device, "
+        f"please open the app and re-save any affected entries. "
+        f"If you did not make changes, please contact support.\n\n"
+        f"— The Afterword Team"
+    )
+    html = (
+        f"<p>Hi {sender_name},</p>"
+        f"<p>Our system detected that <strong>{decryption_failures}</strong> vault "
+        f"{'entry has' if decryption_failures == 1 else 'entries have'} "
+        f"data that could not be verified.</p>"
+        f"<p>This may indicate data corruption. The affected "
+        f"{'entry was' if decryption_failures == 1 else 'entries were'} "
+        f"preserved and will not be sent until the issue is resolved.</p>"
+        f"<p>If you recently restored your account on a new device, "
+        f"please open the app and re-save any affected entries. "
+        f"If you did not make changes, please contact support.</p>"
+        f"<p>— The Afterword Team</p>"
+    )
+    try:
+        send_email(
+            resend_key, from_email, email, subject, text, html,
+            idempotency_key=f"tamper-{uid}-{now.date().isoformat()}",
+            preheader="Important security notice about your Afterword vault.",
+        )
+        print(f"User {uid}: sent tampering notification email")
+    except Exception as exc:  # noqa: BLE001
+        print(f"User {uid}: failed to send tampering notification: {exc}")
+
+
 def process_expired_entries(
     client,
     profile: dict,
@@ -1488,9 +1547,13 @@ def process_expired_entries(
         try:
             hmac_key_bytes = decrypt_with_server_secret(hmac_key_encrypted, server_secret)
         except Exception as exc:  # noqa: BLE001
-            print(f"CRITICAL: Failed to decrypt HMAC key for user {user_id}: {exc}")
+            print(f"WARNING: Failed to decrypt HMAC key for user {user_id}: {exc} — delivery will proceed without HMAC check")
     elif input_send_count > 0:
-        print(f"CRITICAL: User {user_id} has {input_send_count} send entries but hmac_key_encrypted is NULL in profile")
+        print(f"WARNING: User {user_id} has {input_send_count} send entries but hmac_key_encrypted is NULL — delivery will proceed without HMAC check")
+
+    # Counters for post-loop integrity summary
+    hmac_mismatches = 0
+    decryption_failures = 0
 
     # ── Phase 1: Process destroy entries immediately, prepare send entries ──
     # Each prepared send is (entry_id, entry_title, recipient, viewer_link, security_key, email_payload)
@@ -1520,26 +1583,29 @@ def process_expired_entries(
             # SAFETY: NEVER delete a send entry on validation failure.
             # Release the lock so it stays in the DB for retry next cycle.
 
-            if hmac_key_bytes is None:
-                print(f"CRITICAL: Skipping send entry {entry_id} — HMAC key unavailable for user {user_id}")
-                release_entry_lock(client, entry_id)
-                continue
-
-            recipient_encrypted = entry.get("recipient_email_encrypted") or ""
-            signature_message = f"{entry.get('payload_encrypted')}|{recipient_encrypted}"
-            expected_signature = compute_hmac_signature(signature_message, hmac_key_bytes)
-
-            if expected_signature != entry.get("hmac_signature"):
-                print(f"CRITICAL: HMAC mismatch for send entry {entry_id} user {user_id} — entry preserved for investigation")
-                release_entry_lock(client, entry_id)
-                continue
+            # ── HMAC integrity check (advisory, NOT a delivery gate) ──
+            # AES-GCM authenticated encryption is the authoritative tamper
+            # check — if the ciphertext was modified, decryption fails.
+            # HMAC mismatches are most often caused by legitimate HMAC key
+            # rotation (device change, app reinstall, secure-storage wipe)
+            # and must NOT block delivery.
+            hmac_ok = False
+            if hmac_key_bytes is not None:
+                recipient_encrypted = entry.get("recipient_email_encrypted") or ""
+                signature_message = f"{entry.get('payload_encrypted')}|{recipient_encrypted}"
+                expected_signature = compute_hmac_signature(signature_message, hmac_key_bytes)
+                hmac_ok = expected_signature == entry.get("hmac_signature")
+                if not hmac_ok:
+                    hmac_mismatches += 1
+            else:
+                recipient_encrypted = entry.get("recipient_email_encrypted") or ""
 
             if not recipient_encrypted:
                 print(f"CRITICAL: Empty recipient for send entry {entry_id} user {user_id} — entry preserved")
                 release_entry_lock(client, entry_id)
                 continue
 
-            # Step 1: Decrypt recipient email
+            # Step 1: Decrypt recipient email (AES-GCM — authoritative integrity check)
             try:
                 recipient_ciphertext = extract_server_ciphertext(recipient_encrypted)
                 recipient_email = decrypt_with_server_secret(
@@ -1547,6 +1613,7 @@ def process_expired_entries(
                 ).decode("utf-8").strip()
             except Exception as dec_exc:  # noqa: BLE001
                 print(f"CRITICAL: Failed to decrypt recipient for send entry {entry_id} user {user_id}: {dec_exc}")
+                decryption_failures += 1
                 release_entry_lock(client, entry_id)
                 continue
 
@@ -1555,7 +1622,7 @@ def process_expired_entries(
                 release_entry_lock(client, entry_id)
                 continue
 
-            # Step 2: Decrypt data key
+            # Step 2: Decrypt data key (AES-GCM — authoritative integrity check)
             data_key_encrypted = entry.get("data_key_encrypted")
             if not data_key_encrypted:
                 print(f"CRITICAL: Missing data_key_encrypted for send entry {entry_id} user {user_id} — entry preserved")
@@ -1567,6 +1634,7 @@ def process_expired_entries(
                 data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
             except Exception as dk_exc:  # noqa: BLE001
                 print(f"CRITICAL: Failed to decrypt data_key for send entry {entry_id} user {user_id}: {dk_exc}")
+                decryption_failures += 1
                 release_entry_lock(client, entry_id)
                 continue
 
@@ -1672,6 +1740,30 @@ def process_expired_entries(
             # Throttle between chunks to respect Resend rate limits
             if chunk_start + RESEND_BATCH_LIMIT < len(prepared_sends):
                 time.sleep(RESEND_INTER_CHUNK_DELAY)
+
+    # ── Post-loop integrity summary ──
+    if hmac_mismatches > 0 and decryption_failures == 0:
+        # All decryptions succeeded → data was NOT tampered, just key rotation.
+        print(
+            f"HMAC-INFO: User {user_id}: {hmac_mismatches} HMAC mismatch(es) "
+            f"but all AES-GCM decryptions succeeded — likely HMAC key rotation "
+            f"(device change / app reinstall). Entries delivered normally."
+        )
+    elif decryption_failures > 0:
+        # AES-GCM decryption failed → genuine corruption or tampering.
+        print(
+            f"CRITICAL: User {user_id}: {decryption_failures} entry decryption "
+            f"failure(s) detected — possible data corruption or tampering. "
+            f"HMAC mismatches: {hmac_mismatches}."
+        )
+        _try_send_tampering_notification(
+            client=client,
+            profile=profile,
+            resend_key=resend_key,
+            from_email=from_email,
+            decryption_failures=decryption_failures,
+            now=now,
+        )
 
     return had_send, input_send_count
 

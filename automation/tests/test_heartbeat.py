@@ -662,8 +662,9 @@ class HeartbeatTests(unittest.TestCase):
         self.assertNotEqual(sig1, sig2,
                             "Different HMAC keys must produce different signatures")
 
-    def test_process_expired_entries_rejects_tampered_hmac(self):
-        """Entry with wrong HMAC signature is preserved (not deleted), not sent."""
+    def test_process_expired_entries_hmac_mismatch_with_bad_recipient_still_preserved(self):
+        """HMAC mismatch alone does NOT block delivery (soft warning). Entry is preserved
+        here because the mocked recipient decryption returns invalid email format."""
         now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
         entries = [
             {
@@ -908,6 +909,51 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(deleted_ids, ["d1"])  # Only destroy entry deleted
         mock_post.assert_called_once()  # Single batch call for both send entries
         self.assertEqual(len(mock_post.call_args.kwargs["payload"]), 2)  # 2 payloads in batch
+
+    def test_hmac_mismatch_does_not_block_delivery_when_decryption_succeeds(self):
+        """THE FIX: HMAC mismatch (key rotation) must NOT block delivery.
+        When AES-GCM decryption succeeds, the data is intact — HMAC mismatch
+        is just a stale key, not tampering. Entries must be delivered."""
+        now = datetime(2026, 2, 7, 10, 0, tzinfo=timezone.utc)
+        entries = [
+            {"id": "rotated-1", "action_type": "send", "title": "Key Rotated Entry",
+             "payload_encrypted": "p1", "recipient_email_encrypted": "r1",
+             "data_key_encrypted": "dk1", "hmac_signature": "OLD_STALE_SIG"},
+        ]
+        profile = {
+            "id": "user-rotated",
+            "sender_name": "Alice",
+            "hmac_key_encrypted": "enc-hmac",
+        }
+
+        with (
+            patch.object(heartbeat, "claim_entry_for_sending", return_value=True),
+            patch.object(heartbeat, "extract_server_ciphertext", side_effect=lambda v: v),
+            # First call: HMAC key decryption, then recipient, then data_key
+            patch.object(heartbeat, "decrypt_with_server_secret",
+                         side_effect=[b"h" * 32, b"ben@example.com", b"k" * 32]),
+            # compute_hmac_signature returns something that does NOT match the entry
+            patch.object(heartbeat, "compute_hmac_signature", return_value="NEW_KEY_SIG"),
+            patch.object(heartbeat, "build_unlock_email_payload", return_value={"mock": True}),
+            patch.object(heartbeat, "_post_json_with_retries",
+                         return_value=_DummyResponse(200, '{"data": [{"id": "r1"}]}')),
+            patch.object(heartbeat, "mark_entry_sent", return_value=True),
+            patch.object(heartbeat, "delete_entry") as mock_delete,
+            patch.object(heartbeat, "release_entry_lock") as mock_release,
+            patch.object(heartbeat, "send_executed_push", return_value=True),
+        ):
+            had_send, input_send_count = heartbeat.process_expired_entries(
+                client=object(), profile=profile, entries=entries,
+                server_secret="s", resend_key="rk", from_email="f@x.com",
+                viewer_base_url="https://v.x", fcm_ctx=None, now=now,
+            )
+
+        # Entry MUST be delivered despite HMAC mismatch
+        self.assertTrue(had_send, "HMAC mismatch must NOT block delivery when decryption succeeds")
+        self.assertEqual(input_send_count, 1)
+        mock_delete.assert_not_called()
+        # release_entry_lock should NOT be called (entry was sent successfully)
+        mock_release.assert_not_called()
 
     def test_null_hmac_key_sends_zero_preserves_all(self):
         """When hmac_key_encrypted is None, ALL send entries must be preserved."""
