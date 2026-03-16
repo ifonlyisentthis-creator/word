@@ -106,6 +106,10 @@ class _DummyResponse:
         self.status_code = status_code
         self.text = text
 
+    @property
+    def ok(self):
+        return self.status_code < 400
+
     def json(self):
         import json as _json
         return _json.loads(self.text)
@@ -1837,6 +1841,178 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(update_calls[0]["timer_days"], 30)
         self.assertIsNone(update_calls[0]["selected_theme"])
         self.assertIsNone(update_calls[0]["selected_soul_fire"])
+
+
+    # ── RC lifetime detection tests ──
+
+    def test_rc_verify_lifetime_via_null_expires(self):
+        """Non-expiring entitlement matching our ID = lifetime, regardless of product name."""
+        rc_response = {
+            "subscriber": {
+                "entitlements": {
+                    "AfterWord Pro": {
+                        "expires_date": None,
+                        "product_identifier": "com.afterword.pro_purchase",
+                    }
+                }
+            }
+        }
+        with patch.object(
+            heartbeat, "_get_http_session",
+            return_value=type("S", (), {
+                "get": lambda self, *a, **kw: _DummyResponse(200, __import__("json").dumps(rc_response))
+            })(),
+        ):
+            result = heartbeat.verify_subscription_with_revenuecat("secret", "user-lt")
+        self.assertEqual(result, "lifetime")
+
+    def test_rc_verify_lifetime_via_product_identifier(self):
+        """Product identifier containing 'lifetime' = lifetime."""
+        rc_response = {
+            "subscriber": {
+                "entitlements": {
+                    "AfterWord Pro": {
+                        "expires_date": "2099-01-01T00:00:00Z",
+                        "product_identifier": "com.afterword.lifetime_pro",
+                    }
+                }
+            }
+        }
+        with patch.object(
+            heartbeat, "_get_http_session",
+            return_value=type("S", (), {
+                "get": lambda self, *a, **kw: _DummyResponse(200, __import__("json").dumps(rc_response))
+            })(),
+        ):
+            result = heartbeat.verify_subscription_with_revenuecat("secret", "user-lt2")
+        self.assertEqual(result, "lifetime")
+
+    def test_rc_verify_pro_with_expiring_entitlement(self):
+        """Entitlement with future expires_date and no 'lifetime' in product = pro."""
+        rc_response = {
+            "subscriber": {
+                "entitlements": {
+                    "AfterWord Pro": {
+                        "expires_date": "2099-06-15T00:00:00Z",
+                        "product_identifier": "com.afterword.pro_monthly",
+                    }
+                }
+            }
+        }
+        with patch.object(
+            heartbeat, "_get_http_session",
+            return_value=type("S", (), {
+                "get": lambda self, *a, **kw: _DummyResponse(200, __import__("json").dumps(rc_response))
+            })(),
+        ):
+            result = heartbeat.verify_subscription_with_revenuecat("secret", "user-pro")
+        self.assertEqual(result, "pro")
+
+    def test_rc_verify_case_insensitive_entitlement_id(self):
+        """Entitlement key 'Afterword Pro' (lowercase w) must still match 'AfterWord Pro'."""
+        rc_response = {
+            "subscriber": {
+                "entitlements": {
+                    "Afterword Pro": {
+                        "expires_date": "2099-01-01T00:00:00Z",
+                        "product_identifier": "com.afterword.pro_annual",
+                    }
+                }
+            }
+        }
+        with patch.object(
+            heartbeat, "_get_http_session",
+            return_value=type("S", (), {
+                "get": lambda self, *a, **kw: _DummyResponse(200, __import__("json").dumps(rc_response))
+            })(),
+        ):
+            result = heartbeat.verify_subscription_with_revenuecat("secret", "user-case")
+        self.assertEqual(result, "pro")
+
+    def test_rc_verify_case_insensitive_lifetime(self):
+        """Case-insensitive entitlement key + null expires = lifetime."""
+        rc_response = {
+            "subscriber": {
+                "entitlements": {
+                    "afterword pro": {
+                        "expires_date": None,
+                        "product_identifier": "com.afterword.pro",
+                    }
+                }
+            }
+        }
+        with patch.object(
+            heartbeat, "_get_http_session",
+            return_value=type("S", (), {
+                "get": lambda self, *a, **kw: _DummyResponse(200, __import__("json").dumps(rc_response))
+            })(),
+        ):
+            result = heartbeat.verify_subscription_with_revenuecat("secret", "user-ci-lt")
+        self.assertEqual(result, "lifetime")
+
+    def test_rc_verify_no_matching_entitlement_returns_free(self):
+        """Entitlement key that doesn't match at all → free."""
+        rc_response = {
+            "subscriber": {
+                "entitlements": {
+                    "SomeOtherEntitlement": {
+                        "expires_date": None,
+                        "product_identifier": "com.other.product",
+                    }
+                }
+            }
+        }
+        with patch.object(
+            heartbeat, "_get_http_session",
+            return_value=type("S", (), {
+                "get": lambda self, *a, **kw: _DummyResponse(200, __import__("json").dumps(rc_response))
+            })(),
+        ):
+            result = heartbeat.verify_subscription_with_revenuecat("secret", "user-free")
+        self.assertEqual(result, "free")
+
+    def test_rc_verify_expired_entitlement_returns_free(self):
+        """Entitlement with past expires_date → free."""
+        rc_response = {
+            "subscriber": {
+                "entitlements": {
+                    "AfterWord Pro": {
+                        "expires_date": "2020-01-01T00:00:00Z",
+                        "product_identifier": "com.afterword.pro_monthly",
+                    }
+                }
+            }
+        }
+        with patch.object(
+            heartbeat, "_get_http_session",
+            return_value=type("S", (), {
+                "get": lambda self, *a, **kw: _DummyResponse(200, __import__("json").dumps(rc_response))
+            })(),
+        ):
+            result = heartbeat.verify_subscription_with_revenuecat("secret", "user-expired")
+        self.assertEqual(result, "free")
+
+    def test_rc_verify_404_returns_free(self):
+        """User not found in RC → free."""
+        with patch.object(
+            heartbeat, "_get_http_session",
+            return_value=type("S", (), {
+                "get": lambda self, *a, **kw: _DummyResponse(404, "Not Found")
+            })(),
+        ):
+            result = heartbeat.verify_subscription_with_revenuecat("secret", "user-404")
+        self.assertEqual(result, "free")
+
+    def test_rc_verify_api_error_returns_none(self):
+        """API error (500, timeout) → None (preserve DB value)."""
+        with patch.object(
+            heartbeat, "_get_http_session",
+            return_value=type("S", (), {
+                "get": lambda self, *a, **kw: _DummyResponse(500, "Internal Server Error")
+            })(),
+        ):
+            result = heartbeat.verify_subscription_with_revenuecat("secret", "user-err")
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

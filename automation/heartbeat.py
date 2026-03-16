@@ -1813,7 +1813,11 @@ def cleanup_sent_entries(client) -> None:
                     )
                     continue
 
-                # All entries removed — reset profile to fresh active state
+                # All entries removed — reset profile to fresh active state.
+                # Also clear pro artifacts (themes, soul fire) in case the user
+                # was downgraded while inactive.  The main-loop downgrade handler
+                # only processes active profiles, so these could have persisted
+                # through the entire 30-day grace period.
                 client.table("profiles").update({
                     "status": "active",
                     "timer_days": 30,
@@ -1823,6 +1827,9 @@ def cleanup_sent_entries(client) -> None:
                     "push_66_sent_at": None,
                     "push_33_sent_at": None,
                     "last_entry_at": None,
+                    "selected_theme": None,
+                    "selected_soul_fire": None,
+                    "downgrade_email_pending": False,
                 }).eq("id", uid).execute()
                 reset_count += 1
                 print(f"User {uid}: grace period ended, all entries cleaned up, account reset")
@@ -2051,10 +2058,29 @@ def verify_subscription_with_revenuecat(
             except (ValueError, TypeError):
                 pass
 
-    has_entitlement = any(k == entitlement_id for k, _ in active_entitlements)
+    # Case-insensitive entitlement matching — prevents "AfterWord Pro" vs
+    # "Afterword Pro" mismatches that would incorrectly classify paid users as free.
+    eid_lower = entitlement_id.lower()
+    has_entitlement = any(k.lower() == eid_lower for k, _ in active_entitlements)
+
+    # Log case mismatches so they can be fixed in the RC dashboard
+    if has_entitlement:
+        exact_match = any(k == entitlement_id for k, _ in active_entitlements)
+        if not exact_match:
+            matched_key = next(k for k, _ in active_entitlements if k.lower() == eid_lower)
+            print(
+                f"RC verify: user {user_id} entitlement key case mismatch — "
+                f"found '{matched_key}', expected '{entitlement_id}'"
+            )
+
+    # Lifetime detection: a non-expiring entitlement matching our ID IS lifetime
+    # by RevenueCat definition (subscriptions always have expires_date; only
+    # lifetime/non-consumable purchases have expires_date=null).
+    # Also check product_identifier as a secondary signal.
     is_lifetime = any(
-        (ent.get("product_identifier") or "").lower().find("lifetime") >= 0
-        for _, ent in active_entitlements
+        (k.lower() == eid_lower and ent.get("expires_date") is None)
+        or (ent.get("product_identifier") or "").lower().find("lifetime") >= 0
+        for k, ent in active_entitlements
     )
 
     if is_lifetime:
@@ -2063,12 +2089,11 @@ def verify_subscription_with_revenuecat(
         return "pro"
 
     # Log when RC says "free" but the user had entitlements with different keys
-    # (helps diagnose entitlement ID mismatches like "AfterWord Pro" vs "Afterword Pro")
     if entitlements_raw:
         ent_keys = list(entitlements_raw.keys())
         print(
             f"RC verify: user {user_id} has entitlements {ent_keys} but none match "
-            f"'{entitlement_id}' — returning free"
+            f"'{entitlement_id}' (case-insensitive) — returning free"
         )
     return "free"
 
@@ -2479,7 +2504,7 @@ def main() -> int:
                   print(f"User {user_id}: {pending.count} entries still pending, keeping active for retry")
               elif had_send:
                   # Send entries exist → enter grace period (beneficiary can download)
-                  client.table("profiles").update({
+                  grace_update: dict = {
                       "status": "inactive",
                       "timer_days": 30,
                       "protocol_executed_at": now.isoformat(),
@@ -2487,8 +2512,58 @@ def main() -> int:
                       "push_66_sent_at": None,
                       "push_33_sent_at": None,
                       "last_entry_at": None,
-                  }).eq("id", user_id).execute()
+                  }
+
+                  # ── Inline downgrade: if user is free, clean pro artifacts NOW ──
+                  # Without this, the profile sits inactive for 30 days (grace) and
+                  # the downgrade handler (PASS 0) never runs because it only
+                  # processes active profiles.  Pro themes/soul_fire would persist
+                  # during grace and the downgrade email would be delayed 30+ days.
+                  if sub_status == "free":
+                      _FT = {"oledVoid", "midnightFrost", "shadowRose", None}
+                      _FS = {"etherealOrb", "goldenPulse", "nebulaHeart", None}
+                      sel_t = profile.get("selected_theme")
+                      sel_s = profile.get("selected_soul_fire")
+                      had_custom_timer_at_start = int(profile.get("timer_days") or 30) != 30
+                      had_audio_at_start = any(
+                          (e.get("data_type") or "").lower() == "audio"
+                          for e in active_entries
+                      )
+                      if sel_t not in _FT:
+                          grace_update["selected_theme"] = None
+                      if sel_s not in _FS:
+                          grace_update["selected_soul_fire"] = None
+                      is_genuine_downgrade = had_custom_timer_at_start or had_audio_at_start
+                      if is_genuine_downgrade:
+                          grace_update["downgrade_email_pending"] = True
+
+                  client.table("profiles").update(grace_update).eq("id", user_id).execute()
                   print(f"User {user_id}: protocol executed, grace period started")
+
+                  # Try to send downgrade email inline (best-effort)
+                  if sub_status == "free" and grace_update.get("downgrade_email_pending"):
+                      _dg_email = profile.get("email")
+                      if _dg_email:
+                          try:
+                              _dg_sub, _dg_txt, _dg_htm = _build_downgrade_email(
+                                  sender_name,
+                                  had_audio=any(
+                                      (e.get("data_type") or "").lower() == "audio"
+                                      for e in active_entries
+                                  ),
+                              )
+                              send_email(
+                                  resend_key, from_email, _dg_email,
+                                  _dg_sub, _dg_txt, _dg_htm,
+                                  idempotency_key=f"downgrade-{user_id}-{now.date().isoformat()}",
+                                  preheader=f"Hi {sender_name}, your Afterword subscription has changed.",
+                              )
+                              client.table("profiles").update({
+                                  "downgrade_email_pending": False,
+                              }).eq("id", user_id).execute()
+                              print(f"User {user_id}: sent downgrade notification alongside protocol execution")
+                          except Exception as _dg_exc:  # noqa: BLE001
+                              print(f"User {user_id}: downgrade email deferred ({_dg_exc}), will retry when active")
               elif input_send_count > 0:
                   # SAFETY INVARIANT: There were send entries in the input but
                   # none were successfully sent AND none are pending in DB.
@@ -2500,7 +2575,8 @@ def main() -> int:
                       f"Keeping active for investigation — NOT resetting."
                   )
               else:
-                  # Truly destroy-only → no grace needed, reset to fresh immediately
+                  # Truly destroy-only → no grace needed, reset to fresh immediately.
+                  # Also clear pro artifacts since PASS 0 (downgrade) is skipped.
                   client.table("profiles").update({
                       "status": "active",
                       "timer_days": 30,
@@ -2510,6 +2586,9 @@ def main() -> int:
                       "push_66_sent_at": None,
                       "push_33_sent_at": None,
                       "last_entry_at": None,
+                      "selected_theme": None,
+                      "selected_soul_fire": None,
+                      "downgrade_email_pending": False,
                   }).eq("id", user_id).execute()
                   print(f"User {user_id}: destroy-only vault cleared, account reset to fresh")
 
