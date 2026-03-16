@@ -226,13 +226,16 @@ class TimerState:
 
 def _normalize_timer_days(timer_days: int | str | None) -> int:
 
+    if timer_days is None:
+        return 30  # match Flutter default — users who never checked in get 30 days
+
     try:
 
-        parsed = int(timer_days or 0)
+        parsed = int(timer_days)
 
-    except Exception:  # noqa: BLE001
+    except (ValueError, TypeError):  # noqa: BLE001
 
-        parsed = 0
+        return 30
 
     return max(1, parsed)
 
@@ -1728,7 +1731,7 @@ def cleanup_sent_entries(client) -> None:
 
                 if unprocessed_count > 0:
                     # Re-activate with expired timer so main loop retries sending
-                    timer_days = profile.get("timer_days") or 30
+                    timer_days = _normalize_timer_days(profile.get("timer_days"))
                     expired_check_in = (
                         datetime.now(timezone.utc) - timedelta(days=timer_days + 1)
                     ).isoformat()
@@ -2058,6 +2061,15 @@ def verify_subscription_with_revenuecat(
         return "lifetime"
     if has_entitlement:
         return "pro"
+
+    # Log when RC says "free" but the user had entitlements with different keys
+    # (helps diagnose entitlement ID mismatches like "AfterWord Pro" vs "Afterword Pro")
+    if entitlements_raw:
+        ent_keys = list(entitlements_raw.keys())
+        print(
+            f"RC verify: user {user_id} has entitlements {ent_keys} but none match "
+            f"'{entitlement_id}' — returning free"
+        )
     return "free"
 
 
@@ -2337,7 +2349,7 @@ def main() -> int:
           last_check_in = parse_iso(profile.get("last_check_in"))
 
           if last_check_in is None:
-
+              print(f"WARN: User {user_id} has NULL last_check_in — skipping (timer cannot be computed)")
               continue
 
 
@@ -2409,21 +2421,12 @@ def main() -> int:
               except Exception:  # noqa: BLE001
                   pass
 
-          # ── PASS 0: Subscription downgrade → revert to free tier ──
-          if sub_status == "free":
-              try:
-                  reverted = handle_subscription_downgrade(
-                      client, profile, active_entries, resend_key, from_email, now,
-                  )
-                  if reverted:
-                      # Profile was modified in DB (timer reset, theme cleared).
-                      # In-memory profile dict is now stale — skip remaining passes.
-                      # Next heartbeat cycle will use the fresh values.
-                      continue
-              except Exception as exc:  # noqa: BLE001
-                  print(f"Subscription downgrade handling failed for {user_id}: {exc}")
-
           # ── PASS 1: Timer expired → execute protocol ──
+          # IMPORTANT: This MUST run before subscription downgrade (PASS 0).
+          # The downgrade handler resets last_check_in and timer_days, which
+          # would prevent expired entries from ever being sent.  Entry delivery
+          # is the core purpose of the app — it must never be blocked by
+          # subscription state changes.
 
           if timer_state.remaining_seconds <= 0:
 
@@ -2512,7 +2515,21 @@ def main() -> int:
 
               continue
 
-
+          # ── PASS 0: Subscription downgrade → revert to free tier ──
+          # Runs AFTER timer-expiry check so that entry delivery is never
+          # blocked by a subscription status change.
+          if sub_status == "free":
+              try:
+                  reverted = handle_subscription_downgrade(
+                      client, profile, active_entries, resend_key, from_email, now,
+                  )
+                  if reverted:
+                      # Profile was modified in DB (timer reset, theme cleared).
+                      # In-memory profile dict is now stale — skip remaining passes.
+                      # Next heartbeat cycle will use the fresh values.
+                      continue
+              except Exception as exc:  # noqa: BLE001
+                  print(f"Subscription downgrade handling failed for {user_id}: {exc}")
 
           # Skip users with empty vaults — no warnings needed
 

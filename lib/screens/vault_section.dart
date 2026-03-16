@@ -2196,13 +2196,17 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
           state.processingState == ProcessingState.completed;
       if (isCompleted) {
         await _player.seek(Duration.zero);
-        await _player.play();
+        // Fire-and-forget — do NOT await play(), it completes when
+        // playback ends which would block pause for the entire duration.
+        _player.play();
       } else if (state.playing) {
         await _player.pause();
       } else {
-        await _player.play();
+        _player.play();
       }
     } finally {
+      // Short delay to prevent double-tap rapid-fire
+      await Future.delayed(const Duration(milliseconds: 150));
       _actionInProgress = false;
     }
   }
@@ -2254,39 +2258,32 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
 
             final isPlaying = (state?.playing ?? false) && !isCompleted;
 
-            return Row(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.white10,
 
-                    borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(16),
 
-                    border: Border.all(color: Colors.white12),
-                  ),
+                border: Border.all(color: Colors.white12),
+              ),
 
-                  child: IconButton(
-                    iconSize: 30,
+              child: IconButton(
+                iconSize: 30,
 
-                    onPressed: isBuffering
-                        ? null
-                        : _handlePlayPause,
+                onPressed: isBuffering
+                    ? null
+                    : _handlePlayPause,
 
-                    icon: Icon(
-                      isPlaying ? Icons.pause_circle_filled : Icons.play_circle,
-                    ),
-                  ),
-                ),
-
-                if (isBuffering)
-                  const SizedBox(
-                    width: 20,
-
-                    height: 20,
-
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              ],
+                icon: isBuffering
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        isPlaying ? Icons.pause_circle_filled : Icons.play_circle,
+                      ),
+              ),
             );
           },
         ),

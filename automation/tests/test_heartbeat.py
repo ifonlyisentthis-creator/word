@@ -769,9 +769,11 @@ class HeartbeatTests(unittest.TestCase):
     def test_normalize_timer_days_edge_cases(self):
         self.assertEqual(heartbeat._normalize_timer_days(0), 1)
         self.assertEqual(heartbeat._normalize_timer_days(-5), 1)
-        self.assertEqual(heartbeat._normalize_timer_days(None), 1)
+        self.assertEqual(heartbeat._normalize_timer_days(None), 30)  # match Flutter default
         self.assertEqual(heartbeat._normalize_timer_days("30"), 30)
         self.assertEqual(heartbeat._normalize_timer_days(365), 365)
+        self.assertEqual(heartbeat._normalize_timer_days("garbage"), 30)
+        self.assertEqual(heartbeat._normalize_timer_days(""), 30)
 
     def test_already_marked_in_cycle(self):
         lci = datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc)

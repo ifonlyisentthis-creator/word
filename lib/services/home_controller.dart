@@ -111,10 +111,17 @@ class HomeController extends ChangeNotifier {
   }) async {
     _user = user;
 
-    _setLoading(true);
+    // Try prefetch BEFORE showing loading indicator — if profile was
+    // prefetched during auth, the user never sees a loading flash.
+    final prefetched = await ProfilePrefetch.consume(user.id);
+    if (_isDisposed) return;
+
+    if (prefetched == null) {
+      _setLoading(true);
+    }
 
     try {
-      var ensured = await ProfilePrefetch.consume(user.id) ??
+      var ensured = prefetched ??
           await _profileService.ensureProfile(user);
 
       if (_isDisposed) return;
