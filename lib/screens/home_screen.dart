@@ -746,6 +746,7 @@ class _TimerCard extends StatefulWidget {
 class _TimerCardState extends State<_TimerCard> {
   bool _showLongTimerWarning = false;
   Timer? _warningTimer;
+  Timer? _ticker;
 
   int get _minDays => widget.isPro || widget.isLifetime ? 7 : 30;
   int get _maxDays => widget.isLifetime
@@ -756,7 +757,16 @@ class _TimerCardState extends State<_TimerCard> {
   bool get _canAdjust => widget.isPro || widget.isLifetime;
 
   @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
+    _ticker?.cancel();
     _warningTimer?.cancel();
     super.dispose();
   }
@@ -861,20 +871,24 @@ class _TimerCardState extends State<_TimerCard> {
 
     final vaultEmpty = !widget.hasVaultEntries;
 
+    final minutes = remaining.inMinutes.remainder(60);
+
     final timerLabel = vaultEmpty
         ? '${resolvedProfile.timerDays} days'
         : remaining.isNegative
         ? 'Expired'
         : days > 0
         ? '$days days'
-        : '${hours}h remaining';
+        : hours > 0
+        ? '${hours}h ${minutes}m'
+        : '${minutes}m remaining';
 
     final timerSub = vaultEmpty
         ? null
         : remaining.isNegative
         ? 'Check in to reactivate'
         : days > 0 && hours > 0
-        ? '+ ${hours}h'
+        ? '+ ${hours}h ${minutes}m'
         : null;
 
     final statusMessage = vaultEmpty
