@@ -24,8 +24,17 @@ class SubscriptionDebugScreen extends StatelessWidget {
 
   const SubscriptionDebugScreen({super.key});
 
-  static final Uri _playSubscriptionsUrl =
-      Uri.parse('https://play.google.com/store/account/subscriptions');
+  static Uri get _manageSubscriptionsUrl {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return Uri.parse('https://apps.apple.com/account/subscriptions');
+    }
+    return Uri.parse('https://play.google.com/store/account/subscriptions');
+  }
+
+  static String get _storeName {
+    if (defaultTargetPlatform == TargetPlatform.iOS) return 'App Store';
+    return 'Google Play';
+  }
 
   String _normalizeProductId(String id) {
     final trimmed = id.trim();
@@ -67,19 +76,19 @@ class SubscriptionDebugScreen extends StatelessWidget {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Lifetime unlocked!'),
-          content: const Text(
-            "Please note: you must manually cancel your old subscription in Google Play to avoid future charges.",
+          content: Text(
+            'Please note: you must manually cancel your old subscription in $_storeName to avoid future charges.',
           ),
           actions: [
             TextButton(
               onPressed: () async {
                 debugPrint('[PAYWALL] User tapped open subscriptions link');
                 await launchUrl(
-                  _playSubscriptionsUrl,
+                  _manageSubscriptionsUrl,
                   mode: LaunchMode.externalApplication,
                 );
               },
-              child: const Text('Open Google Play Subscriptions'),
+              child: Text('Open $_storeName Subscriptions'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
@@ -266,7 +275,7 @@ class SubscriptionDebugScreen extends StatelessWidget {
                                 currentKind != kind &&
                                 beforeActiveSubs.isNotEmpty) {
                               // Pick the exact old product id from activeSubscriptions that matches the current package.
-                              // This must be the Google Play base plan id string as returned by RevenueCat.
+                              // This must be the store base plan id string as returned by RevenueCat.
                               final currentNormalized = currentPackage == null
                                   ? null
                                   : _normalizeProductId(
@@ -289,13 +298,13 @@ class SubscriptionDebugScreen extends StatelessWidget {
                                 context: context,
                                 builder: (dlg) => AlertDialog(
                                   title: const Text('Upgrade to Lifetime?'),
-                                  content: const Text(
-                                    'You have an active subscription. Google Play '
+                                  content: Text(
+                                    'You have an active subscription. $_storeName '
                                     'does not automatically cancel subscriptions '
                                     'when you buy a one-time product.\n\n'
                                     'After purchasing Lifetime, you will need to '
                                     'manually cancel your current subscription in '
-                                    'Google Play to avoid being charged twice.',
+                                    '$_storeName to avoid being charged twice.',
                                   ),
                                   actions: [
                                     TextButton(

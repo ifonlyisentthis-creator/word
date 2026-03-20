@@ -49,6 +49,13 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<!-- ═══ URL Scheme Queries (required by url_launcher on iOS) ═══ -->
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>https</string>
+			<string>http</string>
+			<string>mailto</string>
+		</array>
 		<!-- ═══ Permissions ═══ -->
 		<key>NSMicrophoneUsageDescription</key>
 		<string>Afterword needs microphone access to record audio messages for your vault entries.</string>

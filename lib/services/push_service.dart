@@ -73,6 +73,13 @@ class PushService {
           authStatus.authorizationStatus == AuthorizationStatus.denied ||
           authStatus.authorizationStatus == AuthorizationStatus.notDetermined;
 
+      // iOS: show FCM notifications natively when app is in foreground
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
       _onMessageSubscription = FirebaseMessaging.onMessage.listen(
         (message) async {
           final notification = message.notification;
