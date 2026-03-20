@@ -49,5 +49,42 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<!-- ═══ Permissions ═══ -->
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Afterword needs microphone access to record audio messages for your vault entries.</string>
+		<key>NSFaceIDUsageDescription</key>
+		<string>Afterword uses Face ID to protect access to your vault.</string>
+		<!-- ═══ Push Notifications (background fetch for FCM) ═══ -->
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>remote-notification</string>
+		</array>
+		<!-- Disable Firebase swizzling — we handle push delegate methods manually -->
+		<key>FirebaseAppDelegateProxyEnabled</key>
+		<false/>
+		<!-- ═══ URL Schemes (deep links + Google Sign-In) ═══ -->
+		<key>CFBundleURLTypes</key>
+		<array>
+			<!-- Deep link: afterword://login-callback -->
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>afterword</string>
+				</array>
+			</dict>
+			<!-- Google Sign-In reversed client ID
+			     TODO: Replace PLACEHOLDER with your actual reversed client ID
+			     from GoogleService-Info.plist (e.g. com.googleusercontent.apps.123456) -->
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>PLACEHOLDER-REVERSED-CLIENT-ID</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>

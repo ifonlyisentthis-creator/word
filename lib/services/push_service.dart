@@ -46,7 +46,15 @@ class PushService {
       debugPrint('[PUSH] Initializing PushService...');
 
       const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const settings = InitializationSettings(android: androidSettings);
+      const darwinSettings = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
+      const settings = InitializationSettings(
+        android: androidSettings,
+        iOS: darwinSettings,
+      );
       await _localNotifications.initialize(settings: settings);
 
       await _localNotifications
@@ -78,11 +86,20 @@ class PushService {
             priority: Priority.high,
           );
 
+          const darwinDetails = DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          );
+
           await _localNotifications.show(
             id: notification.hashCode,
             title: notification.title,
             body: notification.body,
-            notificationDetails: const NotificationDetails(android: androidDetails),
+            notificationDetails: const NotificationDetails(
+              android: androidDetails,
+              iOS: darwinDetails,
+            ),
           );
         },
       );
