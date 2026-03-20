@@ -40,16 +40,14 @@ Open `ios/Runner.xcworkspace` in Xcode:
 3. Xcode will auto-manage provisioning profiles
 4. Verify the Bundle Identifier is `com.afterword.afterword`
 
-## 5. Add Files to Xcode Project (if needed)
+## 5. Verify Files in Xcode Project
 
-If Xcode doesn't see the new files, add them manually:
+All files are already referenced in `project.pbxproj`. After opening the workspace,
+verify they appear in the Runner group in the Xcode project navigator:
 
-1. Open `ios/Runner.xcworkspace`
-2. Right-click the **Runner** group → Add Files to "Runner"
-3. Add:
-   - `GoogleService-Info.plist` (ensure "Copy items if needed" is checked, target: Runner)
-   - `Runner.entitlements` (should already be referenced via build settings)
-   - `Release.entitlements` (should already be referenced via build settings)
+- `GoogleService-Info.plist` (included in Copy Bundle Resources build phase)
+- `Runner.entitlements` (referenced by Debug build config)
+- `Release.entitlements` (referenced by Release + Profile build configs)
 
 ## 6. Run Pod Install
 
@@ -69,8 +67,24 @@ RevenueCat should work automatically via `purchases_flutter`. Ensure:
 1. Your App Store Connect app is created with Bundle ID `com.afterword.afterword`
 2. In RevenueCat dashboard, add the iOS app with the correct Bundle ID
 3. Upload your App Store Connect API key to RevenueCat
+4. **IMPORTANT:** The iOS build uses a different RevenueCat API key than Android.
+   Pass the Apple API key via `--dart-define=REVENUECAT_API_KEY=appl_XXXXX`
 
-## 8. App Store Connect
+## 8. iOS Build Command
+
+All runtime config is passed via `--dart-define`. Example iOS build:
+
+```bash
+flutter build ios \
+  --dart-define=SUPABASE_URL=https://your-project.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=your-anon-key \
+  --dart-define=REVENUECAT_API_KEY=appl_your_ios_key \
+  --dart-define=GOOGLE_WEB_CLIENT_ID=394982150671-qcapj1t19e19p4bunm448t5cf51lp8m9.apps.googleusercontent.com
+```
+
+The `GOOGLE_WEB_CLIENT_ID` is the same web (type 3) OAuth client ID used on Android.
+
+## 9. App Store Connect
 
 1. Create the app in App Store Connect with Bundle ID `com.afterword.afterword`
 2. Set up your app listing (screenshots, description, etc.)
@@ -94,3 +108,6 @@ RevenueCat should work automatically via `purchases_flutter`. Ensure:
 | Splash screen (flutter_native_splash) | ✅ Done |
 | Push service (iOS DarwinNotificationDetails) | ✅ Done |
 | App icons | ✅ Already present |
+| GoogleService-Info.plist in Xcode project | ✅ Referenced in pbxproj |
+| Entitlements in Xcode project | ✅ Referenced in pbxproj |
+| Platform-aware subscription URLs | ✅ Done (App Store on iOS) |
