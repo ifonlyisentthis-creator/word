@@ -1076,19 +1076,19 @@ def build_unlock_email_payload(
         "has been automatically released to you.\n\n"
         "This is an automated cryptographic release. Afterword will never ask "
         "you to reply to this email, and we will never ask you to provide your "
-        "security key.\n\n"
+        "Private Access Code.\n\n"
         "To view this message, open the link below and paste your "
-        "security key when prompted.\n\n"
+        "Private Access Code when prompted.\n\n"
         f"Viewer: {viewer_link}\n\n"
-        f"Security Key: {security_key}\n\n"
+        f"Private Access Code: {security_key}\n\n"
         "How it works:\n"
         "1. Open the viewer link above in your browser\n"
-        "2. Paste the security key into the key field\n"
+        "2. Paste the Private Access Code into the key field\n"
         "3. Your message will be decrypted locally in your browser\n\n"
         "Note: To ensure uninterrupted delivery of any future secure payloads from "
         "this sender, please add this email address to your trusted contacts.\n\n"
-        "The security key is never sent to our servers. Do not share "
-        "it — anyone with this key can read the message.\n\n"
+        "The Private Access Code is never sent to our servers. Do not share "
+        "it — anyone with this code can read the message.\n\n"
         "This message will be available for 30 days, after which it "
         "will be permanently and automatically erased.\n\n"
         "If you do not recognize the sender, you may safely ignore "
@@ -1106,7 +1106,7 @@ def build_unlock_email_payload(
         'encrypted payload has been automatically released to you.</p>'
         f'<p style="margin:0 0 12px">This is an automated cryptographic release. '
         'Afterword will never ask you to reply to this email, and we will never '
-        'ask you to provide your security key.</p>'
+        'ask you to provide your Private Access Code.</p>'
 
         f'<a href="{safe_link}" target="_blank" style="display:block;'
         'background:#0a0a0a;color:#ffffff;text-decoration:none;'
@@ -1114,7 +1114,7 @@ def build_unlock_email_payload(
         'font-weight:600;text-align:center;margin:0 0 28px">'
         'Open Secure Message</a>'
 
-        '<p style="margin:0 0 8px;font-weight:700">Your Security Key:</p>'
+        '<p style="margin:0 0 8px;font-weight:700">Your Private Access Code:</p>'
         '<div style="background:#f5f5f5;border:1px solid #e0e0e0;'
         'border-radius:8px;padding:14px 16px;'
         'font-family:\'Courier New\',monospace;font-size:13px;'
@@ -1124,7 +1124,7 @@ def build_unlock_email_payload(
         '<ol style="margin:0 0 20px;padding-left:20px;font-size:14px;'
         'color:#444;line-height:1.8">'
         '<li>Click the button above to open the secure viewer</li>'
-        '<li>Paste the security key into the key field</li>'
+        '<li>Paste the Private Access Code into the key field</li>'
         '<li>Your message will be decrypted privately in your browser</li>'
         '</ol>'
 
@@ -1135,8 +1135,8 @@ def build_unlock_email_payload(
         'this sender, please add this email address to your trusted contacts.</p>'
 
         '<p style="margin:0 0 12px;color:#888;font-size:12px;font-style:italic">'
-        'The security key is never sent to our servers. Do not share it '
-        '&mdash; anyone with this key can read the message.</p>'
+        'The Private Access Code is never sent to our servers. Do not share it '
+        '&mdash; anyone with this code can read the message.</p>'
 
         '<p style="margin:0;color:#888;font-size:12px">'
         'This message will be available for 30 days, after which it '
