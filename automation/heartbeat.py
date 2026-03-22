@@ -1075,7 +1075,6 @@ def build_unlock_email_payload(
         "This is an automated cryptographic release. Afterword will never ask "
         "you to reply to this email, and we will never ask you to provide your "
         "security key.\n\n"
-        f"Title: {entry_title}\n\n"
         "To view this message, open the link below and paste your "
         "security key when prompted.\n\n"
         f"Viewer: {viewer_link}\n\n"
@@ -1096,7 +1095,6 @@ def build_unlock_email_payload(
     )
 
     safe_sender = html_mod.escape(sender_name)
-    safe_title = html_mod.escape(entry_title)
     safe_link = html_mod.escape(viewer_link)
 
     body_html = (
@@ -1107,8 +1105,6 @@ def build_unlock_email_payload(
         f'<p style="margin:0 0 12px">This is an automated cryptographic release. '
         'Afterword will never ask you to reply to this email, and we will never '
         'ask you to provide your security key.</p>'
-
-        f'<p style="margin:0 0 20px"><strong>Title:</strong> {safe_title}</p>'
 
         f'<a href="{safe_link}" target="_blank" style="display:block;'
         'background:#0a0a0a;color:#ffffff;text-decoration:none;'
