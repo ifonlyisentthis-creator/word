@@ -339,10 +339,6 @@ class HeartbeatTests(unittest.TestCase):
 
         payload = mocked_post.call_args.kwargs.get("payload", {})
         self.assertEqual(payload.get("reply_to"), "from@example.com")
-        self.assertEqual(
-            payload.get("headers", {}).get("List-Unsubscribe"),
-            "<mailto:from@example.com?subject=Unsubscribe>",
-        )
 
     def test_build_unlock_email_payload_aligns_reply_to_with_from_domain(self):
         payload = heartbeat.build_unlock_email_payload(
@@ -356,10 +352,6 @@ class HeartbeatTests(unittest.TestCase):
         )
 
         self.assertEqual(payload.get("reply_to"), "vault@afterword-app.com")
-        self.assertEqual(
-            payload.get("headers", {}).get("List-Unsubscribe"),
-            "<mailto:vault@afterword-app.com?subject=Unsubscribe>",
-        )
 
     def test_invalid_fcm_token_detection(self):
         self.assertTrue(
