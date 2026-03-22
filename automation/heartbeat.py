@@ -1069,7 +1069,7 @@ def build_unlock_email_payload(
 
     text = (
         f"Hi,\n\n"
-        f"{sender_name} assigned you as a trusted beneficiary. "
+        f"{sender_name} assigned you as a chosen recipient. "
         "Because their check-in timer expired, the following encrypted payload "
         "has been automatically released to you.\n\n"
         "This is an automated cryptographic release. Afterword will never ask "
@@ -1100,7 +1100,7 @@ def build_unlock_email_payload(
     body_html = (
         f'<p style="margin:0 0 12px">Hi,</p>'
         f'<p style="margin:0 0 18px"><strong>{safe_sender}</strong> assigned you as a '
-        'trusted beneficiary. Because their check-in timer expired, the following '
+        'chosen recipient. Because their check-in timer expired, the following '
         'encrypted payload has been automatically released to you.</p>'
         f'<p style="margin:0 0 12px">This is an automated cryptographic release. '
         'Afterword will never ask you to reply to this email, and we will never '
@@ -1152,9 +1152,13 @@ def build_unlock_email_payload(
         "html": wrap_email_html(
             body_html,
             unsubscribe_email=reply_to_email,
-            preheader=f"{sender_name} assigned you as a beneficiary. A secure message has been released to you.",
+            preheader=f"{sender_name} assigned you as a chosen recipient. A secure message has been released to you.",
         ),
         "reply_to": reply_to_email,
+        "headers": {
+            "List-Unsubscribe": f"<mailto:{reply_to_email}?subject=Unsubscribe>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
     }
 
 
