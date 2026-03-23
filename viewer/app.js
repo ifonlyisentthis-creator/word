@@ -43,7 +43,9 @@ function setStatus(message, type = "") {
 }
 
 function normalizeBase64(input) {
-  let normalized = input.trim();
+  // Strip all whitespace including non-breaking spaces that may have been
+  // added when the key was fragmented in the email for deliverability.
+  let normalized = input.replace(/[\s\u00a0]/g, "");
   normalized = normalized.replace(/-/g, "+").replace(/_/g, "/");
   const pad = normalized.length % 4;
   if (pad) {

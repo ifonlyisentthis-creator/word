@@ -344,22 +344,74 @@ class HeartbeatTests(unittest.TestCase):
             "<mailto:from@example.com?subject=Unsubscribe>",
         )
 
-    def test_build_unlock_email_payload_aligns_reply_to_with_from_domain(self):
+    def test_build_unlock_email_payload_primary_inbox_structure(self):
+        """Beneficiary email must be structured for Primary inbox delivery:
+        - No List-Unsubscribe (not bulk)
+        - No reply_to (inbox not monitored)
+        - Subject includes sender name
+        - Title excluded from body (triggering words risk)
+        - Key fragmented into chunks
+        - HTML uses native <div dir="ltr"> wrapper
+        """
         payload = heartbeat.build_unlock_email_payload(
             recipient_email="recipient@example.com",
             entry_id="entry-123",
-            sender_name="Afterword",
-            entry_title="Letter",
+            sender_name="Alice",
+            entry_title="My Secret Letter",
             viewer_link="https://viewer.afterword.app/?entry=entry-123",
-            security_key="base64-key",
+            security_key="O1UFuAKfBm3qZ9sLU+nOczvjGQ9LWc/MHsUdKU7bIuk=",
             from_email="Afterword <vault@afterword-app.com>",
         )
 
-        self.assertEqual(payload.get("reply_to"), "vault@afterword-app.com")
-        self.assertEqual(
-            payload.get("headers", {}).get("List-Unsubscribe"),
-            "<mailto:vault@afterword-app.com?subject=Unsubscribe>",
-        )
+        # No bulk/commercial headers
+        self.assertNotIn("reply_to", payload)
+        self.assertEqual(payload.get("headers"), {})
+
+        # Subject contains sender name
+        self.assertEqual(payload["subject"], "A personal message from Alice")
+
+        # Title must NOT appear in body (could contain triggering words)
+        self.assertNotIn("My Secret Letter", payload["text"])
+        self.assertNotIn("My Secret Letter", payload["html"])
+
+        # Sender name appears in first sentence
+        self.assertIn("Alice asked me to ensure you received", payload["text"])
+        self.assertIn("Alice asked me to ensure you received", payload["html"])
+
+        # Key is fragmented (spaces in plain text)
+        self.assertIn("  ", payload["text"])
+        # Key is fragmented (nbsp in HTML)
+        self.assertIn("&nbsp;&nbsp;", payload["html"])
+
+        # HTML uses native Gmail structure
+        self.assertTrue(payload["html"].startswith('<div dir="ltr">'))
+        self.assertIn("font-family:Arial", payload["html"])
+        self.assertIn("color:#222222", payload["html"])
+        # Raw link, not a styled button
+        self.assertIn('style="color:#1155cc;text-decoration:underline"', payload["html"])
+        # No dark header, no card layout
+        self.assertNotIn("background:#0a0a0a", payload["html"])
+        self.assertNotIn("border-radius:12px", payload["html"])
+
+    def test_fragment_security_key_splits_into_three_chunks(self):
+        key = "O1UFuAKfBm3qZ9sLU+nOczvjGQ9LWc/MHsUdKU7bIuk="
+        plain, html = heartbeat._fragment_security_key(key)
+
+        # Plain text uses double-space separator
+        parts = plain.split("  ")
+        self.assertEqual(len(parts), 3)
+        # Recombined key matches original
+        self.assertEqual("".join(parts), key)
+
+        # HTML uses &nbsp;&nbsp; separator
+        html_parts = html.split("&nbsp;&nbsp;")
+        self.assertEqual(len(html_parts), 3)
+
+    def test_fragment_security_key_handles_short_keys(self):
+        plain, html = heartbeat._fragment_security_key("abc")
+        parts = plain.split("  ")
+        self.assertEqual(len(parts), 3)
+        self.assertEqual("".join(parts), "abc")
 
     def test_invalid_fcm_token_detection(self):
         self.assertTrue(
