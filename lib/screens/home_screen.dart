@@ -433,7 +433,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                       ),
                     ),
 
-                  if (!controller.isScheduledMode) ...[
+                  if (profile != null && !controller.isScheduledMode) ...[
                   const SizedBox(height: 24),
 
                   // Soul Fire — greyed out & non-interactive during grace
@@ -455,8 +455,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                                   styleId: tp.soulFireId,
                                   enabled:
                                       !isInGracePeriod &&
-                                      !controller.isLoading &&
-                                      profile != null,
+                                      !controller.isLoading,
                                   onConfirmed: () async {
                                     final result = await controller
                                         .manualCheckIn();
@@ -500,6 +499,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                   ),
                   ],
 
+                  if (profile != null) ...[
                   const SizedBox(height: 28),
 
                   // Vault — View All always works, Add Entry disabled during grace
@@ -552,6 +552,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                       },
                     ),
                   ),
+                  ], // profile != null
                 ],
               ),
             ),
