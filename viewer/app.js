@@ -185,6 +185,32 @@ function renderExpiredMessage(senderName) {
   resultEl.classList.remove("hidden");
 }
 
+function renderPermanentlyDeletedMessage() {
+  resultTitle.textContent = "Entry Not Found";
+  resultBody.innerHTML = "";
+  resultActions.innerHTML = "";
+
+  const intro = document.createElement("p");
+  intro.textContent = "This vault entry does not exist or has been permanently removed.";
+
+  const detail = document.createElement("p");
+  detail.textContent =
+    "After a vault entry is delivered, it remains accessible for a 30-day grace period. Once that window closes, the entry and all associated data are permanently erased from our servers.";
+
+  const finality = document.createElement("p");
+  finality.textContent =
+    "If you believe this is a mistake, please verify the Entry ID from your email. If the grace period has passed, this data cannot be recovered by anyone, including our support team.";
+
+  const rule = document.createElement("hr");
+
+  resultBody.appendChild(intro);
+  resultBody.appendChild(detail);
+  resultBody.appendChild(finality);
+  resultBody.appendChild(rule);
+
+  resultEl.classList.remove("hidden");
+}
+
 async function unlock() {
   clearResult();
 
@@ -213,6 +239,13 @@ async function unlock() {
 
     if (statusError) {
       throw new Error("could_not_verify");
+    }
+
+    // Entry and tombstone both deleted (grace period fully expired and cleaned up)
+    if (!entryStatus || !entryStatus.state) {
+      renderPermanentlyDeletedMessage();
+      setStatus("This entry has been permanently removed.", "error");
+      return;
     }
 
     if (entryStatus?.state === "expired") {

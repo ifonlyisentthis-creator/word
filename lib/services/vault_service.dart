@@ -126,8 +126,22 @@ class VaultService {
     final recipientEncrypted = recipient == null
         ? null
         : await _encryptMetadataText(recipient, deviceWrappingKey);
-    final dataKeyEncrypted =
-        await _encryptMetadataKey(dataKey, deviceWrappingKey);
+
+    // Zero-knowledge mode: only encrypt data key with device key, not server
+    final String dataKeyEncrypted;
+    if (draft.isZeroKnowledge) {
+      final keyBytes = await dataKey.extractBytes();
+      final deviceCipher =
+          await _cryptoService.encryptBytes(keyBytes, deviceWrappingKey);
+      dataKeyEncrypted = jsonEncode({
+        'v': 1,
+        'server': '',
+        'device': deviceCipher,
+      });
+    } else {
+      dataKeyEncrypted =
+          await _encryptMetadataKey(dataKey, deviceWrappingKey);
+    }
 
     var uploadedAudio = false;
     try {
@@ -159,6 +173,12 @@ class VaultService {
         'hmac_signature': hmacSignature,
         'audio_file_path': audioFilePath,
         'audio_duration_seconds': audioDurationSeconds,
+        'is_zero_knowledge': draft.isZeroKnowledge,
+        if (draft.scheduledAt != null)
+          'scheduled_at': draft.scheduledAt!.toUtc().toIso8601String(),
+        if (draft.scheduledAt != null)
+          'grace_until': draft.scheduledAt!.toUtc()
+              .add(const Duration(days: 30)).toIso8601String(),
       }).select().single();
 
       return VaultEntry.fromMap(inserted);
@@ -200,8 +220,19 @@ class VaultService {
     if (isAudio) {
       if (hasNewAudio) {
         dataKey = await _cryptoService.generateDataKey();
-        dataKeyEncrypted =
-            await _encryptMetadataKey(dataKey, deviceWrappingKey);
+        if (draft.isZeroKnowledge) {
+          final keyBytes = await dataKey.extractBytes();
+          final deviceCipher =
+              await _cryptoService.encryptBytes(keyBytes, deviceWrappingKey);
+          dataKeyEncrypted = jsonEncode({
+            'v': 1,
+            'server': '',
+            'device': deviceCipher,
+          });
+        } else {
+          dataKeyEncrypted =
+              await _encryptMetadataKey(dataKey, deviceWrappingKey);
+        }
         final uploadToken = _uuid.v4().replaceAll('-', '');
         audioFilePath = _buildAudioPath(
           userId: entry.userId,
@@ -232,7 +263,18 @@ class VaultService {
       }
     } else {
       dataKey = await _cryptoService.generateDataKey();
-      dataKeyEncrypted = await _encryptMetadataKey(dataKey, deviceWrappingKey);
+      if (draft.isZeroKnowledge) {
+        final keyBytes = await dataKey.extractBytes();
+        final deviceCipher =
+            await _cryptoService.encryptBytes(keyBytes, deviceWrappingKey);
+        dataKeyEncrypted = jsonEncode({
+          'v': 1,
+          'server': '',
+          'device': deviceCipher,
+        });
+      } else {
+        dataKeyEncrypted = await _encryptMetadataKey(dataKey, deviceWrappingKey);
+      }
       shouldDeletePreviousAudioAfterUpdate =
           wasAudio && previousAudioPath != null;
       audioFilePath = null;
@@ -264,6 +306,12 @@ class VaultService {
             'hmac_signature': hmacSignature,
             'audio_file_path': audioFilePath,
             'audio_duration_seconds': audioDurationSeconds,
+            'is_zero_knowledge': draft.isZeroKnowledge,
+            if (draft.scheduledAt != null)
+              'scheduled_at': draft.scheduledAt!.toUtc().toIso8601String(),
+            if (draft.scheduledAt != null)
+              'grace_until': draft.scheduledAt!.toUtc()
+                  .add(const Duration(days: 30)).toIso8601String(),
             'updated_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', entry.id)
@@ -503,6 +551,22 @@ class VaultService {
       return null;
     }
     return raw;
+  }
+
+  /// Get the raw base64 security key for a ZK entry so the user can copy it.
+  Future<String> getSecurityKeyBase64(VaultEntry entry) async {
+    final hmacKey = await _deviceSecretService.loadOrCreateHmacKey(
+        userId: entry.userId);
+    final deviceWrappingKey =
+        await _deviceSecretService.loadOrCreateDeviceWrappingKey(
+            userId: entry.userId);
+    final dataKey = await _decryptMetadataKey(
+      entry.dataKeyEncrypted,
+      hmacKey: hmacKey,
+      deviceWrappingKey: deviceWrappingKey,
+    );
+    final keyBytes = await dataKey.extractBytes();
+    return base64Encode(keyBytes);
   }
 }
 

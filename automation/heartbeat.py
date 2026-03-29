@@ -55,7 +55,7 @@ PROFILE_BATCH_SIZE = 200
 PROFILE_SELECT_FIELDS = (
     "id,email,sender_name,status,subscription_status,last_check_in,timer_days,"
     "hmac_key_encrypted,warning_sent_at,push_66_sent_at,push_33_sent_at,"
-    "selected_theme,selected_soul_fire,created_at,downgrade_email_pending"
+    "selected_theme,selected_soul_fire,created_at,downgrade_email_pending,app_mode"
 )
 
 REQUEST_TIMEOUT_SECONDS = 30
@@ -1161,6 +1161,80 @@ def build_unlock_email_payload(
     }
 
 
+def build_zk_unlock_email_payload(
+    recipient_email: str,
+    entry_id: str,
+    sender_name: str,
+    entry_title: str,
+    viewer_link: str,
+    from_email: str,
+) -> dict:
+    """Build email payload for a zero-knowledge vault entry.
+
+    Same deliverability-optimized format as build_unlock_email_payload but
+    WITHOUT the security key. The sender chose self-managed key mode, so the
+    beneficiary must obtain the key directly from the sender.
+    """
+    formatted_from = _format_from_address(from_email)
+    safe_sender = html_mod.escape(sender_name)
+    safe_link = html_mod.escape(viewer_link)
+
+    subject = f"A personal message from {sender_name}"
+
+    text = (
+        "Hi,\n\n"
+        f"{sender_name} asked me to ensure you received this message.\n\n"
+        "They prepared a private digital vault for you via our service, "
+        "which they scheduled for delivery at this specific time. Per their "
+        "instructions, the file has been secured with a self-managed access "
+        "sequence that only they control.\n\n"
+        "You can view their message here:\n"
+        f"{viewer_link}\n\n"
+        "To unlock it, you will need the unique access sequence "
+        "they generated. Please contact them or check any instructions "
+        "they may have left for you.\n\n"
+        "For your privacy, this is an automated delivery and this inbox "
+        "is not monitored for replies.\n\n"
+        "Take care,\n\n"
+        "The Afterword Team\n"
+        "https://afterword-app.com"
+    )
+
+    html = (
+        '<div dir="ltr">'
+        '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;'
+        'color:#222222;line-height:1.5">'
+        '<p>Hi,</p>'
+        f'<p>{safe_sender} asked me to ensure you received this message.</p>'
+        '<p>They prepared a private digital vault for you via our service, '
+        'which they scheduled for delivery at this specific time. Per their '
+        'instructions, the file has been secured with a self-managed access '
+        'sequence that only they control.</p>'
+        f'<p>You can view their message here:<br>'
+        f'<a href="{safe_link}" style="color:#1155cc;text-decoration:underline">'
+        f'{safe_link}</a></p>'
+        '<p>To unlock it, you will need the unique access sequence '
+        'they generated. Please contact them or check any instructions '
+        'they may have left for you.</p>'
+        '<p>For your privacy, this is an automated delivery and this inbox '
+        'is not monitored for replies.</p>'
+        '<p>Take care,</p>'
+        '<p>The Afterword Team<br>'
+        '<a href="https://afterword-app.com" style="color:#1155cc;'
+        'text-decoration:none">https://afterword-app.com</a></p>'
+        '</div></div>'
+    )
+
+    return {
+        "from": formatted_from,
+        "to": [recipient_email],
+        "subject": subject,
+        "text": text,
+        "html": html,
+        "headers": {},
+    }
+
+
 def send_unlock_email(
     recipient_email: str,
     entry_id: str,
@@ -1623,30 +1697,41 @@ def process_expired_entries(
                 release_entry_lock(client, entry_id)
                 continue
 
-            # Step 2: Decrypt data key (AES-GCM — authoritative integrity check)
-            data_key_encrypted = entry.get("data_key_encrypted")
-            if not data_key_encrypted:
-                print(f"CRITICAL: Missing data_key_encrypted for send entry {entry_id} user {user_id} — entry preserved")
-                release_entry_lock(client, entry_id)
-                continue
-
-            try:
-                data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
-                data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
-            except Exception as dk_exc:  # noqa: BLE001
-                print(f"CRITICAL: Failed to decrypt data_key for send entry {entry_id} user {user_id}: {dk_exc}")
-                decryption_failures += 1
-                release_entry_lock(client, entry_id)
-                continue
-
-            security_key = base64.b64encode(data_key_bytes).decode("utf-8")
+            # Step 2: Decrypt data key or handle ZK entry
+            is_zk = entry.get("is_zero_knowledge", False)
             viewer_link = build_viewer_link(viewer_base_url, entry_id)
             entry_title = entry.get("title") or "Untitled"
 
-            email_payload = build_unlock_email_payload(
-                recipient_email, entry_id, sender_name, entry_title,
-                viewer_link, security_key, from_email,
-            )
+            if is_zk:
+                # Zero-knowledge: server never has the data key.
+                # Send email WITHOUT the security key.
+                security_key = None
+                email_payload = build_zk_unlock_email_payload(
+                    recipient_email, entry_id, sender_name, entry_title,
+                    viewer_link, from_email,
+                )
+            else:
+                data_key_encrypted = entry.get("data_key_encrypted")
+                if not data_key_encrypted:
+                    print(f"CRITICAL: Missing data_key_encrypted for send entry {entry_id} user {user_id} — entry preserved")
+                    release_entry_lock(client, entry_id)
+                    continue
+
+                try:
+                    data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
+                    data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
+                except Exception as dk_exc:  # noqa: BLE001
+                    print(f"CRITICAL: Failed to decrypt data_key for send entry {entry_id} user {user_id}: {dk_exc}")
+                    decryption_failures += 1
+                    release_entry_lock(client, entry_id)
+                    continue
+
+                security_key = base64.b64encode(data_key_bytes).decode("utf-8")
+                email_payload = build_unlock_email_payload(
+                    recipient_email, entry_id, sender_name, entry_title,
+                    viewer_link, security_key, from_email,
+                )
+
             prepared_sends.append((entry_id, entry_title, recipient_email, viewer_link, security_key, email_payload))
 
         except Exception as exc:  # noqa: BLE001
@@ -1769,16 +1854,267 @@ def process_expired_entries(
     return had_send, input_send_count
 
 
+def process_scheduled_entries(
+    client,
+    profile: dict,
+    entries: list[dict],
+    server_secret: str,
+    resend_key: str,
+    from_email: str,
+    viewer_base_url: str,
+    now: datetime,
+) -> int:
+    """Process scheduled vault entries whose scheduled_at has arrived.
+
+    Time Capsule mode: each entry has its own scheduled_at date. When that
+    date passes, the entry is delivered. No global timer, no push notifications.
+
+    Per-entry grace: after delivery, grace_until = scheduled_at + 30 days.
+    The entry sits as 'sent' until cleanup_sent_entries removes it after grace.
+
+    Returns the number of entries successfully sent.
+    """
+    sender_name = profile.get("sender_name") or "Afterword"
+    user_id = str(profile.get("id", "?"))
+    sent_count = 0
+
+    # Counters for post-loop integrity summary (parity with process_expired_entries)
+    hmac_mismatches = 0
+    decryption_failures = 0
+
+    # Filter to entries whose scheduled_at has arrived
+    due_entries = []
+    for entry in entries:
+        scheduled_at_str = entry.get("scheduled_at")
+        if not scheduled_at_str:
+            continue
+        scheduled_at = parse_iso(scheduled_at_str)
+        if scheduled_at is not None and scheduled_at <= now:
+            due_entries.append(entry)
+
+    if not due_entries:
+        return 0
+
+    hmac_key_encrypted = profile.get("hmac_key_encrypted")
+    hmac_key_bytes = None
+    if hmac_key_encrypted:
+        try:
+            hmac_key_bytes = decrypt_with_server_secret(hmac_key_encrypted, server_secret)
+        except Exception as exc:  # noqa: BLE001
+            print(f"WARNING: Failed to decrypt HMAC key for scheduled user {user_id}: {exc}")
+
+    prepared_sends: list[tuple[str, str, str, str, str | None, dict]] = []
+
+    for entry in due_entries:
+        entry_id = entry.get("id", "unknown")
+        try:
+            if not claim_entry_for_sending(client, entry_id):
+                continue
+
+            action = (entry.get("action_type") or "send").lower()
+
+            if action == "destroy":
+                entry_title = entry.get("title") or "Untitled"
+                delete_entry(client, entry)
+                continue
+
+            # Decrypt recipient email
+            recipient_encrypted = entry.get("recipient_email_encrypted") or ""
+
+            # ── HMAC integrity check (advisory, NOT a delivery gate) ──
+            # Mirrors process_expired_entries: AES-GCM is the authoritative
+            # tamper check; HMAC mismatches are usually key rotation.
+            if hmac_key_bytes is not None:
+                signature_message = f"{entry.get('payload_encrypted')}|{recipient_encrypted}"
+                expected_signature = compute_hmac_signature(signature_message, hmac_key_bytes)
+                hmac_ok = expected_signature == entry.get("hmac_signature")
+                if not hmac_ok:
+                    hmac_mismatches += 1
+
+            if not recipient_encrypted:
+                print(f"CRITICAL: Empty recipient for scheduled entry {entry_id} user {user_id}")
+                release_entry_lock(client, entry_id)
+                continue
+
+            try:
+                recipient_ciphertext = extract_server_ciphertext(recipient_encrypted)
+                recipient_email = decrypt_with_server_secret(
+                    recipient_ciphertext, server_secret
+                ).decode("utf-8").strip()
+            except Exception as dec_exc:  # noqa: BLE001
+                print(f"CRITICAL: Failed to decrypt recipient for scheduled entry {entry_id}: {dec_exc}")
+                decryption_failures += 1
+                release_entry_lock(client, entry_id)
+                continue
+
+            if not _EMAIL_RE.match(recipient_email):
+                print(f"CRITICAL: Invalid recipient for scheduled entry {entry_id}: '{recipient_email}'")
+                release_entry_lock(client, entry_id)
+                continue
+
+            # Decrypt data key or handle ZK
+            is_zk = entry.get("is_zero_knowledge", False)
+            viewer_link = build_viewer_link(viewer_base_url, entry_id)
+            entry_title = entry.get("title") or "Untitled"
+
+            if is_zk:
+                security_key = None
+                email_payload = build_zk_unlock_email_payload(
+                    recipient_email, entry_id, sender_name, entry_title,
+                    viewer_link, from_email,
+                )
+            else:
+                data_key_encrypted = entry.get("data_key_encrypted")
+                if not data_key_encrypted:
+                    print(f"CRITICAL: Missing data_key for scheduled entry {entry_id}")
+                    release_entry_lock(client, entry_id)
+                    continue
+
+                try:
+                    data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
+                    data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
+                except Exception as dk_exc:  # noqa: BLE001
+                    print(f"CRITICAL: Failed to decrypt data_key for scheduled entry {entry_id}: {dk_exc}")
+                    decryption_failures += 1
+                    release_entry_lock(client, entry_id)
+                    continue
+
+                security_key = base64.b64encode(data_key_bytes).decode("utf-8")
+                email_payload = build_unlock_email_payload(
+                    recipient_email, entry_id, sender_name, entry_title,
+                    viewer_link, security_key, from_email,
+                )
+
+            prepared_sends.append((entry_id, entry_title, recipient_email, viewer_link, security_key, email_payload))
+
+        except Exception as exc:  # noqa: BLE001
+            try:
+                release_entry_lock(client, entry_id)
+            except Exception:  # noqa: BLE001
+                pass
+            print(f"SEND FAILED (prepare) scheduled entry {entry_id} user {user_id}: {exc}")
+
+    # Send prepared emails in batches
+    if prepared_sends:
+        all_entry_ids = [eid for eid, _, _, _, _, _ in prepared_sends]
+        entry_hash = hashlib.md5(
+            "|".join(sorted(all_entry_ids)).encode()
+        ).hexdigest()[:16]
+        idem_base = f"scheduled-batch-{user_id}-{entry_hash}"
+
+        total_chunks = (len(prepared_sends) + RESEND_BATCH_LIMIT - 1) // RESEND_BATCH_LIMIT
+        print(f"User {user_id} (scheduled): sending {len(prepared_sends)} emails in {total_chunks} chunk(s)")
+
+        for chunk_start in range(0, len(prepared_sends), RESEND_BATCH_LIMIT):
+            if _resend_quota_exhausted:
+                for eid in all_entry_ids[chunk_start:]:
+                    try:
+                        release_entry_lock(client, eid)
+                    except Exception:  # noqa: BLE001
+                        pass
+                break
+
+            chunk = prepared_sends[chunk_start : chunk_start + RESEND_BATCH_LIMIT]
+            chunk_payloads = [p for _, _, _, _, _, p in chunk]
+            chunk_idx = chunk_start // RESEND_BATCH_LIMIT
+            chunk_key = idem_base if total_chunks == 1 else f"{idem_base}-{chunk_idx}"
+
+            try:
+                response = _post_json_with_retries(
+                    "https://api.resend.com/emails/batch",
+                    headers={
+                        "Authorization": f"Bearer {resend_key}",
+                        "Content-Type": "application/json",
+                    },
+                    payload=chunk_payloads,
+                    idempotency_key=chunk_key,
+                )
+                if response.status_code >= 400:
+                    _mark_resend_quota_exhausted(response)
+                    raise RuntimeError(
+                        f"Resend batch error (chunk {chunk_idx}): "
+                        f"{response.status_code} {response.text}"
+                    )
+            except Exception as chunk_exc:  # noqa: BLE001
+                print(f"CHUNK {chunk_idx} FAILED for scheduled user {user_id}: {chunk_exc}")
+                for eid in all_entry_ids[chunk_start:]:
+                    try:
+                        release_entry_lock(client, eid)
+                    except Exception:  # noqa: BLE001
+                        pass
+                break
+
+            # Mark entries as sent with per-entry grace_until
+            for entry_id, entry_title, *_ in chunk:
+                marked = False
+                for _mark_attempt in range(3):
+                    try:
+                        if mark_entry_sent(client, entry_id, now):
+                            # Set per-entry grace_until = now + 30 days
+                            try:
+                                grace_until = (now + timedelta(days=30)).isoformat()
+                                client.table("vault_entries").update({
+                                    "grace_until": grace_until,
+                                }).eq("id", entry_id).execute()
+                            except Exception:  # noqa: BLE001
+                                pass
+                            marked = True
+                            break
+                    except Exception as mark_exc:  # noqa: BLE001
+                        if _mark_attempt == 2:
+                            print(f"Failed to mark scheduled entry {entry_id} as sent: {mark_exc}")
+                    if _mark_attempt < 2:
+                        time.sleep(1)
+                if marked:
+                    sent_count += 1
+
+            if chunk_start + RESEND_BATCH_LIMIT < len(prepared_sends):
+                time.sleep(RESEND_INTER_CHUNK_DELAY)
+
+    if sent_count > 0:
+        try:
+            client.table("profiles").update({
+                "had_vault_activity": True,
+            }).eq("id", user_id).execute()
+        except Exception:  # noqa: BLE001
+            pass
+        print(f"User {user_id} (scheduled): {sent_count} entries delivered")
+
+    # ── Post-loop integrity summary (parity with process_expired_entries) ──
+    if hmac_mismatches > 0 and decryption_failures == 0:
+        print(
+            f"HMAC-INFO: User {user_id} (scheduled): {hmac_mismatches} HMAC "
+            f"mismatch(es) but all AES-GCM decryptions succeeded — likely "
+            f"HMAC key rotation (device change / app reinstall). "
+            f"Entries delivered normally."
+        )
+    elif decryption_failures > 0:
+        print(
+            f"CRITICAL: User {user_id} (scheduled): {decryption_failures} "
+            f"entry decryption failure(s) detected — possible data "
+            f"corruption or tampering. HMAC mismatches: {hmac_mismatches}."
+        )
+        _try_send_tampering_notification(
+            client=client,
+            profile=profile,
+            resend_key=resend_key,
+            from_email=from_email,
+            decryption_failures=decryption_failures,
+            now=now,
+        )
+
+    return sent_count
 
 
 def cleanup_sent_entries(client) -> None:
-    """Grace-based cleanup: when grace period ends, delete ALL sent entries immediately.
+    """Grace-based cleanup: when grace period ends, delete sent entries.
 
-    Flow:
-      1. Find profiles with expired grace (inactive + protocol_executed_at <= 30 days ago)
-      2. For each profile:
-         a) If unprocessed entries exist → re-activate with expired timer for retry
-         b) Otherwise → tombstone + delete ALL sent entries → reset profile to fresh
+    Two cleanup paths:
+      1. Guardian Vault (global grace): Find profiles with expired grace
+         (inactive + protocol_executed_at <= 30 days ago), tombstone + delete
+         ALL sent entries, reset profile to fresh.
+      2. Time Capsule (per-entry grace): Find individual sent entries where
+         grace_until <= now, tombstone + delete each expired entry.
     """
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -1931,10 +2267,81 @@ def cleanup_sent_entries(client) -> None:
                 print(f"Failed to process expired grace profile {uid}: {type(exc).__name__}: {exc}")
 
     print(
-        f"cleanup_sent_entries: done — "
+        f"cleanup_sent_entries: done (guardian) — "
         f"profiles_reset={reset_count} found={total_found} "
         f"tombstoned={total_tombstoned} deleted={total_deleted}"
     )
+
+    # ── Per-entry grace cleanup (Time Capsule mode) ──
+    # Find individual sent entries where grace_until has expired.
+    # These are independent of profile status.
+    per_entry_deleted = 0
+    per_entry_tombstoned = 0
+    now_iso_pe = datetime.now(timezone.utc).isoformat()
+    last_entry_id_pe: str | None = None
+    while True:
+        eq = (
+            client.table("vault_entries")
+            .select("id,user_id,audio_file_path,sent_at,scheduled_at")
+            .eq("status", "sent")
+            .lte("grace_until", now_iso_pe)
+            .order("id")
+            .limit(PAGE_SIZE)
+        )
+        if last_entry_id_pe is not None:
+            eq = eq.gt("id", last_entry_id_pe)
+        resp = eq.execute()
+        entries_pe = resp.data or []
+        if not entries_pe:
+            break
+        last_entry_id_pe = str(entries_pe[-1]["id"])
+
+        for entry in entries_pe:
+            eid = entry.get("id", "?")
+            uid = entry.get("user_id", "?")
+            # Look up sender_name for tombstone
+            try:
+                prof_resp = (
+                    client.table("profiles")
+                    .select("sender_name")
+                    .eq("id", uid)
+                    .limit(1)
+                    .execute()
+                )
+                prof_data = (prof_resp.data or [None])[0]
+                s_name = (prof_data.get("sender_name") or "Afterword") if prof_data else "Afterword"
+            except Exception:  # noqa: BLE001
+                s_name = "Afterword"
+
+            tombstone_ok = False
+            try:
+                client.table("vault_entry_tombstones").insert({
+                    "vault_entry_id": eid,
+                    "user_id": uid,
+                    "sender_name": s_name,
+                    "sent_at": entry.get("sent_at"),
+                    "expired_at": now_iso_pe,
+                }).execute()
+                tombstone_ok = True
+                per_entry_tombstoned += 1
+            except Exception as tomb_exc:  # noqa: BLE001
+                if "duplicate" in str(tomb_exc).lower() or "23505" in str(tomb_exc):
+                    tombstone_ok = True
+                else:
+                    print(f"CRITICAL: Per-entry tombstone failed for {eid}: {tomb_exc}")
+
+            if tombstone_ok:
+                try:
+                    delete_entry(client, entry)
+                    per_entry_deleted += 1
+                except Exception as del_exc:  # noqa: BLE001
+                    print(f"Failed to delete per-entry grace expired {eid}: {del_exc}")
+
+    if per_entry_deleted > 0 or per_entry_tombstoned > 0:
+        print(
+            f"cleanup_sent_entries: done (per-entry grace) — "
+            f"tombstoned={per_entry_tombstoned} deleted={per_entry_deleted}"
+        )
 
 
 def cleanup_bot_accounts(client, now: datetime) -> None:
@@ -2191,6 +2598,37 @@ def verify_subscription_with_revenuecat(
     return "free"
 
 
+def _clamp_scheduled_dates(client, user_id: str, max_days: int, now: datetime) -> None:
+    """Clamp scheduled_at dates to at most max_days from now for a downgraded user.
+
+    When a Time Capsule user downgrades to free tier, their entries scheduled
+    beyond 30 days must be clamped to now + 30 days.
+    """
+    max_date = (now + timedelta(days=max_days)).isoformat()
+    try:
+        far_entries = (
+            client.table("vault_entries")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("status", "active")
+            .not_.is_("scheduled_at", "null")
+            .gt("scheduled_at", max_date)
+            .execute()
+        )
+        entries = far_entries.data or []
+        if entries:
+            clamped_at = max_date
+            clamped_grace = (now + timedelta(days=max_days + 30)).isoformat()
+            for entry in entries:
+                client.table("vault_entries").update({
+                    "scheduled_at": clamped_at,
+                    "grace_until": clamped_grace,
+                }).eq("id", entry["id"]).execute()
+            print(f"User {user_id}: clamped {len(entries)} scheduled entries to {max_days} days")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Failed to clamp scheduled dates for {user_id}: {exc}")
+
+
 def handle_subscription_downgrade(
     client,
     profile: dict,
@@ -2438,7 +2876,7 @@ def main() -> int:
 
             .select(
 
-                "id,user_id,title,action_type,data_type,status,payload_encrypted,recipient_email_encrypted,data_key_encrypted,hmac_signature,audio_file_path"
+                "id,user_id,title,action_type,data_type,status,payload_encrypted,recipient_email_encrypted,data_key_encrypted,hmac_signature,audio_file_path,is_zero_knowledge,scheduled_at,grace_until"
 
             )
 
@@ -2463,6 +2901,52 @@ def main() -> int:
         try:
 
           user_id = str(profile["id"])
+
+          # ── Scheduled mode (Time Capsule): process per-entry delivery ──
+          # No global timer, no push notifications, no warnings.
+          app_mode = (profile.get("app_mode") or "vault").lower()
+          if app_mode == "scheduled":
+              active_entries = batch_entries_by_user.get(user_id, [])
+              sub_status = (profile.get("subscription_status") or "free").lower()
+
+              # Still run RC verification for scheduled mode users
+              if rc_api_secret and sub_status in PAID_STATUSES:
+                  try:
+                      rc_status = verify_subscription_with_revenuecat(rc_api_secret, user_id)
+                      if rc_status is not None and rc_status != sub_status:
+                          try:
+                              client.table("profiles").update({
+                                  "subscription_status": rc_status,
+                              }).eq("id", user_id).execute()
+                              sub_status = rc_status
+                          except Exception:  # noqa: BLE001
+                              pass
+                      time.sleep(RC_VERIFY_RATE_LIMIT_DELAY)
+                  except Exception:  # noqa: BLE001
+                      pass
+
+              # Subscription downgrade for scheduled mode
+              if sub_status == "free":
+                  try:
+                      reverted = handle_subscription_downgrade(
+                          client, profile, active_entries, resend_key, from_email, now,
+                      )
+                      if reverted:
+                          # Also clamp scheduled dates to free tier max (30 days)
+                          _clamp_scheduled_dates(client, user_id, max_days=30, now=now)
+                          continue
+                  except Exception:  # noqa: BLE001
+                      pass
+
+              if active_entries:
+                  try:
+                      process_scheduled_entries(
+                          client, profile, active_entries, server_secret,
+                          resend_key, from_email, viewer_base_url, now,
+                      )
+                  except Exception as exc:  # noqa: BLE001
+                      print(f"Scheduled processing failed for {user_id}: {exc}")
+              continue
 
           last_check_in = parse_iso(profile.get("last_check_in"))
 

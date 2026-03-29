@@ -7,6 +7,7 @@ class Profile {
     required this.subscriptionStatus,
     required this.lastCheckIn,
     required this.timerDays,
+    this.appMode = 'vault',
     this.createdAt,
     this.updatedAt,
     this.warningSentAt,
@@ -25,6 +26,7 @@ class Profile {
   final String subscriptionStatus;
   final DateTime lastCheckIn;
   final int timerDays;
+  final String appMode;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? warningSentAt;
@@ -48,6 +50,7 @@ class Profile {
           ? DateTime.parse(map['last_check_in'] as String)
           : DateTime.now().toUtc(),
       timerDays: (map['timer_days'] as num?)?.toInt() ?? 30,
+      appMode: (map['app_mode'] as String?) ?? 'vault',
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'] as String)
           : null,
@@ -78,6 +81,7 @@ class Profile {
     String? subscriptionStatus,
     DateTime? lastCheckIn,
     int? timerDays,
+    String? appMode,
     DateTime? updatedAt,
     DateTime? warningSentAt,
     String? hmacKeyEncrypted,
@@ -95,6 +99,7 @@ class Profile {
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
       lastCheckIn: lastCheckIn ?? this.lastCheckIn,
       timerDays: timerDays ?? this.timerDays,
+      appMode: appMode ?? this.appMode,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       warningSentAt: warningSentAt ?? this.warningSentAt,
@@ -114,4 +119,6 @@ class Profile {
   int get remainingDays => timeRemaining.isNegative ? 0 : timeRemaining.inDays;
 
   bool get isExpired => timeRemaining.isNegative;
+
+  bool get isScheduledMode => appMode == 'scheduled';
 }

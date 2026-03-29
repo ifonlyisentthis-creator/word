@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_theme.dart';
+import '../services/home_controller.dart';
 import '../services/profile_service.dart';
 import '../services/theme_provider.dart';
 import '../widgets/ambient_background.dart';
@@ -15,6 +16,9 @@ class CustomizationScreen extends StatelessWidget {
     final tp = context.watch<ThemeProvider>();
     final sub = tp.subscriptionStatus;
     final td = tp.themeData;
+    final isScheduled = context.select<HomeController, bool>(
+      (hc) => hc.isScheduledMode,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -47,18 +51,20 @@ class CustomizationScreen extends StatelessWidget {
 
                 const SizedBox(height: 28),
 
-                // ── Section: Soul Fire ──
-                _SectionLabel(
-                  label: 'SOUL FIRE',
-                  accent: tp.soulFireId.primaryColor,
-                ),
-                const SizedBox(height: 12),
-                ...SoulFireStyleId.values.map((id) => _SoulFireCard(
-                      styleId: id,
-                      isSelected: tp.soulFireId == id,
-                      isUnlocked: id.isUnlocked(sub),
-                      onTap: () => _selectSoulFire(context, id),
-                    )),
+                // ── Section: Soul Fire (hidden in scheduled/Time Capsule mode) ──
+                if (!isScheduled) ...[
+                  _SectionLabel(
+                    label: 'SOUL FIRE',
+                    accent: tp.soulFireId.primaryColor,
+                  ),
+                  const SizedBox(height: 12),
+                  ...SoulFireStyleId.values.map((id) => _SoulFireCard(
+                        styleId: id,
+                        isSelected: tp.soulFireId == id,
+                        isUnlocked: id.isUnlocked(sub),
+                        onTap: () => _selectSoulFire(context, id),
+                      )),
+                ],
 
               ],
             ),

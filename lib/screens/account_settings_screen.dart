@@ -112,7 +112,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // Sender Name — disabled during grace
+                // App Mode + Sender Name — disabled during grace
                 IgnorePointer(
                 ignoring: controller.isInGracePeriod,
                 child: AnimatedOpacity(
@@ -120,6 +120,50 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 duration: const Duration(milliseconds: 300),
                 child: Column(
                   children: [
+                    // App Mode section
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'APP MODE',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _ModeOption(
+                                  label: 'Guardian Vault',
+                                  description: 'Periodic check-in. Shared timer.',
+                                  icon: Icons.shield_outlined,
+                                  isSelected: controller.appMode == 'vault',
+                                  onTap: () => _switchMode(context, controller, 'vault'),
+                                  theme: theme,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _ModeOption(
+                                  label: 'Time Capsule',
+                                  description: 'Per-vault scheduled dates.',
+                                  icon: Icons.schedule_send,
+                                  isSelected: controller.appMode == 'scheduled',
+                                  onTap: () => _switchMode(context, controller, 'scheduled'),
+                                  theme: theme,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                     // Sender Name
                     _Card(
                       child: Padding(
@@ -342,6 +386,16 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     );
   }
 
+  Future<void> _switchMode(BuildContext context, HomeController controller, String mode) async {
+    if (controller.appMode == mode) return;
+    final error = await controller.switchAppMode(mode);
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error)),
+      );
+    }
+  }
+
   Future<bool> _confirmDeleteAccount(BuildContext context) async {
     final tc = TextEditingController();
     final isPaidUser = widget.revenueCatController.isPro ||
@@ -467,6 +521,75 @@ class _Card extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
         child: child,
+      ),
+    );
+  }
+}
+
+class _ModeOption extends StatelessWidget {
+  const _ModeOption({
+    required this.label,
+    required this.description,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+    required this.theme,
+  });
+  final String label;
+  final String description;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? theme.colorScheme.primary.withValues(alpha: 0.1)
+              : theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? theme.colorScheme.primary.withValues(alpha: 0.5)
+                : theme.colorScheme.outline.withValues(alpha: 0.15),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon,
+                size: 20,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              description,
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

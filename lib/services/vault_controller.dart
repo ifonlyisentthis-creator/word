@@ -18,6 +18,16 @@ class VaultController extends ChangeNotifier {
   static const int maxPlaintextLength = 50000;
   static const Duration createRateLimit = Duration(seconds: 5);
 
+  static const int maxEntriesFree = 3;
+  static const int maxEntriesPro = 20;
+  static const int maxEntriesLifetime = 50;
+
+  static int maxEntriesFor({required bool isPro, required bool isLifetime}) {
+    if (isLifetime) return maxEntriesLifetime;
+    if (isPro) return maxEntriesPro;
+    return maxEntriesFree;
+  }
+
   final VaultService _vaultService;
   final String _userId;
 
@@ -251,17 +261,23 @@ class VaultController extends ChangeNotifier {
     if (!isAudio && draft.plaintext.trim().isEmpty) {
       return 'Write something before saving.';
     }
+
+    // Tier-based vault count limits
+    final activeEntriesCount = _entries
+        .where((entry) => entry.status == VaultStatus.active)
+        .length;
+    final maxEntries = maxEntriesFor(isPro: isPro, isLifetime: isLifetime);
+
     if (!isPro) {
-      final activeEntriesCount = _entries
-          .where((entry) => entry.status == VaultStatus.active)
-          .length;
       if (draft.actionType == VaultActionType.destroy) {
         return 'Upgrade to unlock Secure Erase mode.';
       }
-      if (isNew && activeEntriesCount >= 3) {
-        return 'Free plan allows up to 3 text items.';
-      }
     }
+    if (isNew && activeEntriesCount >= maxEntries) {
+      final tierName = isLifetime ? 'Lifetime' : (isPro ? 'Pro' : 'Free');
+      return '$tierName plan allows up to $maxEntries entries.';
+    }
+
     if (draft.dataType == VaultDataType.audio && !isPro) {
       return 'Audio vault requires Pro or Lifetime.';
     }
@@ -294,6 +310,21 @@ class VaultController extends ChangeNotifier {
         return 'Please enter a valid email address.';
       }
     }
+
+    // Validate scheduled delivery date (Time Capsule mode)
+    if (draft.scheduledAt != null) {
+      final now = DateTime.now().toUtc();
+      if (draft.scheduledAt!.isBefore(now)) {
+        return 'Scheduled date must be in the future.';
+      }
+      final maxDays = isLifetime ? 3650 : (isPro ? 365 : 30);
+      final maxDate = now.add(Duration(days: maxDays));
+      if (draft.scheduledAt!.isAfter(maxDate)) {
+        final tierName = isLifetime ? 'Lifetime' : (isPro ? 'Pro' : 'Free');
+        return '$tierName plan allows scheduling up to $maxDays days ahead.';
+      }
+    }
+
     return null;
   }
 
@@ -331,6 +362,8 @@ class VaultController extends ChangeNotifier {
       dataType: draft.dataType,
       audioFilePath: draft.audioFilePath,
       audioDurationSeconds: draft.audioDurationSeconds,
+      isZeroKnowledge: draft.isZeroKnowledge,
+      scheduledAt: draft.scheduledAt,
     );
   }
 }

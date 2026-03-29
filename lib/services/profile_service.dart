@@ -93,6 +93,12 @@ class ProfileService {
     return Profile.fromMap(response);
   }
 
+  Future<Profile> updateAppMode(String mode) async {
+    final response = await _client
+        .rpc('update_app_mode', params: {'p_mode': mode}).single();
+    return Profile.fromMap(response);
+  }
+
   String _defaultSenderName(User user) {
     final metadata = user.userMetadata ?? <String, dynamic>{};
     final possibleName = (metadata['full_name'] ?? metadata['name']) as String?;

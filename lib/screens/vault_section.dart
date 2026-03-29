@@ -8,6 +8,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:flutter/services.dart';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:just_audio/just_audio.dart';
@@ -48,6 +50,8 @@ class VaultSection extends StatelessWidget {
     this.onVaultChanged,
 
     this.readOnly = false,
+
+    this.isScheduledMode = false,
   });
 
   final String userId;
@@ -59,6 +63,8 @@ class VaultSection extends StatelessWidget {
   final VoidCallback? onVaultChanged;
 
   final bool readOnly;
+
+  final bool isScheduledMode;
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +95,8 @@ class VaultSection extends StatelessWidget {
         onVaultChanged: onVaultChanged,
 
         readOnly: readOnly,
+
+        isScheduledMode: isScheduledMode,
       ),
     );
   }
@@ -101,6 +109,7 @@ Future<bool> openVaultEntryEditor(
   required String userId,
   required bool isPro,
   required bool isLifetime,
+  bool isScheduledMode = false,
 }) async {
   final controller = VaultController(
     vaultService: VaultService(
@@ -139,6 +148,7 @@ Future<bool> openVaultEntryEditor(
             payload: null,
             isPro: isPro,
             isLifetime: isLifetime,
+            isScheduledMode: isScheduledMode,
             onSave: (draft) async {
               return controller.createEntry(
                 draft,
@@ -173,6 +183,8 @@ class _VaultSectionView extends StatelessWidget {
     this.onVaultChanged,
 
     this.readOnly = false,
+
+    this.isScheduledMode = false,
   });
 
   final bool isPro;
@@ -182,6 +194,8 @@ class _VaultSectionView extends StatelessWidget {
   final VoidCallback? onVaultChanged;
 
   final bool readOnly;
+
+  final bool isScheduledMode;
 
   @override
   Widget build(BuildContext context) {
@@ -197,6 +211,8 @@ class _VaultSectionView extends StatelessWidget {
         .where((entry) => entry.status == VaultStatus.sent)
         .toList();
 
+    final maxEntries = VaultController.maxEntriesFor(isPro: isPro, isLifetime: isLifetime);
+
     final emptyMessage = sentEntries.isEmpty
         ? 'Your vault is empty. Add a secure message to protect it.'
         : 'No active items right now. Sent items live in History.';
@@ -206,46 +222,48 @@ class _VaultSectionView extends StatelessWidget {
         for (final entry in entries) ...[
           const SizedBox(height: 12),
 
-          _VaultEntryTile(
-            entry: entry,
+          RepaintBoundary(
+            child: _VaultEntryTile(
+              entry: entry,
 
-            onView: () async {
-              await _showEntryDetails(context, controller, entry);
-            },
+              onView: () async {
+                await _showEntryDetails(context, controller, entry);
+              },
 
-            onEdit: readOnly
-                ? null
-                : (entry.isEditable
-                      ? () async {
-                          final payload = await controller.loadPayload(entry);
+              onEdit: readOnly
+                  ? null
+                  : (entry.isEditable
+                        ? () async {
+                            final payload = await controller.loadPayload(entry);
 
-                          if (payload == null) return;
+                            if (payload == null) return;
 
-                          if (!context.mounted) return;
+                            if (!context.mounted) return;
 
-                          await _openEditor(
-                            context,
+                            await _openEditor(
+                              context,
 
-                            controller,
+                              controller,
 
-                            entry: entry,
+                              entry: entry,
 
-                            payload: payload,
-                          );
-                        }
-                      : null),
+                              payload: payload,
+                            );
+                          }
+                        : null),
 
-            onDelete: readOnly
-                ? null
-                : (() async {
-                    final confirmed = await _confirmDelete(context);
+              onDelete: readOnly
+                  ? null
+                  : (() async {
+                      final confirmed = await _confirmDelete(context);
 
-                    if (!confirmed) return;
+                      if (!confirmed) return;
 
-                    await controller.deleteEntry(entry);
+                      await controller.deleteEntry(entry);
 
-                    if (context.mounted) onVaultChanged?.call();
-                  }),
+                      if (context.mounted) onVaultChanged?.call();
+                    }),
+            ),
           ),
         ],
       ];
@@ -413,7 +431,7 @@ class _VaultSectionView extends StatelessWidget {
                         width: double.infinity,
 
                         child: OutlinedButton.icon(
-                          onPressed: controller.isLoading || (!isPro && activeEntries.length >= 3)
+                          onPressed: controller.isLoading || activeEntries.length >= maxEntries
                               ? null
                               : () async {
                                   await _openEditor(context, controller);
@@ -438,7 +456,7 @@ class _VaultSectionView extends StatelessWidget {
                   width: double.infinity,
 
                   child: OutlinedButton.icon(
-                    onPressed: controller.isLoading || (!isPro && activeEntries.length >= 3)
+                    onPressed: controller.isLoading || activeEntries.length >= maxEntries
                         ? null
                         : () async {
                             await _openEditor(context, controller);
@@ -449,10 +467,14 @@ class _VaultSectionView extends StatelessWidget {
                     label: const Text('Add Entry'),
                   ),
                 ),
-                if (!isPro && activeEntries.length >= 3) ...[
+                if (activeEntries.length >= maxEntries) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'Free plan allows up to 3 entries. Upgrade to add more.',
+                    isLifetime
+                        ? 'Lifetime plan allows up to $maxEntries entries.'
+                        : isPro
+                            ? 'Pro plan allows up to $maxEntries entries.'
+                            : 'Free plan allows up to $maxEntries entries. Upgrade to add more.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Colors.white38,
                       fontSize: 11,
@@ -545,6 +567,8 @@ class _VaultSectionView extends StatelessWidget {
             isPro: isPro,
 
             isLifetime: isLifetime,
+
+            isScheduledMode: isScheduledMode,
 
             onSave: (draft) async {
               return entry == null
@@ -965,6 +989,57 @@ class _VaultEntryTile extends StatelessWidget {
                     _VaultChip(label: entry.status.label),
                   ],
                 ),
+
+                if (entry.scheduledAt != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(Icons.calendar_today, size: 12, color: theme.colorScheme.primary.withValues(alpha: 0.7)),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Delivers ${entry.scheduledAt!.day}/${entry.scheduledAt!.month}/${entry.scheduledAt!.year}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white60,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
+                if (entry.graceUntil != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.timer_outlined, size: 12, color: theme.colorScheme.secondary.withValues(alpha: 0.7)),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Grace until ${entry.graceUntil!.day}/${entry.graceUntil!.month}/${entry.graceUntil!.year}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
+                if (entry.isZeroKnowledge) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.key, size: 12, color: theme.colorScheme.primary.withValues(alpha: 0.7)),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Self-Managed Key',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -1037,6 +1112,8 @@ class _VaultDraftStorage {
     required String body,
     required String actionType,
     required String dataType,
+    bool isZeroKnowledge = false,
+    String? scheduledAt,
   }) async {
     // Don't save empty drafts
     if (title.isEmpty && recipient.isEmpty && body.isEmpty) {
@@ -1052,6 +1129,8 @@ class _VaultDraftStorage {
           'body': body,
           'actionType': actionType,
           'dataType': dataType,
+          'isZeroKnowledge': isZeroKnowledge,
+          if (scheduledAt != null) 'scheduledAt': scheduledAt,
         }),
       );
     } catch (_) {}
@@ -1077,6 +1156,8 @@ class VaultEntrySheet extends StatefulWidget {
     required this.isLifetime,
 
     required this.onSave,
+
+    this.isScheduledMode = false,
   });
 
   final VaultEntry? entry;
@@ -1088,6 +1169,8 @@ class VaultEntrySheet extends StatefulWidget {
   final bool isLifetime;
 
   final Future<bool> Function(VaultEntryDraft draft) onSave;
+
+  final bool isScheduledMode;
 
   @override
   State<VaultEntrySheet> createState() => _VaultEntrySheetState();
@@ -1124,6 +1207,9 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
   bool _consentChecked = false;
   bool _audioUsageLoaded = false;
   bool _savedSuccessfully = false;
+  bool _isZeroKnowledge = false;
+
+  DateTime? _scheduledAt;
 
   String? _saveError;
 
@@ -1144,6 +1230,14 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
     _actionType = widget.entry?.actionType ?? VaultActionType.send;
 
     _dataType = widget.entry?.dataType ?? VaultDataType.text;
+
+    _isZeroKnowledge = widget.entry?.isZeroKnowledge ?? false;
+    _scheduledAt = widget.entry?.scheduledAt;
+
+    // In scheduled mode, force action type to send
+    if (widget.isScheduledMode) {
+      _actionType = VaultActionType.send;
+    }
 
     // Restore draft only for new entries (not editing existing ones)
     if (widget.entry == null) {
@@ -1177,6 +1271,16 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
       setState(() => _dataType = VaultDataType.audio);
       _ensureAudioUsageLoaded();
     }
+    final savedZk = draft['isZeroKnowledge'] as bool?;
+    if (savedZk == true) {
+      setState(() => _isZeroKnowledge = true);
+    }
+    final savedScheduledAt = draft['scheduledAt'] as String?;
+    if (savedScheduledAt != null) {
+      try {
+        setState(() => _scheduledAt = DateTime.parse(savedScheduledAt));
+      } catch (_) {}
+    }
   }
 
   void _saveDraftOnClose() {
@@ -1188,6 +1292,8 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
       body: _bodyController.text,
       actionType: _actionType == VaultActionType.destroy ? 'destroy' : 'send',
       dataType: _dataType == VaultDataType.audio ? 'audio' : 'text',
+      isZeroKnowledge: _isZeroKnowledge,
+      scheduledAt: _scheduledAt?.toUtc().toIso8601String(),
     ));
   }
 
@@ -1305,8 +1411,92 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                   ),
                 ),
 
+                if (widget.isScheduledMode) ...[
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+                    child: InkWell(
+                      onTap: () async {
+                        final now = DateTime.now();
+                        final maxDays = widget.isLifetime ? 3650 : (widget.isPro ? 365 : 30);
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _scheduledAt ?? now.add(const Duration(days: 1)),
+                          firstDate: now.add(const Duration(days: 1)),
+                          lastDate: now.add(Duration(days: maxDays)),
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: Theme.of(context).colorScheme,
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setState(() => _scheduledAt = DateTime.utc(
+                            picked.year, picked.month, picked.day, 12, 0, 0));
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _scheduledAt != null
+                                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)
+                                : Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today,
+                              color: Theme.of(context).colorScheme.primary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Delivery Date',
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _scheduledAt != null
+                                        ? '${_scheduledAt!.day}/${_scheduledAt!.month}/${_scheduledAt!.year}'
+                                        : 'Select a date',
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.onSurface,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right,
+                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 12),
 
+                if (!widget.isScheduledMode) ...[
                 Row(
                   children: [
                     const Icon(
@@ -1398,6 +1588,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                       context,
                     ).textTheme.bodySmall?.copyWith(color: Colors.white54),
                   ),
+                ],
                 ],
 
                 const SizedBox(height: 16),
@@ -1789,6 +1980,41 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                   const SizedBox(height: 12),
                 ],
 
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Self-Managed Key',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                )),
+                            const SizedBox(height: 2),
+                            Text(
+                              'You manage the decryption key. Server won\'t store it.',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _isZeroKnowledge,
+                        onChanged: _isSaving ? null : (v) => setState(() => _isZeroKnowledge = v),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
                 // Consent checkbox — mandatory before saving
                 CheckboxListTile(
                   value: _consentChecked,
@@ -1834,6 +2060,14 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
   }
 
   Future<void> _handleSave(BuildContext context) async {
+    // Validate scheduled mode date
+    if (widget.isScheduledMode && _scheduledAt == null) {
+      setState(() {
+        _saveError = 'Select a delivery date.';
+      });
+      return;
+    }
+
     setState(() {
       _isSaving = true;
 
@@ -1864,6 +2098,10 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
       audioFilePath: isAudio ? _recordedFilePath : null,
 
       audioDurationSeconds: isAudio ? _recordedDurationSeconds : null,
+
+      isZeroKnowledge: _isZeroKnowledge,
+
+      scheduledAt: widget.isScheduledMode ? _scheduledAt : null,
     );
 
     final success = await widget.onSave(draft);
@@ -1884,6 +2122,27 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
         } catch (_) {}
       }
 
+      if (_isZeroKnowledge && mounted) {
+        // Show the security key to the user for ZK mode
+        try {
+          final newEntry = ctrl.entries.first; // Most recently created
+          final svc = VaultService(
+            client: Supabase.instance.client,
+            cryptoService: CryptoService(),
+            serverCryptoService: ServerCryptoService(
+              client: Supabase.instance.client,
+            ),
+            deviceSecretService: DeviceSecretService(),
+          );
+          final keyBase64 = await svc.getSecurityKeyBase64(newEntry);
+          if (mounted) {
+            await _showZkKeyDialog(context, keyBase64);
+          }
+        } catch (_) {
+          // Best effort - key display; entry is already saved
+        }
+      }
+
       if (mounted) nav.pop(true);
     } else {
       setState(() {
@@ -1893,6 +2152,82 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
             ctrl.errorMessage ?? 'Unable to save this entry. Please try again.';
       });
     }
+  }
+
+  Future<void> _showZkKeyDialog(BuildContext context, String keyBase64) async {
+    final theme = Theme.of(context);
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        title: Row(
+          children: [
+            Icon(Icons.key, color: theme.colorScheme.primary, size: 22),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Save Your Security Key')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This key is required to unlock this vault. '
+              'The server does not have a copy.',
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                ),
+              ),
+              child: SelectableText(
+                keyBase64,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'If this key is lost, the vault can never be unlocked.',
+              style: TextStyle(
+                color: theme.colorScheme.error,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: keyBase64));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Key copied to clipboard')),
+              );
+            },
+            child: const Text('Copy Key'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('I\'ve Saved It'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _handleDataTypeChange(VaultDataType type) async {

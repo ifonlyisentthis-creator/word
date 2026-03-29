@@ -104,6 +104,50 @@ class FaqHelpScreen extends StatelessWidget {
                             'access and decrypt their entry. After that, the data '
                             'is permanently purged from our servers.',
                       ),
+                      _FaqItem(
+                        question: 'What is the difference between Guardian Vault and Time Capsule?',
+                        answer:
+                            'Guardian Vault uses a single check-in timer — if you '
+                            'miss it, all entries execute at once. Time Capsule lets '
+                            'you schedule each entry for a specific future date with '
+                            'no check-ins needed. Both modes are available on all plans.',
+                      ),
+                      _FaqItem(
+                        question: 'How do I switch between Guardian Vault and Time Capsule?',
+                        answer:
+                            'Go to Account Settings and tap the mode toggle. You must '
+                            'clear all active entries before switching. This ensures no '
+                            'entries are left in an ambiguous state.',
+                      ),
+                      _FaqItem(
+                        question: 'What is zero-knowledge mode?',
+                        answer:
+                            'A per-entry toggle that keeps the encryption key only on '
+                            'your device. The server stores no copy of the data key. '
+                            'You must share the key with your beneficiary manually. '
+                            'Available on all plans.',
+                      ),
+                      _FaqItem(
+                        question: 'What happens if I lose my zero-knowledge key?',
+                        answer:
+                            'The vault entry becomes permanently unrecoverable. '
+                            'Neither you, your beneficiary, nor our support team '
+                            'can decrypt it. Save the key securely when prompted.',
+                      ),
+                      _FaqItem(
+                        question: 'How many vault entries can I create?',
+                        answer:
+                            'Free: 3 entries. Pro: 20 entries. Lifetime: 50 entries. '
+                            'Slots are recovered after sent entries are purged '
+                            '(30 days after delivery).',
+                      ),
+                      _FaqItem(
+                        question: 'How far ahead can I schedule a Time Capsule entry?',
+                        answer:
+                            'Free: up to 30 days ahead. Pro: up to 1 year. '
+                            'Lifetime: up to 10 years. If you downgrade, scheduled '
+                            'dates beyond your new limit are adjusted automatically.',
+                      ),
                       const SizedBox(height: 28),
                       _SectionTitle('Contact & Support'),
                       const SizedBox(height: 4),

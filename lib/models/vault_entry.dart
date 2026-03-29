@@ -11,6 +11,9 @@ class VaultEntry {
     required this.dataKeyEncrypted,
     required this.hmacSignature,
     required this.createdAt,
+    this.isZeroKnowledge = false,
+    this.scheduledAt,
+    this.graceUntil,
     this.updatedAt,
     this.sentAt,
     this.audioFilePath,
@@ -27,6 +30,9 @@ class VaultEntry {
   final String? recipientEncrypted;
   final String dataKeyEncrypted;
   final String hmacSignature;
+  final bool isZeroKnowledge;
+  final DateTime? scheduledAt;
+  final DateTime? graceUntil;
   final DateTime createdAt;
   final DateTime? updatedAt;
   final DateTime? sentAt;
@@ -47,6 +53,13 @@ class VaultEntry {
       recipientEncrypted: map['recipient_email_encrypted'] as String?,
       dataKeyEncrypted: map['data_key_encrypted'] as String,
       hmacSignature: map['hmac_signature'] as String,
+      isZeroKnowledge: map['is_zero_knowledge'] as bool? ?? false,
+      scheduledAt: map['scheduled_at'] != null
+          ? DateTime.parse(map['scheduled_at'] as String)
+          : null,
+      graceUntil: map['grace_until'] != null
+          ? DateTime.parse(map['grace_until'] as String)
+          : null,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: map['updated_at'] != null
           ? DateTime.parse(map['updated_at'] as String)
@@ -120,12 +133,14 @@ class VaultEntryPayload {
     this.recipientEmail,
     this.audioFilePath,
     this.audioDurationSeconds,
+    this.isZeroKnowledge = false,
   });
 
   final String? plaintext;
   final String? recipientEmail;
   final String? audioFilePath;
   final int? audioDurationSeconds;
+  final bool isZeroKnowledge;
 }
 
 class VaultEntryDraft {
@@ -137,6 +152,8 @@ class VaultEntryDraft {
     this.recipientEmail,
     this.audioFilePath,
     this.audioDurationSeconds,
+    this.isZeroKnowledge = false,
+    this.scheduledAt,
   });
 
   final String title;
@@ -146,4 +163,6 @@ class VaultEntryDraft {
   final int? audioDurationSeconds;
   final VaultActionType actionType;
   final VaultDataType dataType;
+  final bool isZeroKnowledge;
+  final DateTime? scheduledAt;
 }

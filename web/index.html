@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Afterword is a secure, time-locked digital vault that delivers or erases your messages when your check-in timer expires.">
+    <meta name="description" content="Afterword is a secure digital vault with two modes: Guardian Vault (check-in timer) and Time Capsule (scheduled delivery). AES-256 encryption, zero-knowledge option, and recipient-only viewer.">
     <meta name="theme-color" content="#050505">
     <title>Afterword · Secure Digital Vault</title>
 
@@ -65,14 +65,14 @@
           <div class="hero__copy">
             <span class="eyebrow">Digital time capsule · Secure vault</span>
             <h1>
-              A secure vault that delivers your words only when your
-              check-in timer expires.
+              A secure vault for your most important words &mdash; delivered
+              on your terms, or erased forever.
             </h1>
             <p>
-              Afterword is a secure protocol for your most important
-              messages. Set a check-in timer. If you miss it, your protocol
-              automatically sends encrypted items to chosen beneficiaries or
-              erases them forever.
+              Afterword gives you two powerful modes: <strong>Guardian Vault</strong>
+              protects entries behind a check-in timer, and <strong>Time Capsule</strong>
+              delivers them on a date you choose. End-to-end encrypted, with an
+              optional zero-knowledge mode where even the server cannot decrypt.
             </p>
             <div class="hero__actions">
               <a class="button primary" href="https://play.google.com/store/apps/details?id=com.afterword.app" target="_blank" rel="noopener noreferrer">Get Afterword</a>
@@ -80,20 +80,20 @@
             </div>
             <div class="hero__stats">
               <div class="stat card">
-                <h3>One heartbeat, many items</h3>
-                <p>Every vault entry stays protected by the same timer.</p>
+                <h3>Two modes, one vault</h3>
+                <p>Guardian Vault (check-in timer) or Time Capsule (scheduled date).</p>
               </div>
               <div class="stat card">
                 <h3>Send or erase on expiry</h3>
                 <p>Choose delivery or deletion for each item.</p>
               </div>
               <div class="stat card">
-                <h3>Recipient-only viewer</h3>
-                <p>Beneficiaries unlock in the browser with a private key.</p>
+                <h3>Zero-knowledge option</h3>
+                <p>Self-managed keys &mdash; the server never sees your data key.</p>
               </div>
             </div>
             <div class="signal-row">
-              <span class="signal">AES-256 encryption</span>
+              <span class="signal">AES-256-GCM encryption</span>
               <span class="signal">HMAC integrity seal</span>
               <span class="signal">Android-first release</span>
             </div>
@@ -106,8 +106,8 @@
             </div>
             <div class="panel__details">
               <div class="detail">
-                <span class="detail__label">Timer</span>
-                <p>Default 30 days, extend to 365 days on Pro/Lifetime.</p>
+                <span class="detail__label">Modes</span>
+                <p>Guardian Vault (timer) or Time Capsule (scheduled date).</p>
               </div>
               <div class="detail">
                 <span class="detail__label">Outcome</span>
@@ -136,8 +136,16 @@
           </div>
           <div class="feature-grid">
             <article class="card feature reveal">
-              <h3>Time-locked encryption</h3>
-              <p>Keys are generated on your device and never leave it.</p>
+              <h3>Guardian Vault</h3>
+              <p>A check-in timer controls all entries. Miss it, and your protocol executes.</p>
+            </article>
+            <article class="card feature reveal">
+              <h3>Time Capsule</h3>
+              <p>Schedule each entry for a specific date. No timer, no check-ins required.</p>
+            </article>
+            <article class="card feature reveal">
+              <h3>Zero-knowledge mode</h3>
+              <p>Self-managed encryption keys. The server never sees your data key.</p>
             </article>
             <article class="card feature reveal">
               <h3>Secure Erase</h3>
@@ -179,7 +187,11 @@
             </article>
             <article class="card reveal">
               <h3>Client-side keys</h3>
-              <p>Keys are created on-device and never stored server-side.</p>
+              <p>Keys are created on-device and wrapped before upload.</p>
+            </article>
+            <article class="card reveal">
+              <h3>Zero-knowledge option</h3>
+              <p>Enable self-managed keys per entry. The server stores no copy of the data key.</p>
             </article>
             <article class="card reveal">
               <h3>Audio locked as noise</h3>
@@ -199,32 +211,32 @@
         <section id="protocol" class="section">
           <div class="section__header">
             <span class="eyebrow">Protocol flow</span>
-            <h2>The Afterword protocol, step by step.</h2>
+            <h2>Two modes, one vault. Choose how your entries are delivered.</h2>
             <p>
-              One heartbeat controls every entry. Check in before it expires and
-              nothing is released.
+              Guardian Vault uses a heartbeat timer. Time Capsule schedules each
+              entry for a specific date. Both are end-to-end encrypted.
             </p>
           </div>
           <div class="protocol-grid">
             <article class="card step reveal">
+              <span class="step__number">Guardian Vault</span>
+              <h3>Heartbeat-protected</h3>
+              <p>Set a check-in timer (7&ndash;3650 days). If you miss it, all entries execute at once. Press Soul Fire to reset the timer.</p>
+            </article>
+            <article class="card step reveal">
+              <span class="step__number">Time Capsule</span>
+              <h3>Scheduled delivery</h3>
+              <p>Pick a future date for each entry. No timer, no check-ins. Each entry is delivered on its scheduled date automatically.</p>
+            </article>
+            <article class="card step reveal">
               <span class="step__number">01</span>
-              <h3>Set the heartbeat</h3>
-              <p>Pick a cadence. Default is 30 days, adjustable on Pro.</p>
+              <h3>Secure your vault</h3>
+              <p>Write messages or audio. Everything encrypts locally. Toggle zero-knowledge for entries you want fully private.</p>
             </article>
             <article class="card step reveal">
               <span class="step__number">02</span>
-              <h3>Secure your vault</h3>
-              <p>Write messages or audio. Everything encrypts locally.</p>
-            </article>
-            <article class="card step reveal">
-              <span class="step__number">03</span>
-              <h3>Check in</h3>
-              <p>Hold the pulse to reset the timer and keep items locked.</p>
-            </article>
-            <article class="card step reveal">
-              <span class="step__number">04</span>
               <h3>Protocol executes</h3>
-              <p>Afterword sends or erases entries exactly as instructed.</p>
+              <p>Afterword sends or erases entries exactly as instructed. Sent items stay available for 30 days, then purge.</p>
             </article>
           </div>
         </section>
@@ -241,6 +253,9 @@
               <ul>
                 <li>3 text entries</li>
                 <li>30-day timer</li>
+                <li>Guardian Vault &amp; Time Capsule modes</li>
+                <li>Zero-knowledge mode</li>
+                <li>Scheduled delivery (up to 30 days ahead)</li>
                 <li>3 themes &amp; 3 soul fire styles</li>
                 <li>Push notifications</li>
                 <li>Recovery phrase backup</li>
@@ -251,10 +266,11 @@
               <h3>Pro</h3>
               <p class="plan__price">$1.99 / mo · $19.99 / yr</p>
               <ul>
-                <li>Unlimited text entries</li>
+                <li>20 text entries</li>
                 <li>Secure Erase mode</li>
                 <li>Encrypted audio vault (1 min)</li>
-                <li>Custom timer (7–365 days)</li>
+                <li>Custom timer (7&ndash;365 days)</li>
+                <li>Scheduled delivery (up to 1 year ahead)</li>
                 <li>Email expiry warning</li>
                 <li>8 themes &amp; 8 soul fire styles</li>
               </ul>
@@ -263,9 +279,11 @@
               <h3>Lifetime</h3>
               <p class="plan__price">$49.99 once</p>
               <ul>
+                <li>50 text entries</li>
                 <li>Everything in Pro, forever</li>
                 <li>Encrypted audio vault (10 min)</li>
                 <li>Extended timer (up to 10 years)</li>
+                <li>Scheduled delivery (up to 10 years ahead)</li>
                 <li>All 10 themes &amp; 10 soul fire styles</li>
               </ul>
             </article>
@@ -280,8 +298,8 @@
             <div class="comparison__row">
               <span data-label="Feature">Text items</span>
               <span data-label="Free">3</span>
-              <span data-label="Pro">Unlimited</span>
-              <span data-label="Lifetime">Unlimited</span>
+              <span data-label="Pro">20</span>
+              <span data-label="Lifetime">50</span>
             </div>
             <div class="comparison__row">
               <span data-label="Feature">Secure Erase</span>
@@ -290,10 +308,22 @@
               <span data-label="Lifetime">Yes</span>
             </div>
             <div class="comparison__row">
-              <span data-label="Feature">Custom timers</span>
+              <span data-label="Feature">Guardian Vault timer</span>
               <span data-label="Free">30 days</span>
-              <span data-label="Pro">7-365 days</span>
-              <span data-label="Lifetime">7-3650 days</span>
+              <span data-label="Pro">7&ndash;365 days</span>
+              <span data-label="Lifetime">7&ndash;3650 days</span>
+            </div>
+            <div class="comparison__row">
+              <span data-label="Feature">Time Capsule schedule</span>
+              <span data-label="Free">30 days ahead</span>
+              <span data-label="Pro">1 year ahead</span>
+              <span data-label="Lifetime">10 years ahead</span>
+            </div>
+            <div class="comparison__row">
+              <span data-label="Feature">Zero-knowledge mode</span>
+              <span data-label="Free">Yes</span>
+              <span data-label="Pro">Yes</span>
+              <span data-label="Lifetime">Yes</span>
             </div>
             <div class="comparison__row">
               <span data-label="Feature">Email warning</span>
@@ -336,13 +366,30 @@
           <div class="faq-grid">
             <div class="faq__item reveal">
               <h3>Can Afterword read my messages?</h3>
-              <p>No. Encryption happens on-device and keys never leave you.</p>
+              <p>No. Encryption happens on-device and keys never leave you. With zero-knowledge mode, even the server cannot decrypt your data key.</p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>What&rsquo;s the difference between Guardian Vault and Time Capsule?</h3>
+              <p>
+                Guardian Vault uses a single check-in timer for all entries &mdash;
+                miss it and everything executes. Time Capsule lets you schedule each
+                entry for a specific date with no check-ins needed.
+              </p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>What is zero-knowledge mode?</h3>
+              <p>
+                A per-entry toggle that keeps the encryption key only on your device. The
+                server stores no copy, so even we cannot decrypt. You manually share the
+                key with your beneficiary.
+              </p>
             </div>
             <div class="faq__item reveal">
               <h3>What if I miss a check-in?</h3>
               <p>
-                The protocol executes. Sent items stay visible for 30 days, then
-                purge.
+                In Guardian Vault mode, the protocol executes. Sent items stay visible
+                for 30 days, then purge. In Time Capsule mode, there is no check-in &mdash;
+                entries deliver on their scheduled date.
               </p>
             </div>
             <div class="faq__item reveal">
@@ -351,7 +398,15 @@
             </div>
             <div class="faq__item reveal">
               <h3>How do beneficiaries access items?</h3>
-              <p>They use view.afterword-app.com with the security key.</p>
+              <p>They use view.afterword-app.com with the security key from the email. For zero-knowledge entries, the sender shares the key separately.</p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>How many entries can I create?</h3>
+              <p>Free: 3 entries. Pro: 20 entries. Lifetime: 50 entries. Slots are recovered after sent entries are purged.</p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>Can I switch between modes?</h3>
+              <p>Yes, in Account Settings. You must clear all active entries before switching modes.</p>
             </div>
           </div>
         </section>

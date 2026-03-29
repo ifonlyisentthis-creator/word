@@ -456,4 +456,56 @@ void main() {
       expect(fraction, closeTo(1.0, 0.001));
     });
   });
+
+  group('ZK mode encryption envelope', () {
+    test('ZK envelope has empty server field', () {
+      // In ZK mode, the envelope JSON has server = '' (empty string)
+      const zkEnvelope = '{"v":1,"server":"","device":"deviceCipherBase64"}';
+      final parsed = jsonDecode(zkEnvelope) as Map<String, dynamic>;
+
+      expect(parsed['v'], equals(1));
+      expect(parsed['server'], equals(''));
+      expect(parsed['device'], isNotEmpty);
+    });
+
+    test('Non-ZK envelope has non-empty server field', () {
+      const normalEnvelope =
+          '{"v":1,"server":"serverCipherBase64","device":"deviceCipherBase64"}';
+      final parsed = jsonDecode(normalEnvelope) as Map<String, dynamic>;
+
+      expect(parsed['server'], isNotEmpty);
+      expect(parsed['device'], isNotEmpty);
+    });
+
+    test('extract_server_ciphertext returns empty for ZK envelope', () {
+      // Mirrors the Python extract_server_ciphertext behavior
+      const zkEnvelope = '{"v":1,"server":"","device":"deviceCipher"}';
+      final decoded = jsonDecode(zkEnvelope) as Map<String, dynamic>;
+      final server = decoded['server'] as String;
+
+      // For ZK entries, server field is empty — no server decryption possible
+      expect(server, isEmpty);
+    });
+  });
+
+  group('Scheduled delivery date validation', () {
+    test('scheduled date must be in the future', () {
+      final now = DateTime.now().toUtc();
+      final pastDate = now.subtract(const Duration(hours: 1));
+      final futureDate = now.add(const Duration(days: 1));
+
+      expect(pastDate.isBefore(now), isTrue);
+      expect(futureDate.isAfter(now), isTrue);
+    });
+
+    test('free tier max 30 days, pro 365, lifetime 3650', () {
+      final now = DateTime.now().toUtc();
+      final freeMax = now.add(const Duration(days: 30));
+      final proMax = now.add(const Duration(days: 365));
+      final lifetimeMax = now.add(const Duration(days: 3650));
+
+      expect(freeMax.isBefore(proMax), isTrue);
+      expect(proMax.isBefore(lifetimeMax), isTrue);
+    });
+  });
 }

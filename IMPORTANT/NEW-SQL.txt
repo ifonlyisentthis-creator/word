@@ -1,0 +1,164 @@
+-- ============================================================
+-- Afterword SQL Migration – Run in sequence
+-- Features: vault limits, zero-knowledge mode, Time Capsule mode
+-- ============================================================
+
+-- 67: Add is_zero_knowledge column to vault_entries
+ALTER TABLE vault_entries
+  ADD COLUMN IF NOT EXISTS is_zero_knowledge boolean NOT NULL DEFAULT false;
+
+-- 68: Add app_mode column to profiles (Guardian Vault vs Time Capsule)
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS app_mode text NOT NULL DEFAULT 'vault'
+    CHECK (app_mode IN ('vault', 'scheduled'));
+
+-- 69: Add per-entry scheduled delivery and grace tracking columns
+ALTER TABLE vault_entries
+  ADD COLUMN IF NOT EXISTS scheduled_at timestamptz;
+ALTER TABLE vault_entries
+  ADD COLUMN IF NOT EXISTS grace_until timestamptz;
+
+-- 70: Index for efficient scheduled entry lookup by heartbeat
+CREATE INDEX IF NOT EXISTS vault_entries_scheduled_idx
+  ON vault_entries(scheduled_at)
+  WHERE scheduled_at IS NOT NULL AND status = 'active';
+
+-- 71: Update RLS INSERT policy to enforce tier-based vault limits
+--     Free = 3, Pro = 20, Lifetime = 50
+DROP POLICY IF EXISTS entries_insert_own ON vault_entries;
+CREATE POLICY entries_insert_own ON vault_entries
+FOR INSERT WITH CHECK (
+  auth.uid() = user_id
+  AND status = 'active'
+  -- Destroy mode requires Pro/Lifetime
+  AND (
+    action_type <> 'destroy'
+    OR EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')
+    )
+  )
+  -- Audio requires Pro/Lifetime
+  AND (
+    data_type <> 'audio'
+    OR EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')
+    )
+  )
+  -- Tier-based vault count limits
+  AND (
+    -- Lifetime: max 50 active entries
+    (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status = 'lifetime')
+     AND (SELECT count(*) FROM vault_entries ve WHERE ve.user_id = auth.uid() AND ve.status = 'active') < 50)
+    OR
+    -- Pro: max 20 active entries
+    (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status = 'pro')
+     AND (SELECT count(*) FROM vault_entries ve WHERE ve.user_id = auth.uid() AND ve.status = 'active') < 20)
+    OR
+    -- Free: max 3 active entries
+    (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status NOT IN ('pro','lifetime'))
+     AND (SELECT count(*) FROM vault_entries ve WHERE ve.user_id = auth.uid() AND ve.status = 'active') < 3)
+  )
+  -- Rate limit: 5 seconds between inserts
+  AND (
+    (SELECT p.last_entry_at IS NULL
+        OR now() - p.last_entry_at >= interval '5 seconds'
+     FROM profiles p WHERE p.id = auth.uid())
+  )
+);
+
+-- 72: RPC to switch app mode (Guardian Vault <-> Time Capsule)
+--     Only allowed when user has zero active/sending/sent entries
+CREATE OR REPLACE FUNCTION public.update_app_mode(p_mode text)
+RETURNS profiles
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  result profiles;
+  entry_count int;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+  IF p_mode NOT IN ('vault', 'scheduled') THEN
+    RAISE EXCEPTION 'invalid mode: %', p_mode;
+  END IF;
+
+  -- Block switching if any entries exist in non-cleared states
+  SELECT count(*) INTO entry_count
+  FROM vault_entries
+  WHERE user_id = auth.uid()
+    AND status IN ('active', 'sending', 'sent');
+
+  IF entry_count > 0 THEN
+    RAISE EXCEPTION 'cannot switch mode while vaults are active or in grace period';
+  END IF;
+
+  UPDATE profiles
+  SET app_mode = p_mode
+  WHERE id = auth.uid()
+  RETURNING * INTO result;
+
+  RETURN result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.update_app_mode(text) FROM anon;
+GRANT EXECUTE ON FUNCTION public.update_app_mode(text) TO authenticated;
+
+-- 73: Update cleanup_sent_entries to handle per-entry grace (Time Capsule mode)
+CREATE OR REPLACE FUNCTION cleanup_sent_entries()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  -- 1. Delete audio for per-entry grace-expired entries (Time Capsule mode)
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name IN (
+      SELECT audio_file_path FROM vault_entries
+      WHERE status = 'sent'
+        AND grace_until IS NOT NULL
+        AND grace_until < now()
+        AND audio_file_path IS NOT NULL
+    );
+
+  -- 2. Delete per-entry grace-expired entries (Time Capsule mode)
+  DELETE FROM vault_entries
+  WHERE status = 'sent'
+    AND grace_until IS NOT NULL
+    AND grace_until < now();
+
+  -- 3. Original logic: Delete audio for globally grace-expired entries (Guardian Vault mode)
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name IN (
+      SELECT audio_file_path FROM vault_entries
+      WHERE status = 'sent'
+        AND grace_until IS NULL
+        AND sent_at < now() - interval '30 days'
+        AND audio_file_path IS NOT NULL
+    );
+
+  -- 4. Original logic: Purge globally grace-expired sent entries (Guardian Vault mode)
+  DELETE FROM vault_entries
+  WHERE status = 'sent'
+    AND grace_until IS NULL
+    AND sent_at < now() - interval '30 days';
+
+  -- 5. Archive profiles that have no active/sending entries remaining
+  UPDATE profiles p
+  SET status = 'archived'
+  WHERE p.status <> 'archived'
+    AND NOT EXISTS (
+      SELECT 1 FROM vault_entries v
+      WHERE v.user_id = p.id AND v.status IN ('active','sending')
+    )
+    AND EXISTS (
+      SELECT 1 FROM vault_entries v
+      WHERE v.user_id = p.id AND v.status = 'sent'
+    ) IS false
+    AND p.status = 'inactive';
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.cleanup_sent_entries() FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_sent_entries() TO service_role;

@@ -146,6 +146,43 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
+            // Mode indicator
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white10),
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      homeController.isScheduledMode
+                          ? Icons.schedule_send
+                          : Icons.shield_outlined,
+                      size: 13,
+                      color: Colors.white38,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      homeController.isScheduledMode ? 'TIME CAPSULE' : 'GUARDIAN',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: Colors.white38,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             const Divider(color: Colors.white12, height: 1),
             // Navigation items
             Expanded(
@@ -171,10 +208,14 @@ class AppDrawer extends StatelessWidget {
                     icon: Icons.history,
                     label: 'History',
                     onTap: () {
+                      final hc = context.read<HomeController>();
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        PremiumPageRoute(page: HistoryScreen(userId: userId)),
+                        PremiumPageRoute(page: HistoryScreen(
+                          userId: userId,
+                          appMode: hc.appMode,
+                        )),
                       );
                     },
                   ),
@@ -202,7 +243,7 @@ class AppDrawer extends StatelessWidget {
                   ),
                   _DrawerItem(
                     icon: Icons.palette_outlined,
-                    label: 'Themes & Soul Fire',
+                    label: homeController.isScheduledMode ? 'Themes' : 'Themes & Soul Fire',
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(

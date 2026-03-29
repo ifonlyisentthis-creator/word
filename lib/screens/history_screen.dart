@@ -6,8 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/theme_provider.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key, required this.userId});
+  const HistoryScreen({super.key, required this.userId, this.appMode = 'vault'});
   final String userId;
+  final String appMode;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -31,13 +32,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
       // Fetch sent entries (grace period — still viewable)
       // Only show 'send' type entries in history — 'destroy' entries leave no trace
-      final sentRows = await client
+      var sentQuery = client
           .from('vault_entries')
-          .select('id, title, action_type, data_type, sent_at')
+          .select('id, title, action_type, data_type, sent_at, scheduled_at')
           .eq('user_id', widget.userId)
           .eq('status', 'sent')
-          .eq('action_type', 'send')
-          .order('sent_at', ascending: false);
+          .eq('action_type', 'send');
+
+      // Mode-aware filtering
+      if (widget.appMode == 'scheduled') {
+        sentQuery = sentQuery.not('scheduled_at', 'is', null);
+      } else {
+        sentQuery = sentQuery.isFilter('scheduled_at', null);
+      }
+
+      final sentRows = await sentQuery.order('sent_at', ascending: false);
 
       // Fetch tombstones (permanently deleted after 30-day grace)
       final tombRows = await client
@@ -67,6 +76,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
             actionType: (row['action_type'] as String?) ?? 'send',
             dataType: (row['data_type'] as String?) ?? 'text',
             sentAt: sentAt,
+            scheduledAt: row['scheduled_at'] != null
+                ? DateTime.parse(row['scheduled_at'] as String).toUtc()
+                : null,
           ),
         );
       }
@@ -175,11 +187,13 @@ class _SentItem {
     required this.actionType,
     required this.dataType,
     required this.sentAt,
+    this.scheduledAt,
   });
   final String title;
   final String actionType;
   final String dataType;
   final DateTime sentAt;
+  final DateTime? scheduledAt;
 }
 
 class _DeletedItem {
@@ -282,10 +296,23 @@ class _HistoryGroupCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(
-                          item.title,
-                          style: theme.textTheme.bodyMedium,
-                          overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title,
+                              style: theme.textTheme.bodyMedium,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (item.scheduledAt != null)
+                              Text(
+                                'Scheduled: ${dateFmt.format(item.scheduledAt!.toLocal())}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.white38,
+                                  fontSize: 10,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       Container(

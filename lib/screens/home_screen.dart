@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/app_theme.dart';
+
 import '../models/profile.dart';
 
 import '../services/account_service.dart';
@@ -27,6 +29,8 @@ import '../services/revenuecat_controller.dart';
 import '../services/theme_provider.dart';
 
 import '../services/server_crypto_service.dart';
+
+import '../services/vault_controller.dart';
 
 import '../services/vault_service.dart';
 
@@ -395,12 +399,19 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                   const SizedBox(height: 16),
 
                   // Timer OR Grace period card (grace replaces timer)
-                  if (isInGracePeriod)
-                    _GracePeriodCard(
-                      executedAt: controller.protocolExecutedAt,
-                      graceEndDate: controller.graceEndDate,
-                      graceExpired: controller.graceExpired,
-                      dateFormat: _dateFormat,
+                  // In scheduled mode, show Time Capsule card instead of timer
+                  if (controller.isScheduledMode) ...[
+                    const SizedBox(height: 16),
+                    RepaintBoundary(child: _TimeCapsuleCard(theme: context.watch<ThemeProvider>().themeData, controller: controller, isPro: isPro, isLifetime: isLifetime)),
+                    const SizedBox(height: 24),
+                  ] else if (isInGracePeriod)
+                    RepaintBoundary(
+                      child: _GracePeriodCard(
+                        executedAt: controller.protocolExecutedAt,
+                        graceEndDate: controller.graceEndDate,
+                        graceExpired: controller.graceExpired,
+                        dateFormat: _dateFormat,
+                      ),
                     )
                   else
                     RepaintBoundary(
@@ -417,6 +428,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                       ),
                     ),
 
+                  if (!controller.isScheduledMode) ...[
                   const SizedBox(height: 24),
 
                   // Soul Fire — greyed out & non-interactive during grace
@@ -481,6 +493,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
+                  ],
 
                   const SizedBox(height: 28),
 
@@ -488,14 +501,16 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                   RepaintBoundary(
                     child: Builder(
                       builder: (context) {
-                        final freeAtLimit = !isPro && controller.vaultEntryCount >= 3;
+                        final maxEntries = VaultController.maxEntriesFor(isPro: isPro, isLifetime: isLifetime);
+                        final atLimit = controller.vaultEntryCount >= maxEntries;
+                        final tierName = isLifetime ? 'Lifetime' : (isPro ? 'Pro' : 'Free');
                         return _VaultSummaryCard(
                           entryCount: controller.vaultEntryCount,
                           isLoading: controller.isLoading,
                           disabledReason: isInGracePeriod
                               ? null
-                              : freeAtLimit
-                                  ? 'Free plan allows up to 3 entries. Upgrade to add more.'
+                              : atLimit
+                                  ? '$tierName plan allows up to $maxEntries entries. Upgrade to add more.'
                                   : null,
                           onViewAll: () {
                             Navigator.push(
@@ -512,7 +527,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                               }
                             });
                           },
-                          onAdd: isInGracePeriod || freeAtLimit
+                          onAdd: isInGracePeriod || atLimit
                               ? null
                               : () async {
                                   final created = await openVaultEntryEditor(
@@ -520,6 +535,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                                     userId: widget.userId,
                                     isPro: isPro,
                                     isLifetime: isLifetime,
+                                    isScheduledMode: controller.isScheduledMode,
                                   );
                                   if (created && context.mounted) {
                                     context
@@ -1588,6 +1604,99 @@ class _VaultSummaryCard extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TimeCapsuleCard extends StatelessWidget {
+  const _TimeCapsuleCard({
+    required this.theme,
+    required this.controller,
+    required this.isPro,
+    required this.isLifetime,
+  });
+
+  final AppThemeData theme;
+  final HomeController controller;
+  final bool isPro;
+  final bool isLifetime;
+
+  @override
+  Widget build(BuildContext context) {
+    final flutterTheme = Theme.of(context);
+    final maxEntries = VaultController.maxEntriesFor(isPro: isPro, isLifetime: isLifetime);
+    final entryCount = controller.vaultEntryCount;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: flutterTheme.colorScheme.surface.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: flutterTheme.colorScheme.outline.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.schedule_send, color: flutterTheme.colorScheme.primary, size: 22),
+              const SizedBox(width: 10),
+              Text(
+                'Time Capsule',
+                style: TextStyle(
+                  color: flutterTheme.colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Schedule vaults for delivery on specific dates. Each vault has its own independent timer.',
+            style: TextStyle(
+              color: flutterTheme.colorScheme.onSurface.withValues(alpha: 0.5),
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _StatPill(label: 'Active', value: '$entryCount', theme: flutterTheme),
+              const SizedBox(width: 8),
+              _StatPill(label: 'Limit', value: '$maxEntries', theme: flutterTheme),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  const _StatPill({required this.label, required this.value, required this.theme});
+  final String label;
+  final String value;
+  final ThemeData theme;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        '$label: $value',
+        style: TextStyle(
+          color: theme.colorScheme.primary,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );

@@ -91,6 +91,9 @@ class HomeController extends ChangeNotifier {
   bool get hasVaultEntries => _hasVaultEntries;
   int get vaultEntryCount => _vaultEntryCount;
 
+  bool get isScheduledMode => _profile?.isScheduledMode ?? false;
+  String get appMode => _profile?.appMode ?? 'vault';
+
   @override
   void notifyListeners() {
     if (_isDisposed) return;
@@ -343,6 +346,9 @@ class HomeController extends ChangeNotifier {
   Future<CheckInResult> manualCheckIn() async {
     if (_user == null || _isInGracePeriod) return CheckInResult.error;
 
+    // No check-in needed in Time Capsule mode
+    if (isScheduledMode) return CheckInResult.cooldown;
+
     final currentUser = Supabase.instance.client.auth.currentUser;
 
     if (currentUser == null || currentUser.id != _user!.id) {
@@ -426,6 +432,26 @@ class HomeController extends ChangeNotifier {
     }
   }
 
+  Future<String?> switchAppMode(String mode) async {
+    if (_user == null) return 'Not signed in.';
+    _setLoading(true);
+    try {
+      _profile = await _profileService.updateAppMode(mode);
+      _setProtocolState(_profile!);
+      _errorMessage = null;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('cannot switch mode')) {
+        return 'Delete all vaults and wait for grace periods to end before switching modes.';
+      }
+      return 'Unable to switch mode. Please try again.';
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> _fetchVaultEntryStatus() async {
     if (_user == null) return;
     try {
@@ -462,6 +488,14 @@ class HomeController extends ChangeNotifier {
   }
 
   void _setProtocolState(Profile profile) {
+    // Scheduled mode does not use global grace period
+    if (profile.isScheduledMode) {
+      _protocolExecutedAt = null;
+      _isInGracePeriod = false;
+      _graceEndDate = null;
+      return;
+    }
+
     final status = profile.status.toLowerCase();
     final executed = profile.protocolExecutedAt;
 
