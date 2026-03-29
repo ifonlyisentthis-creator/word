@@ -998,7 +998,7 @@ class _VaultEntryTile extends StatelessWidget {
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          'Delivers ${entry.scheduledAt!.day}/${entry.scheduledAt!.month}/${entry.scheduledAt!.year}',
+                          'Delivers ${entry.scheduledAt!.day} ${_monthAbbr(entry.scheduledAt!.month)} ${entry.scheduledAt!.year}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.white60,
                             fontSize: 11,
@@ -1018,7 +1018,7 @@ class _VaultEntryTile extends StatelessWidget {
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          'Grace until ${entry.graceUntil!.day}/${entry.graceUntil!.month}/${entry.graceUntil!.year}',
+                          'Grace ${entry.graceUntil!.day} ${_monthAbbr(entry.graceUntil!.month)} ${entry.graceUntil!.year}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.white54,
                             fontSize: 11,
@@ -2853,6 +2853,11 @@ class _VaultCard extends StatelessWidget {
     );
   }
 }
+
+String _monthAbbr(int m) => const [
+  '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+][m];
 
 class _VaultChip extends StatelessWidget {
   const _VaultChip({required this.label});
