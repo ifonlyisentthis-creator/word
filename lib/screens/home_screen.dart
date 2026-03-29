@@ -400,10 +400,15 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                   // Timer OR Grace period card (grace replaces timer)
                   // In scheduled mode, show Time Capsule card instead of timer
-                  if (controller.isScheduledMode) ...[
+                  // Wait for profile before rendering to avoid flash of wrong mode
+                  if (profile == null)
+                    const SizedBox.shrink()
+                  else if (controller.isScheduledMode) ...[
                     const SizedBox(height: 16),
                     RepaintBoundary(child: _TimeCapsuleCard(theme: context.watch<ThemeProvider>().themeData, controller: controller, isPro: isPro, isLifetime: isLifetime)),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
+                    RepaintBoundary(child: _TimeCapsuleHowItWorks()),
+                    const SizedBox(height: 16),
                   ] else if (isInGracePeriod)
                     RepaintBoundary(
                       child: _GracePeriodCard(
@@ -1606,6 +1611,98 @@ class _VaultSummaryCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TimeCapsuleHowItWorks extends StatelessWidget {
+  const _TimeCapsuleHowItWorks();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: primary.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lightbulb_outline, size: 16, color: primary.withValues(alpha: 0.7)),
+              const SizedBox(width: 8),
+              Text(
+                'How it works',
+                style: TextStyle(
+                  color: primary.withValues(alpha: 0.9),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _HowItWorksStep(number: '1', text: 'Create a vault and pick a delivery date.', theme: theme),
+          const SizedBox(height: 8),
+          _HowItWorksStep(number: '2', text: 'Your message is encrypted on-device.', theme: theme),
+          const SizedBox(height: 8),
+          _HowItWorksStep(number: '3', text: 'On the date, your recipient gets an email with a secure link.', theme: theme),
+        ],
+      ),
+    );
+  }
+}
+
+class _HowItWorksStep extends StatelessWidget {
+  const _HowItWorksStep({required this.number, required this.text, required this.theme});
+  final String number;
+  final String text;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 20,
+          height: 20,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            number,
+            style: TextStyle(
+              color: theme.colorScheme.primary,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 12,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
