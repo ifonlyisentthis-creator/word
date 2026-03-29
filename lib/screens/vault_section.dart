@@ -996,11 +996,14 @@ class _VaultEntryTile extends StatelessWidget {
                     children: [
                       Icon(Icons.calendar_today, size: 12, color: theme.colorScheme.primary.withValues(alpha: 0.7)),
                       const SizedBox(width: 4),
-                      Text(
-                        'Delivers ${entry.scheduledAt!.day}/${entry.scheduledAt!.month}/${entry.scheduledAt!.year}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.white60,
-                          fontSize: 11,
+                      Flexible(
+                        child: Text(
+                          'Delivers ${entry.scheduledAt!.day}/${entry.scheduledAt!.month}/${entry.scheduledAt!.year}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white60,
+                            fontSize: 11,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -1013,11 +1016,14 @@ class _VaultEntryTile extends StatelessWidget {
                     children: [
                       Icon(Icons.timer_outlined, size: 12, color: theme.colorScheme.secondary.withValues(alpha: 0.7)),
                       const SizedBox(width: 4),
-                      Text(
-                        'Grace until ${entry.graceUntil!.day}/${entry.graceUntil!.month}/${entry.graceUntil!.year}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.white54,
-                          fontSize: 11,
+                      Flexible(
+                        child: Text(
+                          'Grace until ${entry.graceUntil!.day}/${entry.graceUntil!.month}/${entry.graceUntil!.year}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white54,
+                            fontSize: 11,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
