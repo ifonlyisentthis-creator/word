@@ -112,7 +112,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // App Mode + Sender Name — disabled during grace
+                // Sender Name + App Mode — disabled during grace
                 IgnorePointer(
                 ignoring: controller.isInGracePeriod,
                 child: AnimatedOpacity(
@@ -120,50 +120,6 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 duration: const Duration(milliseconds: 300),
                 child: Column(
                   children: [
-                    // App Mode section
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'APP MODE',
-                            style: TextStyle(
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _ModeOption(
-                                  label: 'Guardian Vault',
-                                  description: 'Periodic check-in. Shared timer.',
-                                  icon: Icons.shield_outlined,
-                                  isSelected: controller.appMode == 'vault',
-                                  onTap: () => _switchMode(context, controller, 'vault'),
-                                  theme: theme,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _ModeOption(
-                                  label: 'Time Capsule',
-                                  description: 'Per-vault scheduled dates.',
-                                  icon: Icons.schedule_send,
-                                  isSelected: controller.appMode == 'scheduled',
-                                  onTap: () => _switchMode(context, controller, 'scheduled'),
-                                  theme: theme,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
                     // Sender Name
                     _Card(
                       child: Padding(
@@ -244,6 +200,80 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                 icon: const Icon(Icons.save_outlined),
                                 label: const Text('Save Sender Name'),
                               ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // App Mode section
+                    _Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        theme.colorScheme.primary.withValues(alpha: 0.15),
+                                        theme.colorScheme.primary.withValues(alpha: 0.05),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: theme.colorScheme.primary.withValues(alpha: 0.20),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                      Icons.swap_horiz_rounded,
+                                      size: 18,
+                                      color: theme.colorScheme.primary),
+                                ),
+                                const SizedBox(width: 12),
+                                Text('App Mode',
+                                    style: theme.textTheme.titleMedium),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Switch between operating modes. All active entries must be cleared first.',
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: Colors.white60),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _ModeOption(
+                                    label: 'Guardian Vault',
+                                    description: 'Check-in timer protects all entries.',
+                                    icon: Icons.shield_outlined,
+                                    isSelected: controller.appMode == 'vault',
+                                    onTap: () => _switchMode(context, controller, 'vault'),
+                                    theme: theme,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _ModeOption(
+                                    label: 'Time Capsule',
+                                    description: 'Schedule each entry by date.',
+                                    icon: Icons.schedule_send,
+                                    isSelected: controller.appMode == 'scheduled',
+                                    onTap: () => _switchMode(context, controller, 'scheduled'),
+                                    theme: theme,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -544,48 +574,73 @@ class _ModeOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = theme.colorScheme.primary;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isSelected
-              ? theme.colorScheme.primary.withValues(alpha: 0.1)
-              : theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
+              ? primary.withValues(alpha: 0.15)
+              : Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected
-                ? theme.colorScheme.primary.withValues(alpha: 0.5)
-                : theme.colorScheme.outline.withValues(alpha: 0.15),
-            width: isSelected ? 1.5 : 1,
+                ? primary
+                : Colors.white.withValues(alpha: 0.1),
+            width: isSelected ? 2 : 1,
           ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon,
-                size: 20,
-                color: isSelected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.5)),
-            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(icon,
+                    size: 20,
+                    color: isSelected
+                        ? primary
+                        : Colors.white54),
+                const Spacer(),
+                if (isSelected)
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.check, size: 12, color: Colors.black),
+                  )
+                else
+                  Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24, width: 1.5),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
             Text(
               label,
               style: TextStyle(
-                color: isSelected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurface,
+                color: isSelected ? primary : Colors.white,
                 fontSize: 13,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
             Text(
               description,
               style: TextStyle(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                color: isSelected
+                    ? Colors.white70
+                    : Colors.white38,
                 fontSize: 11,
+                height: 1.3,
               ),
             ),
           ],
