@@ -579,26 +579,19 @@ class _HeaderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final td = context.read<ThemeProvider>().themeData;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
 
       children: [
         Container(
           decoration: BoxDecoration(
-            color: context
-                .read<ThemeProvider>()
-                .themeData
-                .accentGlow
-                .withValues(alpha: 0.06),
+            color: td.accentGlow.withValues(alpha: 0.06),
 
             borderRadius: BorderRadius.circular(14),
 
             border: Border.all(
-              color: context
-                  .read<ThemeProvider>()
-                  .themeData
-                  .accentGlow
-                  .withValues(alpha: 0.15),
+              color: td.accentGlow.withValues(alpha: 0.15),
             ),
           ),
 
