@@ -2,23 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_theme.dart';
-import '../services/home_controller.dart';
 import '../services/profile_service.dart';
 import '../services/theme_provider.dart';
 import '../widgets/ambient_background.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CustomizationScreen extends StatelessWidget {
-  const CustomizationScreen({super.key});
+  const CustomizationScreen({super.key, this.isScheduledMode = false});
+  final bool isScheduledMode;
 
   @override
   Widget build(BuildContext context) {
     final tp = context.watch<ThemeProvider>();
     final sub = tp.subscriptionStatus;
     final td = tp.themeData;
-    final isScheduled = context.select<HomeController, bool>(
-      (hc) => hc.isScheduledMode,
-    );
+    final isScheduled = isScheduledMode;
 
     return Scaffold(
       appBar: AppBar(

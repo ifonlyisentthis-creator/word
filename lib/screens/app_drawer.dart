@@ -248,7 +248,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        PremiumPageRoute(page: const CustomizationScreen()),
+                        PremiumPageRoute(page: CustomizationScreen(isScheduledMode: homeController.isScheduledMode)),
                       );
                     },
                   ),
