@@ -437,6 +437,7 @@ class HomeController extends ChangeNotifier {
     _setLoading(true);
     try {
       _profile = await _profileService.updateAppMode(mode);
+      if (_isDisposed) return null;
       _setProtocolState(_profile!);
       _errorMessage = null;
       notifyListeners();

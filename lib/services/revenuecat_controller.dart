@@ -222,7 +222,10 @@ class RevenueCatController extends ChangeNotifier {
     }
   }
 
+  bool _isDisposed = false;
+
   void _handleCustomerInfoUpdate(CustomerInfo info) {
+    if (_isDisposed) return;
     _customerInfo = info;
     _lastFailure = null;
     // Only sync here if no explicit method (purchase, restore, etc.) is
@@ -235,6 +238,7 @@ class RevenueCatController extends ChangeNotifier {
   }
 
   void _setLoading(bool value) {
+    if (_isDisposed) return;
     _isLoading = value;
     notifyListeners();
   }
@@ -314,6 +318,12 @@ class RevenueCatController extends ChangeNotifier {
         message = exception.message ?? 'Something went wrong. Please try again.';
     }
     return RevenueCatFailure(message, code: code);
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
   }
 }
 

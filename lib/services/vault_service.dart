@@ -307,11 +307,10 @@ class VaultService {
             'audio_file_path': audioFilePath,
             'audio_duration_seconds': audioDurationSeconds,
             'is_zero_knowledge': draft.isZeroKnowledge,
-            if (draft.scheduledAt != null)
-              'scheduled_at': draft.scheduledAt!.toUtc().toIso8601String(),
-            if (draft.scheduledAt != null)
-              'grace_until': draft.scheduledAt!.toUtc()
-                  .add(const Duration(days: 30)).toIso8601String(),
+            'scheduled_at': draft.scheduledAt?.toUtc().toIso8601String(),
+            'grace_until': draft.scheduledAt
+                ?.toUtc()
+                .add(const Duration(days: 30)).toIso8601String(),
             'updated_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', entry.id)

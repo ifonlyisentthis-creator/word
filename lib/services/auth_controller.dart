@@ -189,13 +189,17 @@ class AuthController extends ChangeNotifier {
     _servicesBoundUserId = userId;
   }
 
+  bool _isDisposed = false;
+
   void _setLoading(bool value) {
+    if (_isDisposed) return;
     _isLoading = value;
     notifyListeners();
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _authSubscription?.cancel();
     super.dispose();
   }

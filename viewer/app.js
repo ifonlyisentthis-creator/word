@@ -317,7 +317,7 @@ async function unlock() {
 
       const audio = document.createElement("audio");
       audio.controls = true;
-      const decryptedBlob = new Blob([decryptedBytes], { type: "audio/m4a" });
+      const decryptedBlob = new Blob([decryptedBytes], { type: "audio/mp4" });
       currentObjectUrl = URL.createObjectURL(decryptedBlob);
       audio.src = currentObjectUrl;
       resultBody.appendChild(audio);
@@ -364,6 +364,7 @@ async function unlock() {
     };
     setStatus(friendly[msg] || "Something went wrong. Please check your Entry ID and Security Key and try again.", "error");
   } finally {
+    keyInput.value = "";
     unlockButton.disabled = false;
   }
 }

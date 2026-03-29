@@ -41,6 +41,7 @@ class DeviceSecretService implements KeyMaterialStore {
     final legacy = await _storage.read(key: _legacyHmacKey);
     if (legacy != null && legacy.isNotEmpty) {
       await _storage.write(key: perAccountKey, value: legacy);
+      await _storage.delete(key: _legacyHmacKey);
       return SecretKey(base64.decode(legacy));
     }
 
@@ -72,6 +73,7 @@ class DeviceSecretService implements KeyMaterialStore {
     final legacy = await _storage.read(key: _legacyDeviceKey);
     if (legacy != null && legacy.isNotEmpty) {
       await _storage.write(key: perAccountKey, value: legacy);
+      await _storage.delete(key: _legacyDeviceKey);
       return SecretKey(base64.decode(legacy));
     }
 

@@ -2051,13 +2051,18 @@ def process_scheduled_entries(
                     try:
                         if mark_entry_sent(client, entry_id, now):
                             # Set per-entry grace_until = now + 30 days
-                            try:
-                                grace_until = (now + timedelta(days=30)).isoformat()
-                                client.table("vault_entries").update({
-                                    "grace_until": grace_until,
-                                }).eq("id", entry_id).execute()
-                            except Exception:  # noqa: BLE001
-                                pass
+                            grace_until = (now + timedelta(days=30)).isoformat()
+                            for _gu_attempt in range(3):
+                                try:
+                                    client.table("vault_entries").update({
+                                        "grace_until": grace_until,
+                                    }).eq("id", entry_id).execute()
+                                    break
+                                except Exception:  # noqa: BLE001
+                                    if _gu_attempt == 2:
+                                        print(f"WARNING: grace_until update failed for entry {entry_id} after 3 attempts")
+                                    else:
+                                        time.sleep(0.5)
                             marked = True
                             break
                     except Exception as mark_exc:  # noqa: BLE001
