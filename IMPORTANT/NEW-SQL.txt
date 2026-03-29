@@ -94,8 +94,14 @@ BEGIN
     RAISE EXCEPTION 'cannot switch mode while vaults are active or in grace period';
   END IF;
 
+  -- Reset stale protocol state so switching back later
+  -- doesn't trigger a phantom grace period.
   UPDATE profiles
-  SET app_mode = p_mode
+  SET app_mode = p_mode,
+      status = 'active',
+      protocol_executed_at = NULL,
+      warning_sent_at = NULL,
+      last_check_in = now()
   WHERE id = auth.uid()
   RETURNING * INTO result;
 
