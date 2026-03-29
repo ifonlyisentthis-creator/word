@@ -1130,7 +1130,7 @@ class _VaultDraftStorage {
           'actionType': actionType,
           'dataType': dataType,
           'isZeroKnowledge': isZeroKnowledge,
-          if (scheduledAt != null) 'scheduledAt': scheduledAt,
+          'scheduledAt': scheduledAt,
         }),
       );
     } catch (_) {}
@@ -2135,7 +2135,7 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
             deviceSecretService: DeviceSecretService(),
           );
           final keyBase64 = await svc.getSecurityKeyBase64(newEntry);
-          if (mounted) {
+          if (context.mounted) {
             await _showZkKeyDialog(context, keyBase64);
           }
         } catch (_) {
