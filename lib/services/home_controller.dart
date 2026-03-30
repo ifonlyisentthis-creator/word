@@ -112,6 +112,9 @@ class HomeController extends ChangeNotifier {
     super.dispose();
   }
 
+  /// Max wait for any single network call during init/refresh.
+  static const _networkTimeout = Duration(seconds: 8);
+
   Future<void> initialize(
     User user, {
     String subscriptionStatus = 'free',
@@ -129,51 +132,68 @@ class HomeController extends ChangeNotifier {
 
     try {
       var ensured = prefetched ??
-          await _profileService.ensureProfile(user);
+          await _profileService
+              .ensureProfile(user)
+              .timeout(_networkTimeout);
 
       if (_isDisposed) return;
 
-      // Sync subscription status now that the profile row exists.
-      // RevenueCat's earlier sync may have fired before the row was created.
-      if (kDebugMode) {
-        debugPrint(
-          '[HC-SYNC] ensured=${ensured.subscriptionStatus}, expected=$subscriptionStatus',
-        );
-      }
-      if (ensured.subscriptionStatus != subscriptionStatus) {
-        try {
-          await Supabase.instance.client.functions.invoke(
-            'verify-subscription',
-          );
-          if (kDebugMode) debugPrint('[HC-SYNC] Server-verified subscription');
-          // Re-fetch profile so we have the updated subscription_status
-          if (!_isDisposed) {
-            ensured = await _profileService.fetchProfile(user.id);
-            if (kDebugMode) {
-              debugPrint(
-                '[HC-SYNC] Re-fetched profile: sub=${ensured.subscriptionStatus}',
-              );
-            }
-          }
-        } catch (e) {
-          if (kDebugMode) debugPrint('[HC-SYNC] Error: $e');
-        }
-      }
-
+      // Show the UI immediately with what we have — don't block on
+      // subscription verification or vault counts.
       _setProtocolState(ensured);
-
       _profile = ensured;
-
-      // Sync theme/soul fire from profile ONCE on load (not on every build)
       _themeProvider.syncFromProfile(ensured);
-
       _errorMessage = null;
 
-      await _fetchVaultEntryStatus();
-    } catch (error) {
-      _errorMessage = 'Unable to load your timer. Please try again.';
-    } finally {
+      // Notify NOW so the home screen renders with the profile.
+      // Everything below is background work that updates incrementally.
       _setLoading(false);
+
+      // Fire-and-forget: subscription sync + vault counts.
+      // These update the UI via notifyListeners when they complete,
+      // but do NOT block the initial render.
+      _backgroundSync(ensured, subscriptionStatus);
+    } catch (error) {
+      _errorMessage = 'Unable to load your timer. Pull down to retry.';
+      _setLoading(false);
+    }
+  }
+
+  /// Non-blocking background work after the profile is shown.
+  Future<void> _backgroundSync(
+    Profile ensured,
+    String subscriptionStatus,
+  ) async {
+    // 1) Vault entry counts (parallel queries, non-blocking)
+    _fetchVaultEntryStatus().then((_) {
+      if (!_isDisposed) notifyListeners();
+    });
+
+    // 2) Subscription verification (only if mismatch)
+    if (ensured.subscriptionStatus != subscriptionStatus) {
+      try {
+        await Supabase.instance.client.functions
+            .invoke('verify-subscription')
+            .timeout(_networkTimeout);
+        if (_isDisposed) return;
+        if (kDebugMode) debugPrint('[HC-SYNC] Server-verified subscription');
+        // Re-fetch profile to pick up updated subscription_status
+        final refreshed = await _profileService
+            .fetchProfile(_user!.id)
+            .timeout(_networkTimeout);
+        if (_isDisposed) return;
+        _profile = refreshed;
+        _setProtocolState(refreshed);
+        _themeProvider.syncFromProfile(refreshed);
+        notifyListeners();
+        if (kDebugMode) {
+          debugPrint(
+            '[HC-SYNC] Re-fetched profile: sub=${refreshed.subscriptionStatus}',
+          );
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('[HC-SYNC] Error: $e');
+      }
     }
   }
 
@@ -186,7 +206,9 @@ class HomeController extends ChangeNotifier {
   Future<void> refreshAfterPurchase({String? knownSubscriptionStatus}) async {
     if (_user == null) return;
     try {
-      final profile = await _profileService.fetchProfile(_user!.id);
+      final profile = await _profileService
+          .fetchProfile(_user!.id)
+          .timeout(_networkTimeout);
       if (_isDisposed) return;
       _profile = profile;
       _themeProvider.syncFromProfile(profile);
@@ -230,7 +252,9 @@ class HomeController extends ChangeNotifier {
     if (currentUser == null || currentUser.id != _user!.id) return;
 
     try {
-      final profile = await _profileService.fetchProfile(_user!.id);
+      final profile = await _profileService
+          .fetchProfile(_user!.id)
+          .timeout(_networkTimeout);
 
       if (_isDisposed) return;
 
@@ -268,7 +292,8 @@ class HomeController extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      _profile = await _profileService.updateSenderName(_user!.id, senderName);
+      _profile = await _profileService.updateSenderName(_user!.id, senderName)
+          .timeout(_networkTimeout);
 
       _errorMessage = null;
     } catch (_) {
@@ -288,7 +313,8 @@ class HomeController extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      _profile = await _profileService.updateTimerDays(timerDays);
+      _profile = await _profileService.updateTimerDays(timerDays)
+          .timeout(_networkTimeout);
 
       _errorMessage = null;
     } catch (_) {
@@ -306,7 +332,8 @@ class HomeController extends ChangeNotifier {
     if (currentUser == null || currentUser.id != _user!.id) return;
 
     try {
-      final profile = await _profileService.fetchProfile(_user!.id);
+      final profile = await _profileService.fetchProfile(_user!.id)
+          .timeout(_networkTimeout);
 
       if (_isDisposed) return;
 
@@ -401,7 +428,8 @@ class HomeController extends ChangeNotifier {
     try {
       final previousCheckIn = _profile?.lastCheckIn;
 
-      _profile = await _profileService.updateCheckIn(_user!.id);
+      _profile = await _profileService.updateCheckIn(_user!.id)
+          .timeout(_networkTimeout);
 
       // Detect server-side cooldown no-op: if the returned lastCheckIn is
       // identical to what we had before, the server's 12-hour guard blocked
@@ -440,7 +468,8 @@ class HomeController extends ChangeNotifier {
     if (_user == null) return 'Not signed in.';
     _setLoading(true);
     try {
-      _profile = await _profileService.updateAppMode(mode);
+      _profile = await _profileService.updateAppMode(mode)
+          .timeout(_networkTimeout);
       if (_isDisposed) return null;
       _setProtocolState(_profile!);
       _errorMessage = null;
@@ -459,17 +488,34 @@ class HomeController extends ChangeNotifier {
 
   Future<void> _fetchVaultEntryStatus() async {
     if (_user == null) return;
-    try {
-      final rows = await Supabase.instance.client
-          .from('vault_entries')
-          .select('id, scheduled_at')
-          .eq('user_id', _user!.id)
-          .eq('status', 'active');
-      final list = rows as List;
+
+    // Run both queries in parallel with individual timeouts
+    final activeQuery = Supabase.instance.client
+        .from('vault_entries')
+        .select('id, scheduled_at')
+        .eq('user_id', _user!.id)
+        .eq('status', 'active')
+        .timeout(_networkTimeout);
+
+    final sentQuery = Supabase.instance.client
+        .from('vault_entries')
+        .select('id')
+        .eq('user_id', _user!.id)
+        .eq('status', 'sent')
+        .timeout(_networkTimeout);
+
+    final results = await Future.wait([
+      activeQuery.then<Object?>((v) => v).catchError((_) => null),
+      sentQuery.then<Object?>((v) => v).catchError((_) => null),
+    ]);
+
+    // Active entries
+    final activeRows = results[0];
+    if (activeRows != null) {
+      final list = activeRows as List;
       _hasVaultEntries = list.isNotEmpty;
       _vaultEntryCount = list.length;
 
-      // Find earliest upcoming scheduled delivery
       DateTime? earliest;
       for (final row in list) {
         final raw = row['scheduled_at'];
@@ -487,19 +533,12 @@ class HomeController extends ChangeNotifier {
           '[NOTIF] Vault entries: $_vaultEntryCount, hasEntries=$_hasVaultEntries',
         );
       }
-    } catch (_) {
-      // Best-effort; leave current value.
     }
-    // Sent entry count (best-effort, for Time Capsule display)
-    try {
-      final sentRows = await Supabase.instance.client
-          .from('vault_entries')
-          .select('id')
-          .eq('user_id', _user!.id)
-          .eq('status', 'sent');
+
+    // Sent entries
+    final sentRows = results[1];
+    if (sentRows != null) {
       _sentEntryCount = (sentRows as List).length;
-    } catch (_) {
-      // Best-effort; leave current value.
     }
   }
 
