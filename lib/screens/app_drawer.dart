@@ -200,6 +200,7 @@ class AppDrawer extends StatelessWidget {
                         PremiumPageRoute(page: MyVaultPage(
                           userId: userId,
                           readOnly: grace,
+                          isScheduledMode: homeController.isScheduledMode,
                         )),
                       );
                     },

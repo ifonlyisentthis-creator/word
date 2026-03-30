@@ -10,10 +10,12 @@ class MyVaultPage extends StatelessWidget {
     super.key,
     required this.userId,
     this.readOnly = false,
+    this.isScheduledMode = false,
   });
 
   final String userId;
   final bool readOnly;
+  final bool isScheduledMode;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +42,7 @@ class MyVaultPage extends StatelessWidget {
                   isPro: isPro,
                   isLifetime: isLifetime,
                   readOnly: readOnly,
+                  isScheduledMode: isScheduledMode,
                 ),
               ],
             ),

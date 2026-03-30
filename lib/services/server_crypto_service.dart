@@ -51,7 +51,7 @@ class ServerCryptoService {
         try {
           await _client.auth.refreshSession();
         } catch (_) {
-          rethrow; // rethrow the original FunctionException
+          throw error; // rethrow the original FunctionException
         }
         return _client.functions.invoke(
           'metadata-crypto',

@@ -2064,11 +2064,14 @@ def process_scheduled_entries(
                                     if _gu_attempt < 2:
                                         time.sleep(0.5)
                             if not gu_ok:
-                                # Revert to active — prevents zombie row with
-                                # NULL grace_until that no cleanup ever matches.
+                                # Revert sent→active so next run retries.
+                                # Can't use release_entry_lock (requires status=sending).
                                 print(f"WARNING: grace_until failed for {entry_id}, reverting to active")
                                 try:
-                                    release_entry_lock(client, entry_id)
+                                    client.table("vault_entries").update({
+                                        "status": "active",
+                                        "sent_at": None,
+                                    }).eq("id", entry_id).eq("status", "sent").execute()
                                 except Exception:  # noqa: BLE001
                                     pass
                                 break
