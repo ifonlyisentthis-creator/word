@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/vault_entry.dart';
@@ -53,7 +55,30 @@ class VaultController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _cleanupAudioCache();
     super.dispose();
+  }
+
+  /// Delete all decrypted temp audio files from disk.
+  void _cleanupAudioCache() {
+    for (final path in _audioCache.values) {
+      try {
+        final file = File(path);
+        if (file.existsSync()) file.deleteSync();
+      } catch (_) {}
+    }
+    _audioCache.clear();
+  }
+
+  /// Remove a single entry's decrypted temp file from disk and cache.
+  void _removeAudioCacheEntry(String entryId) {
+    final path = _audioCache.remove(entryId);
+    if (path != null) {
+      try {
+        final file = File(path);
+        if (file.existsSync()) file.deleteSync();
+      } catch (_) {}
+    }
   }
 
   int get audioSecondsUsed => _entries
@@ -219,7 +244,7 @@ class VaultController extends ChangeNotifier {
           .map((item) => item.id == updated.id ? updated : item)
           .toList();
       _payloadCache.remove(entry.id);
-      _audioCache.remove(entry.id);
+      _removeAudioCacheEntry(entry.id);
       _errorMessage = null;
       return true;
     } on VaultFailure catch (error) {
@@ -239,7 +264,7 @@ class VaultController extends ChangeNotifier {
       await _vaultService.deleteEntry(entry);
       _entries = _entries.where((item) => item.id != entry.id).toList();
       _payloadCache.remove(entry.id);
-      _audioCache.remove(entry.id);
+      _removeAudioCacheEntry(entry.id);
       _errorMessage = null;
       return true;
     } catch (_) {

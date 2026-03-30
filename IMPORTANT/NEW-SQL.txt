@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS vault_entries_scheduled_idx
   WHERE scheduled_at IS NOT NULL AND status = 'active';
 
 -- 71: Update RLS INSERT policy to enforce tier-based vault limits
---     Free = 3, Pro = 20, Lifetime = 50
+--     Free = 3, Pro = 20, Lifetime = 30
 DROP POLICY IF EXISTS entries_insert_own ON vault_entries;
 CREATE POLICY entries_insert_own ON vault_entries
 FOR INSERT WITH CHECK (
@@ -48,9 +48,9 @@ FOR INSERT WITH CHECK (
   )
   -- Tier-based vault count limits
   AND (
-    -- Lifetime: max 50 active entries
+    -- Lifetime: max 30 active entries
     (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status = 'lifetime')
-     AND (SELECT count(*) FROM vault_entries ve WHERE ve.user_id = auth.uid() AND ve.status = 'active') < 50)
+     AND (SELECT count(*) FROM vault_entries ve WHERE ve.user_id = auth.uid() AND ve.status = 'active') < 30)
     OR
     -- Pro: max 20 active entries
     (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.subscription_status = 'pro')

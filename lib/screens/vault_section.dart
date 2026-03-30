@@ -1334,6 +1334,13 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
 
     _recorder?.dispose();
 
+    // Clean up orphaned recording temp file if the sheet was dismissed
+    // without saving (draft save doesn't include the audio file).
+    if (!_savedSuccessfully && _recordedFilePath != null) {
+      final path = _recordedFilePath!;
+      File(path).delete().catchError((_) => File(path));
+    }
+
     _titleController.dispose();
 
     _recipientController.dispose();
@@ -2444,14 +2451,23 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
     if (!mounted) return;
 
     final effectivePath = path ?? _recordedFilePath;
+    final duration = _recordSeconds > 0 ? _recordSeconds : null;
+
+    // If recording produced no usable duration (sub-1-second or failure),
+    // clean up the partial/empty temp file immediately.
+    if (duration == null && effectivePath != null) {
+      try {
+        await File(effectivePath).delete();
+      } catch (_) {}
+    }
 
     setState(() {
       _isRecording = false;
       _isPaused = false;
 
-      _recordedFilePath = effectivePath;
+      _recordedFilePath = duration != null ? effectivePath : null;
 
-      _recordedDurationSeconds = _recordSeconds > 0 ? _recordSeconds : null;
+      _recordedDurationSeconds = duration;
 
       if (reachedLimit) {
         _audioError = 'Time bank limit reached. Recording stopped.';
@@ -2559,13 +2575,16 @@ class _AudioPlaybackSectionState extends State<_AudioPlaybackSection> {
       final isCompleted =
           state.processingState == ProcessingState.completed;
       if (isCompleted) {
+        // Seek first, then play in a single atomic sequence.
+        // Await seek so the position stream settles before playback
+        // starts — prevents the brief restart flicker.
         await _player.seek(Duration.zero);
-        // Fire-and-forget — do NOT await play(), it completes when
-        // playback ends which would block pause for the entire duration.
-        _player.play();
+        await _player.play();
       } else if (state.playing) {
         await _player.pause();
       } else {
+        // Fresh play from paused/idle — fire-and-forget so we don't
+        // block until playback ends.
         _player.play();
       }
     } finally {
