@@ -402,7 +402,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                   // In scheduled mode, show Time Capsule card instead of timer
                   // Wait for profile before rendering to avoid flash of wrong mode
                   if (profile == null)
-                    const SizedBox.shrink()
+                    const _SkeletonCard()
                   else if (controller.isScheduledMode) ...[
                     const SizedBox(height: 16),
                     RepaintBoundary(child: _TimeCapsuleCard(theme: context.watch<ThemeProvider>().themeData, controller: controller, isPro: isPro, isLifetime: isLifetime)),
@@ -499,9 +499,11 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                   ),
                   ],
 
-                  if (profile != null) ...[
+                  if (profile == null) ...[
                   const SizedBox(height: 28),
-
+                  const _SkeletonCard(height: 120),
+                  ] else ...[
+                  const SizedBox(height: 28),
                   // Vault — View All always works, Add Entry disabled during grace
                   RepaintBoundary(
                     child: Builder(
@@ -1373,6 +1375,57 @@ class _TimerPickerSheetState extends State<_TimerPickerSheet> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonCard extends StatelessWidget {
+  const _SkeletonCard({this.height = 160});
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SurfaceCard(
+      child: SizedBox(
+        height: height,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Shimmer line 1 (status chip)
+              Container(
+                width: 100,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Shimmer line 2 (timer label)
+              Container(
+                width: 160,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const SizedBox(height: 14),
+              // Shimmer line 3 (progress bar)
+              Container(
+                width: double.infinity,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
