@@ -75,6 +75,10 @@ REVENUECAT_ENTITLEMENT_ID = "AfterWord Pro"
 RC_VERIFY_RATE_LIMIT_DELAY = 1.1  # seconds between RC API calls — RC V1 limit is ~60 req/min
 RC_429_BACKOFF_SECONDS = 30       # pause when RC returns 429 (rate limited)
 
+# Free-tier themes and soul fires (used in multiple downgrade checks)
+FREE_THEMES = frozenset({"oledVoid", "midnightFrost", "shadowRose", None})
+FREE_SOUL_FIRES = frozenset({"etherealOrb", "goldenPulse", "nebulaHeart", None})
+
 _HTTP_SESSION: requests.Session | None = None
 _resend_quota_exhausted = False  # set True when Resend daily limit (100/day free) is hit
 
@@ -1611,6 +1615,7 @@ def process_expired_entries(
     input_send_count = sum(
         1 for e in entries
         if (e.get("action_type") or "send").lower() != "destroy"
+        and (e.get("entry_mode") or "standard") != "recurring"
     )
 
     sender_name = profile.get("sender_name") or "Afterword"
@@ -1872,8 +1877,8 @@ def process_scheduled_entries(
     Time Capsule mode: each entry has its own scheduled_at date. When that
     date passes, the entry is delivered. No global timer, no push notifications.
 
-    Per-entry grace: after delivery, grace_until = scheduled_at + 30 days.
-    The entry sits as 'sent' until cleanup_sent_entries removes it after grace.
+    Per-entry grace: after delivery, grace_until = now + 30 days (beneficiary
+    gets a full 30 days from actual delivery, not from the scheduled date).
 
     Returns the number of entries successfully sent.
     """
@@ -2155,6 +2160,7 @@ def process_recurring_entries(
     today_month = now.month
     today_day = now.day
     sent_count = 0
+    decryption_failures = 0
 
     due_entries = []
     for entry in entries:
@@ -2180,7 +2186,11 @@ def process_recurring_entries(
             if not calendar.isleap(current_year):
                 entry_day = 28
 
-        if entry_month == today_month and entry_day == today_day:
+        # Use >= comparison so a missed day (heartbeat outage) still fires
+        # on the next run rather than being skipped for the entire year.
+        entry_date = (entry_month, entry_day)
+        today_date = (today_month, today_day)
+        if entry_date <= today_date:
             due_entries.append(entry)
 
     if not due_entries:
@@ -2195,6 +2205,13 @@ def process_recurring_entries(
         entry_id = str(entry.get("id", "?"))
         entry_title = str(entry.get("title", "Untitled"))
 
+        # Optimistic lock: claim entry to prevent concurrent heartbeat instances
+        # from double-sending.  Entry is released back to 'active' after send
+        # (recurring entries must stay active for next year's delivery).
+        if not claim_entry_for_sending(client, entry_id):
+            print(f"Skipping recurring entry {entry_id}: already claimed by another instance")
+            continue
+
         try:
             # Decrypt recipient email (same pattern as scheduled entries)
             recipient_encrypted = entry.get("recipient_email_encrypted") or ""
@@ -2203,9 +2220,14 @@ def process_recurring_entries(
                 continue
 
             recipient_ciphertext = extract_server_ciphertext(recipient_encrypted)
-            recipient_email = decrypt_with_server_secret(
-                recipient_ciphertext, server_secret
-            ).decode("utf-8").strip()
+            try:
+                recipient_email = decrypt_with_server_secret(
+                    recipient_ciphertext, server_secret
+                ).decode("utf-8").strip()
+            except Exception as rec_dec_exc:
+                decryption_failures += 1
+                print(f"CRITICAL: Recipient decryption failed for recurring entry {entry_id}: {rec_dec_exc}")
+                continue
 
             if not _EMAIL_RE.match(recipient_email):
                 print(f"Skipping recurring entry {entry_id}: invalid recipient email")
@@ -2220,7 +2242,12 @@ def process_recurring_entries(
                 continue
 
             data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
-            data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
+            try:
+                data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
+            except Exception as dec_exc:
+                decryption_failures += 1
+                print(f"CRITICAL: AES-GCM decryption failed for recurring entry {entry_id}: {dec_exc}")
+                continue
             security_key = base64.b64encode(data_key_bytes).decode("utf-8")
             email_payload = build_unlock_email_payload(
                 recipient_email, entry_id, sender_name, entry_title,
@@ -2245,16 +2272,50 @@ def process_recurring_entries(
                     f"{response.status_code} {response.text}"
                 )
 
-            # Update last_sent_year (entry stays active)
-            client.table("vault_entries").update({
-                "last_sent_year": current_year,
-            }).eq("id", entry_id).execute()
+            # Update last_sent_year (entry stays active).
+            # Retry up to 3 times — if this fails after email was sent,
+            # the idempotency key (recurring-{id}-{year}) prevents duplicate
+            # emails within 24h, but beyond that window a re-send is possible.
+            year_updated = False
+            for _yr_attempt in range(3):
+                try:
+                    client.table("vault_entries").update({
+                        "last_sent_year": current_year,
+                    }).eq("id", entry_id).execute()
+                    year_updated = True
+                    break
+                except Exception as yr_exc:  # noqa: BLE001
+                    if _yr_attempt == 2:
+                        print(f"WARNING: Failed to update last_sent_year for recurring entry {entry_id} after 3 attempts: {yr_exc}")
+                if _yr_attempt < 2:
+                    time.sleep(1)
 
             sent_count += 1
-            print(f"Recurring entry {entry_id} ('{entry_title}') sent for year {current_year}")
+            print(f"Recurring entry {entry_id} ('{entry_title}') sent for year {current_year}{'' if year_updated else ' (last_sent_year update FAILED — may re-send)'}")
 
         except Exception as exc:  # noqa: BLE001
             print(f"SEND FAILED recurring entry {entry_id} user {user_id}: {exc}")
+        finally:
+            # Always release the lock — recurring entries must stay 'active'
+            # for next year's delivery.  If the entry was deleted (e.g., by a
+            # concurrent downgrade), release_entry_lock is a harmless no-op.
+            release_entry_lock(client, entry_id)
+
+    # ── Post-loop integrity summary (parity with process_expired/scheduled) ──
+    if decryption_failures > 0:
+        print(
+            f"CRITICAL: User {user_id} (recurring): {decryption_failures} "
+            f"entry decryption failure(s) detected — possible data "
+            f"corruption or tampering."
+        )
+        _try_send_tampering_notification(
+            client=client,
+            profile=profile,
+            resend_key=resend_key,
+            from_email=from_email,
+            decryption_failures=decryption_failures,
+            now=now,
+        )
 
     return sent_count
 
@@ -2339,7 +2400,7 @@ def cleanup_sent_entries(client) -> None:
                 while True:
                     entry_q = (
                         client.table("vault_entries")
-                        .select("id,user_id,audio_file_path,sent_at")
+                        .select("id,user_id,audio_file_path,sent_at,scheduled_at")
                         .eq("user_id", uid)
                         .eq("status", "sent")
                         .order("id")
@@ -2365,6 +2426,7 @@ def cleanup_sent_entries(client) -> None:
                                 "sender_name": sender_name,
                                 "sent_at": entry.get("sent_at"),
                                 "expired_at": now_iso,
+                                "scheduled_at": entry.get("scheduled_at"),
                             }).execute()
                             tombstone_ok = True
                             total_tombstoned += 1
@@ -2381,12 +2443,13 @@ def cleanup_sent_entries(client) -> None:
                             except Exception as del_exc:  # noqa: BLE001
                                 print(f"Failed to delete sent entry {entry.get('id', '?')}: {del_exc}")
 
-                # SAFETY GUARD: Only reset profile if ALL entries were actually removed.
-                # If tombstone/delete failed for any entry, keep inactive for retry.
+                # SAFETY GUARD: Only reset profile if ALL non-recurring entries were removed.
+                # Recurring entries always stay active — exclude them from this check.
                 remaining_check = (
                     client.table("vault_entries")
                     .select("id", count="exact")
                     .eq("user_id", uid)
+                    .neq("entry_mode", "recurring")
                     .execute()
                 )
                 remaining_count = remaining_check.count or 0
@@ -2476,6 +2539,7 @@ def cleanup_sent_entries(client) -> None:
                     "sender_name": s_name,
                     "sent_at": entry.get("sent_at"),
                     "expired_at": now_iso_pe,
+                    "scheduled_at": entry.get("scheduled_at"),
                 }).execute()
                 tombstone_ok = True
                 per_entry_tombstoned += 1
@@ -2587,6 +2651,7 @@ def _build_downgrade_email(
     sender_name: str,
     had_audio: bool,
     had_recurring: bool = False,
+    had_scheduled_clamped: bool = False,
     reason: str = "refund or expiration",
 ) -> tuple[str, str, str]:
     """Build downgrade notification email content.
@@ -2608,6 +2673,11 @@ def _build_downgrade_email(
         if had_recurring
         else ""
     )
+    text_scheduled_line = (
+        "- Time Capsule delivery dates beyond 30 days have been moved to within 30 days\n"
+        if had_scheduled_clamped
+        else ""
+    )
     subject = "Afterword — Subscription update"
     text = (
         f"Hi {sender_name},\n\n"
@@ -2619,6 +2689,7 @@ def _build_downgrade_email(
         f"{text_preserved_line}"
         f"{text_audio_line}"
         f"{text_recurring_line}"
+        f"{text_scheduled_line}"
         "\n\n"
         "You can continue using Afterword on the free tier, or "
         "resubscribe at any time to restore premium features.\n\n"
@@ -2641,6 +2712,10 @@ def _build_downgrade_email(
         '<li style="margin-bottom:6px">Forever Letters (recurring annual deliveries) have been removed</li>'
         if had_recurring else ''
     )
+    html_scheduled_li = (
+        '<li style="margin-bottom:6px">Time Capsule delivery dates beyond 30 days have been moved to within 30 days</li>'
+        if had_scheduled_clamped else ''
+    )
     html = (
         f'<p style="margin:0 0 16px">Hi {safe_name},</p>'
         f'<p style="margin:0 0 16px">Your Afterword subscription has been updated due to a {reason}. '
@@ -2652,6 +2727,7 @@ def _build_downgrade_email(
         f'{html_preserved_li}'
         f'{html_audio_li}'
         f'{html_recurring_li}'
+        f'{html_scheduled_li}'
         '</ul>'
         '<p style="margin:0 0 24px">You can continue using Afterword on the free tier, or '
         'resubscribe at any time to restore premium features.</p>'
@@ -2839,10 +2915,8 @@ def handle_subscription_downgrade(
     selected_theme = profile.get("selected_theme")
     selected_soul_fire = profile.get("selected_soul_fire")
     has_custom_timer = timer_days != 30
-    FREE_THEMES = {"oledVoid", "midnightFrost", "shadowRose"}
-    FREE_SOUL_FIRES = {"etherealOrb", "goldenPulse", "nebulaHeart"}
-    has_custom_theme = selected_theme is not None and selected_theme not in FREE_THEMES
-    has_custom_soul_fire = selected_soul_fire is not None and selected_soul_fire not in FREE_SOUL_FIRES
+    has_custom_theme = selected_theme not in FREE_THEMES
+    has_custom_soul_fire = selected_soul_fire not in FREE_SOUL_FIRES
 
     active_audio_entries = [
         entry
@@ -2857,6 +2931,24 @@ def handle_subscription_downgrade(
         (entry.get("entry_mode") or "standard") == "recurring"
         for entry in active_entries
     )
+
+    # Detect scheduled entries beyond free tier max (30 days) that need clamping
+    free_max_date = (now + timedelta(days=30)).isoformat()
+    has_far_scheduled = False
+    try:
+        far_check = (
+            client.table("vault_entries")
+            .select("id", count="exact")
+            .eq("user_id", uid)
+            .eq("status", "active")
+            .neq("entry_mode", "recurring")
+            .not_.is_("scheduled_at", "null")
+            .gt("scheduled_at", free_max_date)
+            .execute()
+        )
+        has_far_scheduled = (far_check.count or 0) > 0
+    except Exception:  # noqa: BLE001
+        pass
 
     # Check for audio entries if we have any pro/lifetime indicators, or if
     # active_entries didn't include audio (audio is now pro+lifetime feature).
@@ -2875,7 +2967,7 @@ def handle_subscription_downgrade(
         except Exception:  # noqa: BLE001
             pass
 
-    needs_revert = has_pro_indicators or has_audio
+    needs_revert = has_pro_indicators or has_audio or has_recurring or has_far_scheduled
 
     # ── Retry path: indicators already wiped by a previous run, but email ──
     # ── was never delivered.  The downgrade_email_pending flag persists    ──
@@ -2910,13 +3002,14 @@ def handle_subscription_downgrade(
     # Strong indicators: timer != 30 (impossible without pro) or audio entries
     # (impossible without pro/lifetime). Theme/soul_fire alone are weak signals
     # that can arise from bugs or testing — silently reset, no email.
-    is_genuine_downgrade = has_custom_timer or has_audio or has_recurring
+    is_genuine_downgrade = has_custom_timer or has_audio or has_recurring or has_far_scheduled
     email_needed = bool(email) and is_genuine_downgrade
 
     email_content: tuple[str, str, str] | None = None
     if email_needed:
         email_content = _build_downgrade_email(
             sender_name, had_audio=has_audio, had_recurring=has_recurring,
+            had_scheduled_clamped=has_far_scheduled,
         )
 
     # 1. Reset profile to free defaults
@@ -2965,6 +3058,10 @@ def handle_subscription_downgrade(
     if recurring_entries:
         print(f"Deleted {len(recurring_entries)} recurring (forever letter) entries for downgraded user {uid}")
 
+    # 2c. Clamp scheduled dates beyond free tier max (30 days)
+    if has_far_scheduled:
+        _clamp_scheduled_dates(client, uid, max_days=30, now=now)
+
     # 3. Send notification email
     if email_content:
         subject, text, html = email_content
@@ -2992,6 +3089,9 @@ def handle_subscription_downgrade(
 
 
 def main() -> int:
+
+    global _resend_quota_exhausted
+    _resend_quota_exhausted = False  # Reset for each run/retry
 
     supabase_url = get_env("SUPABASE_URL")
 
@@ -3096,19 +3196,53 @@ def main() -> int:
               active_entries = batch_entries_by_user.get(user_id, [])
               sub_status = (profile.get("subscription_status") or "free").lower()
 
-              # Still run RC verification for scheduled mode users
-              if rc_api_secret and sub_status in PAID_STATUSES:
+              # RC verification for scheduled mode users — same logic as vault mode:
+              #   - Paid → catch cancellations
+              #   - Free with pro indicators → catch missed webhook upgrades
+              #   - Pending downgrade email → confirm still free
+              if rc_api_secret:
+                  _sc_theme = profile.get("selected_theme")
+                  _sc_sf = profile.get("selected_soul_fire")
+                  sc_has_pro = (
+                      int(profile.get("timer_days") or 30) != 30
+                      or _sc_theme not in FREE_THEMES
+                      or _sc_sf not in FREE_SOUL_FIRES
+                  )
+                  sc_needs_rc = (
+                      sub_status in PAID_STATUSES
+                      or sc_has_pro
+                      or profile.get("downgrade_email_pending")
+                  )
+                  if sc_needs_rc:
+                      try:
+                          rc_status = verify_subscription_with_revenuecat(rc_api_secret, user_id)
+                          if rc_status is not None and rc_status != sub_status:
+                              if sub_status in PAID_STATUSES and rc_status == "free":
+                                  print(
+                                      f"RC DOWNGRADE (scheduled): user {user_id} was {sub_status} "
+                                      f"in DB but RC says free — applying downgrade."
+                                  )
+                              else:
+                                  print(f"RC verify (scheduled): user {user_id} DB={sub_status} RC={rc_status} — updating DB")
+                              try:
+                                  client.table("profiles").update({
+                                      "subscription_status": rc_status,
+                                  }).eq("id", user_id).execute()
+                                  sub_status = rc_status
+                                  profile["subscription_status"] = rc_status
+                              except Exception as db_exc:  # noqa: BLE001
+                                  print(f"Failed to update subscription for scheduled user {user_id}: {db_exc}")
+                          time.sleep(RC_VERIFY_RATE_LIMIT_DELAY)
+                      except Exception as rc_exc:  # noqa: BLE001
+                          print(f"RC verify error for scheduled user {user_id}: {rc_exc}")
+
+              # Clear stale downgrade flag when user re-subscribes
+              if sub_status in PAID_STATUSES and profile.get("downgrade_email_pending"):
                   try:
-                      rc_status = verify_subscription_with_revenuecat(rc_api_secret, user_id)
-                      if rc_status is not None and rc_status != sub_status:
-                          try:
-                              client.table("profiles").update({
-                                  "subscription_status": rc_status,
-                              }).eq("id", user_id).execute()
-                              sub_status = rc_status
-                          except Exception:  # noqa: BLE001
-                              pass
-                      time.sleep(RC_VERIFY_RATE_LIMIT_DELAY)
+                      client.table("profiles").update({
+                          "downgrade_email_pending": False,
+                      }).eq("id", user_id).execute()
+                      profile["downgrade_email_pending"] = False
                   except Exception:  # noqa: BLE001
                       pass
 
@@ -3119,11 +3253,9 @@ def main() -> int:
                           client, profile, active_entries, resend_key, from_email, now,
                       )
                       if reverted:
-                          # Also clamp scheduled dates to free tier max (30 days)
-                          _clamp_scheduled_dates(client, user_id, max_days=30, now=now)
                           continue
-                  except Exception:  # noqa: BLE001
-                      pass
+                  except Exception as dg_exc:  # noqa: BLE001
+                      print(f"Downgrade handling failed for scheduled user {user_id}: {dg_exc}")
 
               if active_entries:
                   try:
@@ -3158,7 +3290,11 @@ def main() -> int:
 
           active_entries = batch_entries_by_user.get(user_id, [])
 
-          has_entries = len(active_entries) > 0
+          # has_entries excludes recurring — guardian timer logic only cares about standard/scheduled entries
+          has_entries = any(
+              (e.get("entry_mode") or "standard") != "recurring"
+              for e in active_entries
+          )
 
           sender_name = profile.get("sender_name") or "Afterword"
           sub_status = (profile.get("subscription_status") or "free").lower()
@@ -3179,12 +3315,10 @@ def main() -> int:
           if rc_api_secret:
               selected_theme = profile.get("selected_theme")
               selected_soul_fire = profile.get("selected_soul_fire")
-              _FREE_THEMES = {"oledVoid", "midnightFrost", "shadowRose", None}
-              _FREE_SF = {"etherealOrb", "goldenPulse", "nebulaHeart", None}
               has_pro_indicators = (
                   int(profile.get("timer_days") or 30) != 30
-                  or selected_theme not in _FREE_THEMES
-                  or selected_soul_fire not in _FREE_SF
+                  or selected_theme not in FREE_THEMES
+                  or selected_soul_fire not in FREE_SOUL_FIRES
               )
               needs_rc_verify = (
                   sub_status in PAID_STATUSES  # paid → catch cancellations
@@ -3239,8 +3373,29 @@ def main() -> int:
           if timer_state.remaining_seconds <= 0:
 
               if not has_entries:
-                  # Empty vault = timer has no effect. Do NOT mark inactive.
-                  # User stays active; timer just sits expired until they add entries.
+                  # No standard/scheduled entries — timer has no effect. Do NOT mark inactive.
+                  # Free users shouldn't keep recurring entries — run downgrade handler
+                  # to delete them.  This is safe because has_entries=False means no
+                  # standard entries exist, so resetting timer_days/last_check_in
+                  # (which the downgrade handler does) cannot block entry delivery.
+                  if sub_status == "free" and active_entries:
+                      try:
+                          reverted = handle_subscription_downgrade(
+                              client, profile, active_entries, resend_key, from_email, now,
+                          )
+                          if reverted:
+                              continue
+                      except Exception as exc:  # noqa: BLE001
+                          print(f"Downgrade handling failed for recurring-only user {user_id}: {exc}")
+                  # Still process recurring entries (Forever Letters) if any exist.
+                  if active_entries:
+                      try:
+                          process_recurring_entries(
+                              client, profile, active_entries, server_secret,
+                              resend_key, from_email, viewer_base_url, now,
+                          )
+                      except Exception as exc:  # noqa: BLE001
+                          print(f"Recurring processing failed for {user_id}: {exc}")
                   continue
 
               had_send, input_send_count = process_expired_entries(
@@ -3283,11 +3438,13 @@ def main() -> int:
                   pass
 
               # Check if any entries still need processing (failed during this run)
+              # Exclude recurring entries — they always stay active (Forever Letters)
               pending = (
                   client.table("vault_entries")
                   .select("id", count="exact")
                   .eq("user_id", user_id)
                   .in_("status", ["active", "sending"])
+                  .neq("entry_mode", "recurring")
                   .execute()
               )
               has_pending = (pending.count or 0) > 0
@@ -3312,8 +3469,6 @@ def main() -> int:
                   # processes active profiles.  Pro themes/soul_fire would persist
                   # during grace and the downgrade email would be delayed 30+ days.
                   if sub_status == "free":
-                      _FT = {"oledVoid", "midnightFrost", "shadowRose", None}
-                      _FS = {"etherealOrb", "goldenPulse", "nebulaHeart", None}
                       sel_t = profile.get("selected_theme")
                       sel_s = profile.get("selected_soul_fire")
                       had_custom_timer_at_start = int(profile.get("timer_days") or 30) != 30
@@ -3321,16 +3476,84 @@ def main() -> int:
                           (e.get("data_type") or "").lower() == "audio"
                           for e in active_entries
                       )
-                      if sel_t not in _FT:
+                      had_recurring_at_start = any(
+                          (e.get("entry_mode") or "standard") == "recurring"
+                          for e in active_entries
+                      )
+                      # Check for far-scheduled entries (TC entries beyond free 30-day cap)
+                      had_far_scheduled_at_start = False
+                      try:
+                          _fs_max = (now + timedelta(days=30)).isoformat()
+                          _fs_check = (
+                              client.table("vault_entries")
+                              .select("id", count="exact")
+                              .eq("user_id", user_id)
+                              .eq("status", "active")
+                              .neq("entry_mode", "recurring")
+                              .not_.is_("scheduled_at", "null")
+                              .gt("scheduled_at", _fs_max)
+                              .execute()
+                          )
+                          had_far_scheduled_at_start = (_fs_check.count or 0) > 0
+                      except Exception:  # noqa: BLE001
+                          pass
+                      if sel_t not in FREE_THEMES:
                           grace_update["selected_theme"] = None
-                      if sel_s not in _FS:
+                      if sel_s not in FREE_SOUL_FIRES:
                           grace_update["selected_soul_fire"] = None
-                      is_genuine_downgrade = had_custom_timer_at_start or had_audio_at_start
+                      is_genuine_downgrade = had_custom_timer_at_start or had_audio_at_start or had_recurring_at_start or had_far_scheduled_at_start
                       if is_genuine_downgrade:
                           grace_update["downgrade_email_pending"] = True
 
                   client.table("profiles").update(grace_update).eq("id", user_id).execute()
                   print(f"User {user_id}: protocol executed, grace period started")
+
+                  # ── Inline downgrade: actually delete pro-only entries NOW ──
+                  # Without this, audio/recurring entries persist through the 30-day
+                  # grace period and trigger a SECOND downgrade email after cleanup.
+                  if sub_status == "free":
+                      # Delete audio entries
+                      if had_audio_at_start:
+                          try:
+                              _inline_audio = (
+                                  client.table("vault_entries")
+                                  .select("id,audio_file_path")
+                                  .eq("user_id", user_id)
+                                  .eq("data_type", "audio")
+                                  .eq("status", "active")
+                                  .execute()
+                              ).data or []
+                              for _ae in _inline_audio:
+                                  delete_entry(client, _ae)
+                              if _inline_audio:
+                                  print(f"User {user_id}: inline downgrade deleted {len(_inline_audio)} audio entries")
+                          except Exception as _ae_exc:  # noqa: BLE001
+                              print(f"User {user_id}: inline audio deletion failed ({_ae_exc}), PASS 0 will retry")
+
+                      # Delete recurring (Forever Letters) entries
+                      if had_recurring_at_start:
+                          try:
+                              _inline_recurring = (
+                                  client.table("vault_entries")
+                                  .select("id,audio_file_path")
+                                  .eq("user_id", user_id)
+                                  .eq("entry_mode", "recurring")
+                                  .eq("status", "active")
+                                  .execute()
+                              ).data or []
+                              for _re in _inline_recurring:
+                                  delete_entry(client, _re)
+                              if _inline_recurring:
+                                  print(f"User {user_id}: inline downgrade deleted {len(_inline_recurring)} recurring entries")
+                          except Exception as _re_exc:  # noqa: BLE001
+                              print(f"User {user_id}: inline recurring deletion failed ({_re_exc}), PASS 0 will retry")
+
+                      # Clamp far-scheduled dates
+                      if had_far_scheduled_at_start:
+                          try:
+                              _clamp_scheduled_dates(client, user_id, max_days=30, now=now)
+                          except Exception as _cs_exc:  # noqa: BLE001
+                              print(f"User {user_id}: inline scheduled clamp failed ({_cs_exc}), PASS 0 will retry")
 
                   # Try to send downgrade email inline (best-effort)
                   if sub_status == "free" and grace_update.get("downgrade_email_pending"):
@@ -3343,6 +3566,11 @@ def main() -> int:
                                       (e.get("data_type") or "").lower() == "audio"
                                       for e in active_entries
                                   ),
+                                  had_recurring=any(
+                                      (e.get("entry_mode") or "standard") == "recurring"
+                                      for e in active_entries
+                                  ),
+                                  had_scheduled_clamped=had_far_scheduled_at_start,
                               )
                               send_email(
                                   resend_key, from_email, _dg_email,
@@ -3384,6 +3612,35 @@ def main() -> int:
                   }).eq("id", user_id).execute()
                   print(f"User {user_id}: destroy-only vault cleared, account reset to fresh")
 
+                  # Delete pro-only entries that survive destroy (audio/recurring/far-scheduled)
+                  if sub_status == "free":
+                      try:
+                          _do_audio = (
+                              client.table("vault_entries")
+                              .select("id,audio_file_path")
+                              .eq("user_id", user_id)
+                              .eq("data_type", "audio")
+                              .eq("status", "active")
+                              .execute()
+                          ).data or []
+                          for _ae in _do_audio:
+                              delete_entry(client, _ae)
+                          _do_recurring = (
+                              client.table("vault_entries")
+                              .select("id,audio_file_path")
+                              .eq("user_id", user_id)
+                              .eq("entry_mode", "recurring")
+                              .eq("status", "active")
+                              .execute()
+                          ).data or []
+                          for _re in _do_recurring:
+                              delete_entry(client, _re)
+                          _clamp_scheduled_dates(client, user_id, max_days=30, now=now)
+                          if _do_audio or _do_recurring:
+                              print(f"User {user_id}: destroy-only path cleaned {len(_do_audio)} audio + {len(_do_recurring)} recurring entries")
+                      except Exception as _do_exc:  # noqa: BLE001
+                          print(f"User {user_id}: destroy-only pro cleanup failed ({_do_exc}), PASS 0 will catch on next run")
+
               continue
 
           # ── PASS 0: Subscription downgrade → revert to free tier ──
@@ -3403,14 +3660,14 @@ def main() -> int:
                   print(f"Subscription downgrade handling failed for {user_id}: {exc}")
 
           # Skip users with empty vaults — no warnings needed
+          # But still process recurring entries (Forever Letters) for users with only recurring entries
 
-          if not has_entries:
+          has_recurring = any(
+              (e.get("entry_mode") or "standard") == "recurring"
+              for e in active_entries
+          )
 
-              continue
-
-          # ── PASS 1b: Process recurring (Forever Letters) for active-timer users ──
-          # Forever Letters fire annually regardless of timer state.
-          if active_entries:
+          if has_recurring:
               try:
                   process_recurring_entries(
                       client, profile, active_entries, server_secret,
@@ -3418,6 +3675,14 @@ def main() -> int:
                   )
               except Exception as exc:  # noqa: BLE001
                   print(f"Recurring processing failed for guardian user {user_id}: {exc}")
+
+          if not has_entries:
+
+              continue
+
+          # ── PASS 1b: Process recurring (Forever Letters) for active-timer users ──
+          # Forever Letters fire annually regardless of timer state.
+          # (Already handled above for all users including recurring-only)
 
 
           # ── PASS 2: Push #1 at 66% remaining (ALL users) ──
