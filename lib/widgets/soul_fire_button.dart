@@ -524,12 +524,6 @@ class _OrbPainter extends CustomPainter {
 
     final rng = Random(42);
 
-    // ── SUPERNOVA on completion ──
-    if (flash > 0) {
-      _paintGoldenSupernova(canvas, center, r, bs, rng);
-      return;
-    }
-
     // ── LAYER 0: Deep ambient warmth — large diffuse glow ──
     final auraR = r * 2.4 * bs;
     canvas.drawCircle(center, auraR, Paint()
@@ -679,6 +673,11 @@ class _OrbPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.4 + hold * 0.4
       ..color = champagne.withValues(alpha: rimAlpha * 0.25));
+
+    // ── LAYER 8: Supernova overlay on completion ──
+    if (flash > 0) {
+      _paintGoldenSupernova(canvas, center, r, bs, rng);
+    }
   }
 
   // ── Sacred Geometry on Hold ──
@@ -745,15 +744,16 @@ class _OrbPainter extends CustomPainter {
     const deepAmber = Color(0xFFFF8F00);
     const roseGold = Color(0xFFE8B4B8);
 
-    final fadeOut = (1 - flash).clamp(0.0, 1.0);
+    // Bell curve: peak intensity at flash ~0.35, graceful tail
+    final intensity = (sin(flash * pi)).clamp(0.0, 1.0);
 
     // Full-canvas golden wash
     final washR = r * (1.5 + flash * 4.0);
     canvas.drawCircle(center, washR, Paint()
       ..shader = RadialGradient(colors: [
-        hotWhite.withValues(alpha: fadeOut * 0.35),
-        moltenGold.withValues(alpha: fadeOut * 0.20),
-        deepAmber.withValues(alpha: fadeOut * 0.08),
+        hotWhite.withValues(alpha: intensity * 0.35),
+        moltenGold.withValues(alpha: intensity * 0.20),
+        deepAmber.withValues(alpha: intensity * 0.08),
         Colors.transparent,
       ], stops: const [0.0, 0.25, 0.55, 1.0])
           .createShader(Rect.fromCircle(center: center, radius: washR)));
@@ -780,15 +780,15 @@ class _OrbPainter extends CustomPainter {
       // Glow ribbon
       canvas.drawPath(ribbonPath, Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 4.0 + (1 - flash) * 6.0
-        ..color = ribbonColor.withValues(alpha: fadeOut * 0.10)
+        ..strokeWidth = 4.0 + intensity * 6.0
+        ..color = ribbonColor.withValues(alpha: intensity * 0.10)
         ..strokeCap = StrokeCap.round
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6.0));
       // Core ribbon
       canvas.drawPath(ribbonPath, Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0 + (1 - flash) * 2.0
-        ..color = champagne.withValues(alpha: fadeOut * 0.30)
+        ..strokeWidth = 1.0 + intensity * 2.0
+        ..color = champagne.withValues(alpha: intensity * 0.30)
         ..strokeCap = StrokeCap.round);
     }
 
@@ -799,16 +799,16 @@ class _OrbPainter extends CustomPainter {
       final starEnd = r * (0.8 + flash * 3.5);
       final startPos = center + Offset(cos(starAngle) * starStart, sin(starAngle) * starStart);
       final endPos = center + Offset(cos(starAngle) * starEnd, sin(starAngle) * starEnd);
-      final starAlpha = fadeOut * (0.3 + (sin(i * 1.7) * 0.5 + 0.5) * 0.3);
+      final starAlpha = intensity * (0.3 + (sin(i * 1.7) * 0.5 + 0.5) * 0.3);
       final starColor = i % 3 == 0 ? hotWhite : i % 3 == 1 ? moltenGold : deepAmber;
 
       canvas.drawLine(startPos, endPos, Paint()
         ..color = starColor.withValues(alpha: starAlpha.clamp(0.0, 1.0))
-        ..strokeWidth = 2.0 * fadeOut + 0.5
+        ..strokeWidth = 2.0 * intensity + 0.5
         ..strokeCap = StrokeCap.round);
 
       // Tiny dot at the tip
-      canvas.drawCircle(endPos, 1.5 * fadeOut + 0.5, Paint()
+      canvas.drawCircle(endPos, 1.5 * intensity + 0.5, Paint()
         ..color = hotWhite.withValues(alpha: (starAlpha * 1.2).clamp(0.0, 1.0)));
     }
 
@@ -824,11 +824,11 @@ class _OrbPainter extends CustomPainter {
     }
 
     // Central nova flash — blindingly bright white-gold core
-    final novaR = r * (0.6 + (1 - flash) * 0.8) * bs;
+    final novaR = r * (0.6 + intensity * 0.8) * bs;
     canvas.drawCircle(center, novaR, Paint()
       ..shader = RadialGradient(colors: [
-        hotWhite.withValues(alpha: fadeOut * 0.80),
-        moltenGold.withValues(alpha: fadeOut * 0.35),
+        hotWhite.withValues(alpha: intensity * 0.80),
+        moltenGold.withValues(alpha: intensity * 0.35),
         Colors.transparent,
       ], stops: const [0.0, 0.35, 1.0])
           .createShader(Rect.fromCircle(center: center, radius: novaR)));
@@ -843,7 +843,7 @@ class _OrbPainter extends CustomPainter {
         sin(sparkAngle) * sparkDist,
       );
       final sparkTwinkle = (sin(i * 3.7 + flash * 8) * 0.5 + 0.5);
-      final sparkAlpha = (fadeOut * sparkTwinkle * 0.40).clamp(0.0, 1.0);
+      final sparkAlpha = (intensity * sparkTwinkle * 0.40).clamp(0.0, 1.0);
       if (sparkAlpha > 0.02) {
         canvas.drawCircle(sparkPos, 1.0 + seed * 1.5, Paint()
           ..color = champagne.withValues(alpha: sparkAlpha));

@@ -588,6 +588,7 @@ class _ModeOption extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
+        constraints: const BoxConstraints(minHeight: 130),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isSelected

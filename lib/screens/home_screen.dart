@@ -501,7 +501,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                   if (profile == null) ...[
                   const SizedBox(height: 28),
-                  const _SkeletonCard(height: 80),
+                  const _SkeletonCard(),
                   ] else ...[
                   const SizedBox(height: 28),
                   // Vault — View All always works, Add Entry disabled during grace
@@ -1382,51 +1382,44 @@ class _TimerPickerSheetState extends State<_TimerPickerSheet> {
 }
 
 class _SkeletonCard extends StatelessWidget {
-  const _SkeletonCard({this.height});
-  final double? height;
+  const _SkeletonCard();
 
   @override
   Widget build(BuildContext context) {
     return _SurfaceCard(
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: SizedBox(
-          height: height,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Shimmer line 1 (status chip)
-              Container(
-                width: 100,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.04),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 100,
+              height: 24,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(height: 16),
-              // Shimmer line 2 (timer label)
-              Container(
-                width: 160,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: 160,
+              height: 28,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(height: 14),
-              // Shimmer line 3 (progress bar)
-              Container(
-                width: double.infinity,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(999),
-                ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              height: 6,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(999),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1845,33 +1838,46 @@ class _TimeCapsuleCard extends StatelessWidget {
             const SizedBox(height: 14),
 
             // Next delivery headline
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Flexible(
-                  child: Text(
-                    _nextDeliveryLabel(nextAt),
-                    style: flutterTheme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+            if (!hasEntries)
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _nextDeliveryLabel(nextAt),
+                  style: flutterTheme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
                   ),
                 ),
-                if (hasEntries && nextAt != null) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    nextCount > 1 ? '$nextCount deliveries' : 'next delivery',
-                    style: flutterTheme.textTheme.bodySmall?.copyWith(
-                      color: Colors.white54,
+              )
+            else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Flexible(
+                    child: Text(
+                      _nextDeliveryLabel(nextAt),
+                      style: flutterTheme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
+                  if (nextAt != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      nextCount > 1 ? '$nextCount deliveries' : 'next delivery',
+                      style: flutterTheme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white54,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
-              ],
-            ),
+              ),
 
             const SizedBox(height: 14),
 
