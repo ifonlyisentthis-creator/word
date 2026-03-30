@@ -2504,6 +2504,66 @@ class HeartbeatTests(unittest.TestCase):
         clamped = min(entry_scheduled, max_date)
         self.assertEqual(clamped, max_date)
 
+    def test_downgrade_recurring_only_no_pro_indicators_detected(self):
+        """Free user with only recurring entries (no custom timer/theme) must still trigger downgrade."""
+        client = _MinimalClient()
+        deleted_entries = []
+
+        profile = {
+            "id": "user-recurring-only",
+            "email": "rec@example.com",
+            "sender_name": "RecurringUser",
+            "timer_days": 30,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        # Only recurring entries, no audio, no pro indicators
+        active_entries = [
+            {"id": "fl-1", "data_type": "text", "audio_file_path": None, "entry_mode": "recurring"},
+        ]
+
+        with (
+            patch.object(heartbeat, "delete_entry",
+                         side_effect=lambda _c, e: deleted_entries.append(e)),
+            patch.object(heartbeat, "send_email",
+                         side_effect=lambda *args, **kwargs: None),
+        ):
+            reverted = heartbeat.handle_subscription_downgrade(
+                client=client, profile=profile, active_entries=active_entries,
+                resend_key="rk", from_email="no-reply@example.com",
+                now=heartbeat.datetime.now(heartbeat.timezone.utc),
+            )
+
+        # Must detect recurring entries and trigger downgrade
+        self.assertTrue(reverted)
+        # Profile should be updated (timer reset, etc.)
+        self.assertIsNotNone(client.profiles.updated_payload)
+
+    def test_downgrade_no_recurring_no_indicators_still_returns_false(self):
+        """Free user with no recurring entries and no pro indicators → no action."""
+        client = _MinimalClient()
+
+        profile = {
+            "id": "user-plain-free",
+            "email": "plain@example.com",
+            "sender_name": "PlainFree",
+            "timer_days": 30,
+            "selected_theme": None,
+            "selected_soul_fire": None,
+        }
+        active_entries = [
+            {"id": "e-1", "data_type": "text", "audio_file_path": None, "entry_mode": "standard"},
+        ]
+
+        reverted = heartbeat.handle_subscription_downgrade(
+            client=client, profile=profile, active_entries=active_entries,
+            resend_key="rk", from_email="no-reply@example.com",
+            now=heartbeat.datetime.now(heartbeat.timezone.utc),
+        )
+
+        self.assertFalse(reverted)
+        self.assertIsNone(client.profiles.updated_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

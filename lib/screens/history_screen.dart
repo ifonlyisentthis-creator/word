@@ -34,10 +34,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
       // Only show 'send' type entries in history — 'destroy' entries leave no trace
       var sentQuery = client
           .from('vault_entries')
-          .select('id, title, action_type, data_type, sent_at, scheduled_at')
+          .select('id, title, action_type, data_type, sent_at, scheduled_at, entry_mode')
           .eq('user_id', widget.userId)
           .eq('status', 'sent')
-          .eq('action_type', 'send');
+          .eq('action_type', 'send')
+          .neq('entry_mode', 'recurring');
 
       // Mode-aware filtering
       if (widget.appMode == 'scheduled') {
@@ -49,11 +50,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final sentRows = await sentQuery.order('sent_at', ascending: false);
 
       // Fetch tombstones (permanently deleted after 30-day grace)
-      final tombRows = await client
+      var tombQuery = client
           .from('vault_entry_tombstones')
-          .select('vault_entry_id, sender_name, sent_at, expired_at')
-          .eq('user_id', widget.userId)
-          .order('expired_at', ascending: false);
+          .select('vault_entry_id, sender_name, sent_at, expired_at, scheduled_at')
+          .eq('user_id', widget.userId);
+
+      // Mode-aware tombstone filtering
+      if (widget.appMode == 'scheduled') {
+        tombQuery = tombQuery.not('scheduled_at', 'is', null);
+      } else {
+        tombQuery = tombQuery.isFilter('scheduled_at', null);
+      }
+
+      final tombRows = await tombQuery.order('expired_at', ascending: false);
 
       // Group by execution timestamp (full sent_at), not by day.
       // This avoids collapsing multiple protocol runs into one card.

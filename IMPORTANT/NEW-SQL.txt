@@ -290,3 +290,7 @@ FOR DELETE USING (auth.uid() = user_id);
 ALTER TABLE vault_entries
   ADD CONSTRAINT recurring_cannot_be_zk
     CHECK (NOT (entry_mode = 'recurring' AND is_zero_knowledge = true));
+
+-- 83: Add scheduled_at to tombstones for mode-aware history filtering
+ALTER TABLE vault_entry_tombstones
+  ADD COLUMN IF NOT EXISTS scheduled_at timestamptz;

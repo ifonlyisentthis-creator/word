@@ -1646,11 +1646,21 @@ class _CreateForeverLetterSheetState
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
+    // Forever Letters use month/day for annual delivery — allow picking any
+    // day in the calendar year (past dates deliver next year).
+    final firstDay = DateTime(now.year, 1, 1);
+    final lastDay = DateTime(now.year, 12, 31);
+    final initial = _selectedDate != null
+        ? DateTime(now.year, _selectedDate!.month, _selectedDate!.day)
+        : DateTime(now.year, now.month, now.day);
+    final clampedInitial = initial.isBefore(firstDay)
+        ? firstDay
+        : (initial.isAfter(lastDay) ? lastDay : initial);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? now.add(const Duration(days: 1)),
-      firstDate: now.add(const Duration(days: 1)),
-      lastDate: now.add(const Duration(days: 365)),
+      initialDate: clampedInitial,
+      firstDate: firstDay,
+      lastDate: lastDay,
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
           colorScheme: Theme.of(ctx).colorScheme.copyWith(

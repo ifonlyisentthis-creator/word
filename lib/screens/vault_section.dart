@@ -201,7 +201,9 @@ class _VaultSectionView extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<VaultController>();
 
-    final entries = controller.entries;
+    final entries = controller.entries
+        .where((entry) => !entry.isRecurring)
+        .toList();
 
     final activeEntries = entries
         .where((entry) => entry.status == VaultStatus.active)
@@ -210,6 +212,12 @@ class _VaultSectionView extends StatelessWidget {
     final sentEntries = entries
         .where((entry) => entry.status == VaultStatus.sent)
         .toList();
+
+    // Total active count includes recurring — they occupy vault slots.
+    // Used for capacity checks (Add Entry button), not for display.
+    final totalActiveCount = controller.entries
+        .where((entry) => entry.status == VaultStatus.active)
+        .length;
 
     final maxEntries = VaultController.maxEntriesFor(isPro: isPro, isLifetime: isLifetime);
 
@@ -431,7 +439,7 @@ class _VaultSectionView extends StatelessWidget {
                         width: double.infinity,
 
                         child: OutlinedButton.icon(
-                          onPressed: controller.isLoading || activeEntries.length >= maxEntries
+                          onPressed: controller.isLoading || totalActiveCount >= maxEntries
                               ? null
                               : () async {
                                   await _openEditor(context, controller);
@@ -456,7 +464,7 @@ class _VaultSectionView extends StatelessWidget {
                   width: double.infinity,
 
                   child: OutlinedButton.icon(
-                    onPressed: controller.isLoading || activeEntries.length >= maxEntries
+                    onPressed: controller.isLoading || totalActiveCount >= maxEntries
                         ? null
                         : () async {
                             await _openEditor(context, controller);
@@ -467,7 +475,7 @@ class _VaultSectionView extends StatelessWidget {
                     label: const Text('Add Entry'),
                   ),
                 ),
-                if (activeEntries.length >= maxEntries) ...[
+                if (totalActiveCount >= maxEntries) ...[
                   const SizedBox(height: 6),
                   Text(
                     isLifetime

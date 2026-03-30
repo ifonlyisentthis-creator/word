@@ -496,7 +496,7 @@ class HomeController extends ChangeNotifier {
     // Run both queries in parallel with individual timeouts
     final activeQuery = Supabase.instance.client
         .from('vault_entries')
-        .select('id, scheduled_at, created_at')
+        .select('id, scheduled_at, created_at, entry_mode')
         .eq('user_id', _user!.id)
         .eq('status', 'active')
         .timeout(_networkTimeout);
@@ -517,13 +517,21 @@ class HomeController extends ChangeNotifier {
     final activeRows = results[0];
     if (activeRows != null) {
       final list = activeRows as List;
-      _hasVaultEntries = list.isNotEmpty;
       _vaultEntryCount = list.length;
+      // hasVaultEntries excludes recurring — guardian timer only cares about
+      // standard/scheduled entries.  A user with only Forever Letters should
+      // not see timer warnings or need to check in.
+      _hasVaultEntries = list.any(
+        (row) => (row['entry_mode'] ?? 'standard') != 'recurring',
+      );
 
       DateTime? earliest;
       DateTime? earliestCreated;
       int earliestCount = 0;
       for (final row in list) {
+        // Skip recurring entries for next-scheduled calculation — their
+        // scheduled_at is a recurring month/day, not a one-time delivery date.
+        if ((row['entry_mode'] ?? 'standard') == 'recurring') continue;
         final raw = row['scheduled_at'];
         if (raw != null) {
           final dt = DateTime.tryParse(raw as String);

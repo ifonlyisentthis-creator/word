@@ -337,7 +337,9 @@ class VaultController extends ChangeNotifier {
     }
 
     // Validate scheduled delivery date (Time Capsule mode)
-    if (draft.scheduledAt != null) {
+    // Skip future-date and max-range checks for recurring entries — their
+    // scheduledAt represents a recurring month/day, not a one-time future date.
+    if (draft.scheduledAt != null && draft.entryMode != 'recurring') {
       final now = DateTime.now().toUtc();
       if (draft.scheduledAt!.isBefore(now)) {
         return 'Scheduled date must be in the future.';
@@ -389,6 +391,7 @@ class VaultController extends ChangeNotifier {
       audioDurationSeconds: draft.audioDurationSeconds,
       isZeroKnowledge: draft.isZeroKnowledge,
       scheduledAt: draft.scheduledAt,
+      entryMode: draft.entryMode,
     );
   }
 }
