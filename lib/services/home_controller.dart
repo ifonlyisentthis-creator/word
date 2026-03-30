@@ -60,6 +60,7 @@ class HomeController extends ChangeNotifier {
   bool _hasVaultEntries = false;
   int _vaultEntryCount = 0;
   DateTime? _nextScheduledAt;
+  DateTime? _nextScheduledCreatedAt;
   int _nextScheduledCount = 0;
   int _sentEntryCount = 0;
 
@@ -94,6 +95,7 @@ class HomeController extends ChangeNotifier {
   bool get hasVaultEntries => _hasVaultEntries;
   int get vaultEntryCount => _vaultEntryCount;
   DateTime? get nextScheduledAt => _nextScheduledAt;
+  DateTime? get nextScheduledCreatedAt => _nextScheduledCreatedAt;
   int get nextScheduledCount => _nextScheduledCount;
   int get sentEntryCount => _sentEntryCount;
 
@@ -494,7 +496,7 @@ class HomeController extends ChangeNotifier {
     // Run both queries in parallel with individual timeouts
     final activeQuery = Supabase.instance.client
         .from('vault_entries')
-        .select('id, scheduled_at')
+        .select('id, scheduled_at, created_at')
         .eq('user_id', _user!.id)
         .eq('status', 'active')
         .timeout(_networkTimeout);
@@ -519,6 +521,7 @@ class HomeController extends ChangeNotifier {
       _vaultEntryCount = list.length;
 
       DateTime? earliest;
+      DateTime? earliestCreated;
       int earliestCount = 0;
       for (final row in list) {
         final raw = row['scheduled_at'];
@@ -529,6 +532,8 @@ class HomeController extends ChangeNotifier {
             if (earliest == null || dtDay.isBefore(DateTime(earliest.year, earliest.month, earliest.day))) {
               earliest = dt;
               earliestCount = 1;
+              final cRaw = row['created_at'];
+              earliestCreated = cRaw != null ? DateTime.tryParse(cRaw as String) : null;
             } else if (dtDay == DateTime(earliest.year, earliest.month, earliest.day)) {
               earliestCount++;
             }
@@ -536,6 +541,7 @@ class HomeController extends ChangeNotifier {
         }
       }
       _nextScheduledAt = earliest;
+      _nextScheduledCreatedAt = earliestCreated;
       _nextScheduledCount = earliestCount;
 
       if (kDebugMode) {

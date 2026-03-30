@@ -528,6 +528,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                                 page: MyVaultPage(
                                   userId: widget.userId,
                                   readOnly: isInGracePeriod,
+                                  isScheduledMode: controller.isScheduledMode,
                                 ),
                               ),
                             ).then((_) {
@@ -1762,6 +1763,19 @@ class _TimeCapsuleCard extends StatelessWidget {
   final bool isPro;
   final bool isLifetime;
 
+  /// Progress for the next delivery: 0.0 = just created, 1.0 = delivery imminent.
+  /// Based on time elapsed from entry creation to scheduled delivery.
+  double _deliveryProgress(HomeController c) {
+    final scheduledAt = c.nextScheduledAt;
+    final createdAt = c.nextScheduledCreatedAt;
+    if (scheduledAt == null || createdAt == null) return 0.0;
+    final now = DateTime.now();
+    final totalSpan = scheduledAt.difference(createdAt).inSeconds;
+    if (totalSpan <= 0) return 1.0;
+    final elapsed = now.difference(createdAt).inSeconds;
+    return (elapsed / totalSpan).clamp(0.0, 1.0);
+  }
+
   String _nextDeliveryLabel(DateTime? nextAt) {
     if (nextAt == null) return 'No deliveries scheduled';
     final now = DateTime.now();
@@ -1881,11 +1895,11 @@ class _TimeCapsuleCard extends StatelessWidget {
 
             const SizedBox(height: 14),
 
-            // Capacity bar
+            // Time-based progress bar: fills as delivery date approaches
             ClipRRect(
               borderRadius: BorderRadius.circular(999),
               child: _EasterEggTimerBar(
-                progress: maxEntries == 0 ? 0.0 : (1.0 - entryCount / maxEntries).clamp(0.0, 1.0),
+                progress: _deliveryProgress(controller),
               ),
             ),
 
