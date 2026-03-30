@@ -1635,6 +1635,9 @@ def process_expired_entries(
     prepared_sends: list[tuple[str, str, str, str, str, dict]] = []
 
     for entry in entries:
+        # Skip recurring (Forever Letters) — never consumed by timer expiry
+        if (entry.get("entry_mode") or "standard") == "recurring":
+            continue
         entry_id = entry.get("id", "unknown")
         try:
             if not claim_entry_for_sending(client, entry_id):
@@ -1885,6 +1888,9 @@ def process_scheduled_entries(
     # Filter to entries whose scheduled_at has arrived
     due_entries = []
     for entry in entries:
+        # Skip recurring (Forever Letters) — handled by process_recurring_entries
+        if (entry.get("entry_mode") or "standard") == "recurring":
+            continue
         scheduled_at_str = entry.get("scheduled_at")
         if not scheduled_at_str:
             continue
@@ -2182,15 +2188,10 @@ def process_recurring_entries(
 
     print(f"User {user_id} (recurring): {len(due_entries)} Forever Letter(s) due today")
 
-    hmac_key_encrypted = profile.get("hmac_key_encrypted")
-    hmac_key_bytes = None
-    if hmac_key_encrypted:
-        try:
-            hmac_key_bytes = decrypt_with_server_secret(hmac_key_encrypted, server_secret)
-        except Exception as exc:  # noqa: BLE001
-            print(f"WARNING: Failed to decrypt HMAC key for recurring user {user_id}: {exc}")
-
     for entry in due_entries:
+        if _resend_quota_exhausted:
+            print(f"Resend quota exhausted, deferring remaining recurring entries for {user_id}")
+            break
         entry_id = str(entry.get("id", "?"))
         entry_title = str(entry.get("title", "Untitled"))
 
@@ -2301,11 +2302,13 @@ def cleanup_sent_entries(client) -> None:
 
             try:
                 # Check for unprocessed entries (active/sending) — partial failure
+                # Exclude recurring (Forever Letters) — they stay active permanently
                 unprocessed = (
                     client.table("vault_entries")
                     .select("id", count="exact")
                     .eq("user_id", uid)
                     .in_("status", ["active", "sending"])
+                    .neq("entry_mode", "recurring")
                     .execute()
                 )
                 unprocessed_count = unprocessed.count or 0
@@ -2775,6 +2778,7 @@ def _clamp_scheduled_dates(client, user_id: str, max_days: int, now: datetime) -
             .select("id")
             .eq("user_id", user_id)
             .eq("status", "active")
+            .neq("entry_mode", "recurring")
             .not_.is_("scheduled_at", "null")
             .gt("scheduled_at", max_date)
             .execute()
@@ -3404,6 +3408,16 @@ def main() -> int:
 
               continue
 
+          # ── PASS 1b: Process recurring (Forever Letters) for active-timer users ──
+          # Forever Letters fire annually regardless of timer state.
+          if active_entries:
+              try:
+                  process_recurring_entries(
+                      client, profile, active_entries, server_secret,
+                      resend_key, from_email, viewer_base_url, now,
+                  )
+              except Exception as exc:  # noqa: BLE001
+                  print(f"Recurring processing failed for guardian user {user_id}: {exc}")
 
 
           # ── PASS 2: Push #1 at 66% remaining (ALL users) ──

@@ -1334,6 +1334,7 @@ class HeartbeatTests(unittest.TestCase):
                 self._count = count
             def select(self, *a, **kw): return self
             def eq(self, *a, **kw): return self
+            def neq(self, *a, **kw): return self
             def in_(self, *a, **kw): return self
             def lte(self, *a, **kw): return self
             def gt(self, *a, **kw): return self
@@ -1376,6 +1377,7 @@ class HeartbeatTests(unittest.TestCase):
                 self._count = count
             def select(self, *a, **kw): return self
             def eq(self, *a, **kw): return self
+            def neq(self, *a, **kw): return self
             def lte(self, *a, **kw): return self
             def gt(self, *a, **kw): return self
             def order(self, *a, **kw): return self
@@ -1434,6 +1436,7 @@ class HeartbeatTests(unittest.TestCase):
                 self._is_unprocessed = False
             def select(self, *a, **kw): return self
             def eq(self, *a, **kw): return self
+            def neq(self, *a, **kw): return self
             def lte(self, *a, **kw): return self
             def gt(self, *a, **kw): return self
             def order(self, *a, **kw): return self
