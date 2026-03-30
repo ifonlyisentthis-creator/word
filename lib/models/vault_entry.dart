@@ -80,7 +80,7 @@ class VaultEntry {
     );
   }
 
-  bool get isEditable => status == VaultStatus.active && !isRecurring;
+  bool get isEditable => status == VaultStatus.active;
 }
 
 enum VaultActionType { send, destroy }

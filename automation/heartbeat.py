@@ -2193,7 +2193,6 @@ def process_recurring_entries(
     for entry in due_entries:
         entry_id = str(entry.get("id", "?"))
         entry_title = str(entry.get("title", "Untitled"))
-        is_zk = entry.get("is_zero_knowledge", False)
 
         try:
             # Decrypt recipient email (same pattern as scheduled entries)
@@ -2213,24 +2212,19 @@ def process_recurring_entries(
 
             viewer_link = build_viewer_link(viewer_base_url, entry_id)
 
-            if is_zk:
-                email_payload = build_zk_unlock_email_payload(
-                    recipient_email, entry_id, sender_name, entry_title,
-                    viewer_link, from_email,
-                )
-            else:
-                data_key_encrypted = entry.get("data_key_encrypted")
-                if not data_key_encrypted:
-                    print(f"CRITICAL: Missing data_key for recurring entry {entry_id}")
-                    continue
+            # Recurring entries never use ZK mode — always include security key
+            data_key_encrypted = entry.get("data_key_encrypted")
+            if not data_key_encrypted:
+                print(f"CRITICAL: Missing data_key for recurring entry {entry_id}")
+                continue
 
-                data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
-                data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
-                security_key = base64.b64encode(data_key_bytes).decode("utf-8")
-                email_payload = build_unlock_email_payload(
-                    recipient_email, entry_id, sender_name, entry_title,
-                    viewer_link, security_key, from_email,
-                )
+            data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
+            data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
+            security_key = base64.b64encode(data_key_bytes).decode("utf-8")
+            email_payload = build_unlock_email_payload(
+                recipient_email, entry_id, sender_name, entry_title,
+                viewer_link, security_key, from_email,
+            )
 
             # Send via batch API (single-item batch for idempotency key support)
             idem_key = f"recurring-{entry_id}-{current_year}"

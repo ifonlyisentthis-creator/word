@@ -206,20 +206,19 @@ class AppDrawer extends StatelessWidget {
                       );
                     },
                   ),
-                  if (isPro)
-                    _DrawerItem(
-                      icon: Icons.all_inclusive,
-                      label: 'Forever Letters',
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          PremiumPageRoute(page: ForeverLettersPage(
-                            userId: userId,
-                          )),
-                        );
-                      },
-                    ),
+                  _DrawerItem(
+                    icon: Icons.all_inclusive,
+                    label: 'Forever Letters',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        PremiumPageRoute(page: ForeverLettersPage(
+                          userId: userId,
+                        )),
+                      );
+                    },
+                  ),
                   _DrawerItem(
                     icon: Icons.history,
                     label: 'History',
