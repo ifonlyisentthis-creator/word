@@ -130,13 +130,29 @@ class _ProfilesQuery:
         return types.SimpleNamespace(data=[], count=0)
 
 
+class _VaultEntriesQuery:
+    """Minimal stub for vault_entries table queries in downgrade tests."""
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        return types.SimpleNamespace(data=[], count=0)
+
+
 class _MinimalClient:
     def __init__(self) -> None:
         self.profiles = _ProfilesQuery()
+        self._vault_entries = _VaultEntriesQuery()
 
     def table(self, table_name: str):
         if table_name == "profiles":
             return self.profiles
+        if table_name == "vault_entries":
+            return self._vault_entries
         raise AssertionError(f"Unexpected table access in unit test: {table_name}")
 
 

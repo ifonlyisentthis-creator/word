@@ -3065,7 +3065,7 @@ def main() -> int:
 
             .select(
 
-                "id,user_id,title,action_type,data_type,status,payload_encrypted,recipient_email_encrypted,data_key_encrypted,hmac_signature,audio_file_path,is_zero_knowledge,scheduled_at,grace_until,entry_mode"
+                "id,user_id,title,action_type,data_type,status,payload_encrypted,recipient_email_encrypted,data_key_encrypted,hmac_signature,audio_file_path,is_zero_knowledge,scheduled_at,grace_until,entry_mode,last_sent_year"
 
             )
 

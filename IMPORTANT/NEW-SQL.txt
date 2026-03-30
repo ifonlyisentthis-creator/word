@@ -168,3 +168,104 @@ $$;
 
 REVOKE ALL ON FUNCTION public.cleanup_sent_entries() FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.cleanup_sent_entries() TO service_role;
+
+-- ============================================================
+-- Forever Letters (Recurring Annual Deliveries)
+-- ============================================================
+
+-- 74: Add entry_mode column (standard vs recurring)
+ALTER TABLE vault_entries
+  ADD COLUMN IF NOT EXISTS entry_mode text NOT NULL DEFAULT 'standard'
+    CHECK (entry_mode IN ('standard', 'recurring'));
+
+-- 75: Add last_sent_year to track annual delivery deduplication
+ALTER TABLE vault_entries
+  ADD COLUMN IF NOT EXISTS last_sent_year integer;
+
+-- 76: Index for efficient recurring entry lookup by heartbeat
+CREATE INDEX IF NOT EXISTS vault_entries_recurring_idx
+  ON vault_entries(scheduled_at, last_sent_year)
+  WHERE entry_mode = 'recurring' AND status = 'active';
+
+-- 77: Restrict recurring entries to Pro/Lifetime only (RLS)
+--     Recurring entries share the same global limits (Free=3, Pro=20, Lifetime=30)
+--     This is already enforced by the entries_insert_own policy (step 71) which
+--     counts ALL active entries regardless of entry_mode.
+--     We only need to block free users from creating recurring entries:
+DROP POLICY IF EXISTS entries_insert_recurring ON vault_entries;
+CREATE POLICY entries_insert_recurring ON vault_entries
+FOR INSERT WITH CHECK (
+  -- Allow all non-recurring entries (handled by entries_insert_own)
+  entry_mode <> 'recurring'
+  OR (
+    -- Recurring requires Pro or Lifetime
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')
+    )
+  )
+);
+
+-- 78: Update cleanup_sent_entries to NEVER delete recurring entries
+--     Recurring entries stay active forever (until user deletes or downgrades)
+CREATE OR REPLACE FUNCTION cleanup_sent_entries()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  -- 1. Delete audio for per-entry grace-expired entries (Time Capsule mode)
+  --    EXCLUDE recurring entries (they are never cleaned up automatically)
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name IN (
+      SELECT audio_file_path FROM vault_entries
+      WHERE status = 'sent'
+        AND entry_mode <> 'recurring'
+        AND grace_until IS NOT NULL
+        AND grace_until < now()
+        AND audio_file_path IS NOT NULL
+    );
+
+  -- 2. Delete per-entry grace-expired entries (Time Capsule mode, non-recurring)
+  DELETE FROM vault_entries
+  WHERE status = 'sent'
+    AND entry_mode <> 'recurring'
+    AND grace_until IS NOT NULL
+    AND grace_until < now();
+
+  -- 3. Original logic: Delete audio for globally grace-expired entries (Guardian Vault mode)
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'vault-audio'
+    AND name IN (
+      SELECT audio_file_path FROM vault_entries
+      WHERE status = 'sent'
+        AND entry_mode <> 'recurring'
+        AND grace_until IS NULL
+        AND sent_at < now() - interval '30 days'
+        AND audio_file_path IS NOT NULL
+    );
+
+  -- 4. Original logic: Purge globally grace-expired sent entries (Guardian Vault mode)
+  DELETE FROM vault_entries
+  WHERE status = 'sent'
+    AND entry_mode <> 'recurring'
+    AND grace_until IS NULL
+    AND sent_at < now() - interval '30 days';
+
+  -- 5. Archive profiles that have no active/sending entries remaining
+  UPDATE profiles p
+  SET status = 'archived'
+  WHERE p.status <> 'archived'
+    AND NOT EXISTS (
+      SELECT 1 FROM vault_entries v
+      WHERE v.user_id = p.id AND v.status IN ('active','sending')
+    )
+    AND EXISTS (
+      SELECT 1 FROM vault_entries v
+      WHERE v.user_id = p.id AND v.status = 'sent'
+    ) IS false
+    AND p.status = 'inactive';
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.cleanup_sent_entries() FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_sent_entries() TO service_role;
