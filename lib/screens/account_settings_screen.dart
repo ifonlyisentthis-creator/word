@@ -256,7 +256,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                   ?.copyWith(color: Colors.white60),
                             ),
                             const SizedBox(height: 16),
-                            Row(
+                            IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 Expanded(
                                   child: _ModeOption(
@@ -280,6 +282,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                   ),
                                 ),
                               ],
+                            ),
                             ),
                           ],
                         ),

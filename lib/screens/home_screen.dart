@@ -501,7 +501,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                   if (profile == null) ...[
                   const SizedBox(height: 28),
-                  const _SkeletonCard(height: 120),
+                  const _SkeletonCard(height: 80),
                   ] else ...[
                   const SizedBox(height: 28),
                   // Vault — View All always works, Add Entry disabled during grace
@@ -1382,18 +1382,19 @@ class _TimerPickerSheetState extends State<_TimerPickerSheet> {
 }
 
 class _SkeletonCard extends StatelessWidget {
-  const _SkeletonCard({this.height = 160});
-  final double height;
+  const _SkeletonCard({this.height});
+  final double? height;
 
   @override
   Widget build(BuildContext context) {
     return _SurfaceCard(
-      child: SizedBox(
-        height: height,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: SizedBox(
+          height: height,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               // Shimmer line 1 (status chip)
               Container(
@@ -1788,6 +1789,7 @@ class _TimeCapsuleCard extends StatelessWidget {
     final entryCount = controller.vaultEntryCount;
     final sentCount = controller.sentEntryCount;
     final nextAt = controller.nextScheduledAt;
+    final nextCount = controller.nextScheduledCount;
     final hasEntries = entryCount > 0;
 
     final td = context.watch<ThemeProvider>().themeData;
@@ -1847,23 +1849,25 @@ class _TimeCapsuleCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(
-                  _nextDeliveryLabel(nextAt),
-                  style: flutterTheme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
+                Flexible(
+                  child: Text(
+                    _nextDeliveryLabel(nextAt),
+                    style: flutterTheme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
                 if (hasEntries && nextAt != null) ...[
                   const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'next delivery',
-                      style: flutterTheme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white54,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  Text(
+                    nextCount > 1 ? '$nextCount deliveries' : 'next delivery',
+                    style: flutterTheme.textTheme.bodySmall?.copyWith(
+                      color: Colors.white54,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ],

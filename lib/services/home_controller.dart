@@ -60,6 +60,7 @@ class HomeController extends ChangeNotifier {
   bool _hasVaultEntries = false;
   int _vaultEntryCount = 0;
   DateTime? _nextScheduledAt;
+  int _nextScheduledCount = 0;
   int _sentEntryCount = 0;
 
   Profile? get profile => _profile;
@@ -93,6 +94,7 @@ class HomeController extends ChangeNotifier {
   bool get hasVaultEntries => _hasVaultEntries;
   int get vaultEntryCount => _vaultEntryCount;
   DateTime? get nextScheduledAt => _nextScheduledAt;
+  int get nextScheduledCount => _nextScheduledCount;
   int get sentEntryCount => _sentEntryCount;
 
   bool get isScheduledMode => _profile?.isScheduledMode ?? false;
@@ -517,16 +519,24 @@ class HomeController extends ChangeNotifier {
       _vaultEntryCount = list.length;
 
       DateTime? earliest;
+      int earliestCount = 0;
       for (final row in list) {
         final raw = row['scheduled_at'];
         if (raw != null) {
           final dt = DateTime.tryParse(raw as String);
-          if (dt != null && (earliest == null || dt.isBefore(earliest))) {
-            earliest = dt;
+          if (dt != null) {
+            final dtDay = DateTime(dt.year, dt.month, dt.day);
+            if (earliest == null || dtDay.isBefore(DateTime(earliest.year, earliest.month, earliest.day))) {
+              earliest = dt;
+              earliestCount = 1;
+            } else if (dtDay == DateTime(earliest.year, earliest.month, earliest.day)) {
+              earliestCount++;
+            }
           }
         }
       }
       _nextScheduledAt = earliest;
+      _nextScheduledCount = earliestCount;
 
       if (kDebugMode) {
         debugPrint(
