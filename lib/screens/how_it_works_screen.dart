@@ -48,15 +48,27 @@ class HowItWorksScreen extends StatelessWidget {
                       ),
                       _StepCard(
                         number: '2',
-                        title: 'Set Your Heartbeat Timer',
+                        title: 'Choose Your Mode',
                         body:
-                            'Choose a check-in cadence that fits your life — from 7 days to 10 years. '
-                            'Free users have a 30-day timer. Pro unlocks 7–365 days, and Lifetime '
-                            'extends up to 3,650 days (10 years).',
-                        icon: Icons.timer_outlined,
+                            'Guardian Vault protects entries behind a check-in timer — miss it and '
+                            'they all execute. Time Capsule delivers each entry on a date you choose, '
+                            'no check-ins needed. Forever Letters sends a recurring message to your '
+                            'recipient every year on the same date. Guardian and Time Capsule are '
+                            'available on all plans. Forever Letters requires Pro or Lifetime.',
+                        icon: Icons.dashboard_outlined,
                       ),
                       _StepCard(
                         number: '3',
+                        title: 'Set Your Timer (Guardian Vault)',
+                        body:
+                            'Choose a check-in cadence that fits your life — from 7 days to 10 years. '
+                            'Free users have a 30-day timer. Pro unlocks 7–365 days, and Lifetime '
+                            'extends up to 3,650 days (10 years). Not needed for Time Capsule or '
+                            'Forever Letters.',
+                        icon: Icons.timer_outlined,
+                      ),
+                      _StepCard(
+                        number: '4',
                         title: 'Assign Recipients',
                         body:
                             'Each vault entry can be delivered to a different person. '
@@ -65,10 +77,10 @@ class HowItWorksScreen extends StatelessWidget {
                         icon: Icons.people_outline,
                       ),
                       _StepCard(
-                        number: '4',
+                        number: '5',
                         title: 'Check In to Keep Your Vault Locked',
                         body:
-                            'Long-press the Soul Fire orb to reset your timer. '
+                            'In Guardian Vault mode, long-press the Soul Fire orb to reset your timer. '
                             'Your first press per session always resets. After that, '
                             'a 12-hour cooldown prevents unnecessary writes — you will '
                             'see "Vault Secure" instead of "Signal Verified" during cooldown. '
@@ -77,13 +89,15 @@ class HowItWorksScreen extends StatelessWidget {
                         icon: Icons.favorite_border,
                       ),
                       _StepCard(
-                        number: '5',
+                        number: '6',
                         title: 'Protocol Executes',
                         body:
-                            'If your timer expires, Afterword delivers each entry to its designated recipient. '
-                            'They receive a secure link and a unique key, then decrypt your '
-                            'message entirely in their browser — no login required. '
-                            'Delivered items auto-purge after 30 days.',
+                            'When your timer expires (Guardian), your scheduled date arrives (Time Capsule), '
+                            'or the yearly anniversary hits (Forever Letters), Afterword delivers each entry. '
+                            'Recipients receive a secure link and a unique security key, then decrypt '
+                            'your message entirely in their browser — no login required. '
+                            'Guardian and Time Capsule entries auto-purge after 30 days. '
+                            'Forever Letters are never purged.',
                         icon: Icons.send_outlined,
                       ),
                       _TipCard(
@@ -97,34 +111,46 @@ class HowItWorksScreen extends StatelessWidget {
                         icon: Icons.mark_email_read_outlined,
                       ),
                       _StepCard(
-                        number: '6',
+                        number: '7',
                         title: 'Secure Erase',
                         body:
-                            'Pro and Lifetime users can set any item to "Erase" mode. '
-                            'When the timer expires, the data is permanently removed from our servers '
-                            'instead of being delivered. No emails sent. Complete data erasure.',
+                            'Pro and Lifetime users can set any Guardian or Time Capsule item to '
+                            '"Erase" mode. When the protocol executes, the data is permanently '
+                            'removed from our servers instead of being delivered. No emails sent. '
+                            'Complete data erasure.',
                         icon: Icons.delete_forever_outlined,
                       ),
                       const SizedBox(height: 24),
                       _SectionTitle('Security Architecture'),
-                      _BulletPoint('Industry-standard encryption — keys generated on your device.'),
-                      _BulletPoint('Integrity seals — prevent tampering with recipient addresses.'),
+                      _BulletPoint('AES-256-GCM encryption — keys generated on your device.'),
+                      _BulletPoint('Dual key envelope — data key wrapped with both device and server secrets.'),
+                      _BulletPoint('HMAC integrity seals — detect tampering with recipient, content, or keys.'),
+                      _BulletPoint('Tampering never blocks delivery — entries are sent even if HMAC mismatches, '
+                          'preventing denial-of-service attacks.'),
+                      _BulletPoint('Zero-knowledge option — server never stores the data key. You manage it.'),
                       _BulletPoint('Data isolation — your data is fully separated at the database level.'),
                       _BulletPoint('Subscription features verified securely on the server.'),
                       _BulletPoint('Audio files encrypted before upload and stored in a private bucket.'),
-                      _BulletPoint('Delivered vault entries auto-purge after 30 days.'),
+                      _BulletPoint('Delivered vault entries auto-purge after 30 days (Guardian/Time Capsule).'),
+                      _BulletPoint('Forever Letters never auto-purge — only manual deletion removes them.'),
                       const SizedBox(height: 24),
                       _SectionTitle('Plans'),
-                      _BulletPoint('Free — 3 entries, 30-day timer, push notifications at 66% and 33%.'),
+                      _BulletPoint('Free — 3 entries, 30-day timer, Guardian & Time Capsule, '
+                          'push notifications at 66% and 33%.'),
                       _BulletPoint('Pro — 20 entries, encrypted audio vault (1 min), '
-                          'custom timer (7–365 days), Secure Erase mode, email warning 24h before expiry.'),
+                          'custom timer (7–365 days), Secure Erase, Forever Letters, '
+                          'email warning 24h before expiry.'),
                       _BulletPoint('Lifetime — 30 entries, extended audio vault '
-                          '(10 min), timer up to 10 years, all 8 themes and Soul Fire styles.'),
+                          '(10 min), timer up to 10 years, Forever Letters, '
+                          'all themes and Soul Fire styles.'),
                       const SizedBox(height: 24),
                       _SectionTitle('Modes'),
                       _BulletPoint('Guardian Vault — single global timer. Miss a check-in and all entries fire.'),
                       _BulletPoint('Time Capsule — schedule each entry for a specific date. No check-ins needed.'),
-                      _BulletPoint('Zero-Knowledge — per-entry toggle. Server never stores the key. You manage it.'),
+                      _BulletPoint('Forever Letters — send recurring messages every year on the same date. '
+                          'Pro and Lifetime only.'),
+                      _BulletPoint('Zero-Knowledge — per-entry toggle (Guardian/Time Capsule only). '
+                          'Server never stores the key. You manage it.'),
                     ],
                   ),
                 ),

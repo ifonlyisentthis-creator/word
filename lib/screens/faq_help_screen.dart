@@ -47,23 +47,36 @@ class FaqHelpScreen extends StatelessWidget {
                             'ever store ciphertext — never your plaintext.',
                       ),
                       _FaqItem(
+                        question: 'What are the three modes?',
+                        answer:
+                            'Guardian Vault uses a check-in timer — miss it and '
+                            'all entries execute at once. Time Capsule delivers each '
+                            'entry on a date you choose, no check-ins needed. '
+                            'Forever Letters sends a recurring message to your '
+                            'recipient every year on the same date. All modes are '
+                            'available on Pro and Lifetime plans. Free users can '
+                            'use Guardian Vault and Time Capsule.',
+                      ),
+                      _FaqItem(
                         question: 'What happens if I forget to check in?',
                         answer:
-                            'Your timer expires and Afterword delivers each vault '
-                            'entry to its designated recipient (or permanently '
-                            'erases it if set to Secure Erase).',
+                            'In Guardian Vault mode, your timer expires and Afterword '
+                            'delivers each vault entry to its designated recipient '
+                            '(or permanently erases it if set to Secure Erase). '
+                            'Time Capsule and Forever Letters do not require check-ins.',
                       ),
                       _FaqItem(
                         question: 'Can I change my timer after setting it?',
                         answer:
                             'Yes. Tap the timer card on the home screen to adjust '
-                            'your check-in cadence at any time.',
+                            'your check-in cadence at any time. This only applies '
+                            'to Guardian Vault mode.',
                       ),
                       _FaqItem(
                         question: 'Will my recipient need an account?',
                         answer:
-                            'No. They receive a secure link and a unique key via '
-                            'email, then decrypt everything in their browser — '
+                            'No. They receive a secure link and a unique security '
+                            'key via email, then decrypt everything in their browser — '
                             'no login or app download required.',
                       ),
                       _FaqItem(
@@ -80,7 +93,26 @@ class FaqHelpScreen extends StatelessWidget {
                         answer:
                             'Manual only. You must long-press the Soul Fire orb '
                             'yourself to reset the timer. There is no auto '
-                            'check-in — this is by design for security.',
+                            'check-in — this is by design for security. Soul Fire '
+                            'is only used in Guardian Vault mode.',
+                      ),
+                      _FaqItem(
+                        question: 'How does Forever Letters work?',
+                        answer:
+                            'Pick a date and write a message or record audio. Every '
+                            'year on that date, your recipient receives the same '
+                            'encrypted message with a secure viewer link and key. '
+                            'Forever Letters run independently — they are not affected '
+                            'by your Guardian or Time Capsule settings. Available on '
+                            'Pro and Lifetime plans.',
+                      ),
+                      _FaqItem(
+                        question: 'Can I edit or delete a Forever Letter?',
+                        answer:
+                            'Yes. Tap any Forever Letter to view it, then use the '
+                            'edit or delete buttons. Deleting is permanent — the '
+                            'letter will not be sent again. Editing re-encrypts '
+                            'the content on your device.',
                       ),
                       _FaqItem(
                         question: 'Emails landing in spam?',
@@ -92,32 +124,28 @@ class FaqHelpScreen extends StatelessWidget {
                       _FaqItem(
                         question: 'What happens to my subscription if I delete my account?',
                         answer:
-                            'Your Afterword profile, vault entries, and all stored '
-                            'data are permanently deleted. Your subscription (including '
-                            'Lifetime) is lost and cannot be restored. You would need '
-                            'to re-purchase if you create a new account.',
+                            'Your Afterword profile, vault entries, Forever Letters, '
+                            'and all stored data are permanently deleted. Your '
+                            'subscription (including Lifetime) is lost and cannot '
+                            'be restored. You would need to re-purchase if you '
+                            'create a new account.',
                       ),
                       _FaqItem(
                         question: 'How long do recipients have to view delivered entries?',
                         answer:
-                            'Recipients have 30 days from the delivery date to '
-                            'access and decrypt their entry. After that, the data '
-                            'is permanently purged from our servers.',
-                      ),
-                      _FaqItem(
-                        question: 'What is the difference between Guardian Vault and Time Capsule?',
-                        answer:
-                            'Guardian Vault uses a single check-in timer — if you '
-                            'miss it, all entries execute at once. Time Capsule lets '
-                            'you schedule each entry for a specific future date with '
-                            'no check-ins needed. Both modes are available on all plans.',
+                            'In Guardian Vault and Time Capsule modes, recipients '
+                            'have 30 days from the delivery date to access and '
+                            'decrypt their entry. After that, the data is permanently '
+                            'purged. Forever Letters are never purged — they are '
+                            'delivered every year as long as the letter exists.',
                       ),
                       _FaqItem(
                         question: 'How do I switch between Guardian Vault and Time Capsule?',
                         answer:
                             'Go to Account Settings and tap the mode toggle. You must '
-                            'clear all active entries before switching. This ensures no '
-                            'entries are left in an ambiguous state.',
+                            'clear all active entries before switching. Forever Letters '
+                            'are not affected by mode switching — they work '
+                            'independently in any mode.',
                       ),
                       _FaqItem(
                         question: 'What is zero-knowledge mode?',
@@ -125,7 +153,8 @@ class FaqHelpScreen extends StatelessWidget {
                             'A per-entry toggle that keeps the encryption key only on '
                             'your device. The server stores no copy of the data key. '
                             'You must share the key with your beneficiary manually. '
-                            'Available on all plans.',
+                            'Available on Guardian Vault and Time Capsule entries on '
+                            'all plans. Not available on Forever Letters.',
                       ),
                       _FaqItem(
                         question: 'What happens if I lose my zero-knowledge key?',
@@ -135,18 +164,55 @@ class FaqHelpScreen extends StatelessWidget {
                             'can decrypt it. Save the key securely when prompted.',
                       ),
                       _FaqItem(
+                        question: 'How does tampering protection work?',
+                        answer:
+                            'Every vault entry includes an HMAC integrity seal '
+                            'computed on your device. This seal covers the recipient '
+                            'email, message content, and key material. If anyone '
+                            '(including a server admin) modifies any sealed field, '
+                            'the HMAC check detects the mismatch. Importantly, '
+                            'tampering never blocks delivery — the entry is still '
+                            'sent to protect against denial-of-service attacks. '
+                            'The mismatch is logged for audit purposes.',
+                      ),
+                      _FaqItem(
+                        question: 'How is my data encrypted?',
+                        answer:
+                            'Each vault entry is encrypted with a unique AES-256-GCM '
+                            'key generated on your device. The key is then wrapped '
+                            'in a dual envelope — encrypted once with your device '
+                            'secret and once with a server secret. Both halves are '
+                            'needed to recover the key. The server only stores '
+                            'ciphertext. On delivery, the server decrypts its half '
+                            'of the key envelope and sends the result to your '
+                            'recipient, who decrypts in their browser.',
+                      ),
+                      _FaqItem(
                         question: 'How many vault entries can I create?',
                         answer:
                             'Free: 3 entries. Pro: 20 entries. Lifetime: 30 entries. '
-                            'Slots are recovered after sent entries are purged '
+                            'These limits are shared across Guardian Vault and Time '
+                            'Capsule. Forever Letters have separate limits within your '
+                            'tier. Slots are recovered after sent entries are purged '
                             '(30 days after delivery).',
                       ),
                       _FaqItem(
                         question: 'How far ahead can I schedule a Time Capsule entry?',
                         answer:
                             'Free: up to 30 days ahead. Pro: up to 1 year. '
-                            'Lifetime: up to 10 years. If you downgrade, scheduled '
-                            'dates beyond your new limit are adjusted automatically.',
+                            'Lifetime: up to 10 years. Forever Letters can be '
+                            'set to any date within the next year. If you downgrade, '
+                            'scheduled dates beyond your new limit are adjusted '
+                            'automatically.',
+                      ),
+                      _FaqItem(
+                        question: 'What happens if I downgrade from Pro to Free?',
+                        answer:
+                            'Your existing text entries are preserved but you cannot '
+                            'create new ones until you are under the free limit (3). '
+                            'Audio entries and Forever Letters are deleted. Scheduled '
+                            'dates beyond 30 days are clamped. Themes and Soul Fire '
+                            'styles reset to free defaults.',
                       ),
                       const SizedBox(height: 28),
                       _SectionTitle('Contact & Support'),

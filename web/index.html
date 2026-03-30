@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Afterword is a secure digital vault with two modes: Guardian Vault (check-in timer) and Time Capsule (scheduled delivery). AES-256 encryption, zero-knowledge option, and recipient-only viewer.">
+    <meta name="description" content="Afterword is a secure digital vault with three modes: Guardian Vault (check-in timer), Time Capsule (scheduled delivery), and Forever Letters (recurring annual delivery). AES-256-GCM encryption, HMAC tamper protection, zero-knowledge option, and recipient-only browser viewer.">
     <meta name="theme-color" content="#050505">
     <title>Afterword · Secure Digital Vault</title>
 
@@ -46,6 +46,7 @@
             <a href="#overview">Overview</a>
             <a href="#value">Why Afterword</a>
             <a href="#security">Security</a>
+            <a href="#encryption">How Encryption Works</a>
             <a href="#protocol">Protocol</a>
             <a href="#plans">Plans</a>
             <a href="#faq">FAQ</a>
@@ -63,15 +64,16 @@
       <main>
         <section id="overview" class="hero">
           <div class="hero__copy">
-            <span class="eyebrow">Digital time capsule · Secure vault</span>
+            <span class="eyebrow">Digital time capsule &middot; Secure vault &middot; Forever letters</span>
             <h1>
               A secure vault for your most important words &mdash; delivered
               on your terms, or erased forever.
             </h1>
             <p>
-              Afterword gives you two powerful modes: <strong>Guardian Vault</strong>
-              protects entries behind a check-in timer, and <strong>Time Capsule</strong>
-              delivers them on a date you choose. End-to-end encrypted, with an
+              Afterword gives you three powerful modes: <strong>Guardian Vault</strong>
+              protects entries behind a check-in timer, <strong>Time Capsule</strong>
+              delivers them on a date you choose, and <strong>Forever Letters</strong>
+              sends a recurring message every year on the same date. End-to-end encrypted, with an
               optional zero-knowledge mode where even the server cannot decrypt.
             </p>
             <div class="hero__actions">
@@ -80,8 +82,8 @@
             </div>
             <div class="hero__stats">
               <div class="stat card">
-                <h3>Two modes, one vault</h3>
-                <p>Guardian Vault (check-in timer) or Time Capsule (scheduled date).</p>
+                <h3>Three modes, one vault</h3>
+                <p>Guardian Vault (timer), Time Capsule (date), or Forever Letters (annual).</p>
               </div>
               <div class="stat card">
                 <h3>Send or erase on expiry</h3>
@@ -95,6 +97,7 @@
             <div class="signal-row">
               <span class="signal">AES-256-GCM encryption</span>
               <span class="signal">HMAC integrity seal</span>
+              <span class="signal">Dual key envelope</span>
               <span class="signal">Android-first release</span>
             </div>
           </div>
@@ -107,11 +110,11 @@
             <div class="panel__details">
               <div class="detail">
                 <span class="detail__label">Modes</span>
-                <p>Guardian Vault (timer) or Time Capsule (scheduled date).</p>
+                <p>Guardian Vault, Time Capsule, or Forever Letters.</p>
               </div>
               <div class="detail">
                 <span class="detail__label">Outcome</span>
-                <p>Send or erase each item automatically.</p>
+                <p>Send, erase, or deliver annually &mdash; automatically.</p>
               </div>
               <div class="detail">
                 <span class="detail__label">Access</span>
@@ -144,6 +147,10 @@
               <p>Schedule each entry for a specific date. No timer, no check-ins required.</p>
             </article>
             <article class="card feature reveal">
+              <h3>Forever Letters</h3>
+              <p>Send a recurring message every year on the same date. Your words live on. Pro &amp; Lifetime.</p>
+            </article>
+            <article class="card feature reveal">
               <h3>Zero-knowledge mode</h3>
               <p>Self-managed encryption keys. The server never sees your data key.</p>
             </article>
@@ -153,7 +160,7 @@
             </article>
             <article class="card feature reveal">
               <h3>Recipient-safe viewer</h3>
-              <p>Unlock sent items with a private key, no login required.</p>
+              <p>Unlock sent items with a private key in the browser, no login required.</p>
             </article>
             <article class="card feature reveal">
               <h3>Automated warnings</h3>
@@ -164,8 +171,8 @@
               <p>Pro users get 1 minute, Lifetime members get 10 minutes of encrypted audio.</p>
             </article>
             <article class="card feature reveal">
-              <h3>Integrity seals</h3>
-              <p>HMAC signatures detect tampering and protect recipients.</p>
+              <h3>Tamper protection</h3>
+              <p>HMAC integrity seals detect any modification to entries, recipients, or keys.</p>
             </article>
           </div>
         </section>
@@ -177,66 +184,159 @@
             <p>
               Your device encrypts every message, recipient, and audio file
               before upload. The server only stores ciphertext and integrity
-              seals.
+              seals. Here is exactly how it works.
             </p>
           </div>
           <div class="security-grid">
             <article class="card reveal">
-              <h3>Encrypted recipients</h3>
-              <p>Recipient addresses are encrypted to prevent swaps.</p>
+              <h3>AES-256-GCM encryption</h3>
+              <p>Every vault entry is encrypted with a unique 256-bit key using AES-GCM (Galois/Counter Mode). This is the same standard used by banks and governments. Keys are generated exclusively on your device.</p>
             </article>
             <article class="card reveal">
-              <h3>Client-side keys</h3>
-              <p>Keys are created on-device and wrapped before upload.</p>
+              <h3>Dual key envelope</h3>
+              <p>Each data key is wrapped twice: once with your device secret (stored in secure hardware) and once with a server secret. Both halves are required to recover the key. Neither party alone can decrypt your data.</p>
+            </article>
+            <article class="card reveal">
+              <h3>Encrypted recipients</h3>
+              <p>Recipient email addresses are encrypted on your device before upload. This prevents anyone &mdash; including Afterword engineers &mdash; from swapping, reading, or redirecting your entries.</p>
             </article>
             <article class="card reveal">
               <h3>Zero-knowledge option</h3>
-              <p>Enable self-managed keys per entry. The server stores no copy of the data key.</p>
+              <p>Enable self-managed keys per entry. The server envelope stores an empty value. Only your device holds the decryption key. You share it with your beneficiary out-of-band.</p>
             </article>
             <article class="card reveal">
               <h3>Audio locked as noise</h3>
-              <p>Voice notes are encrypted into noise before storage.</p>
+              <p>Voice notes are encrypted with AES-256-GCM on your device before upload. On the server, they are indistinguishable from random noise. Stored in a private, access-controlled bucket with no public URL.</p>
+            </article>
+            <article class="card reveal">
+              <h3>Browser-only decryption</h3>
+              <p>Recipients decrypt entries entirely in their browser using the Web Crypto API. The security key is provided in the delivery email (or shared manually for ZK entries). No data is sent back to Afterword servers during decryption.</p>
             </article>
           </div>
           <div class="security-banner card reveal">
             <h3>Security promises</h3>
             <ul>
-              <li>No plaintext ever touches the database.</li>
-              <li>Recipient emails are encrypted and sealed.</li>
-              <li>Sent items remain readable for 30 days, then purge.</li>
+              <li>No plaintext ever touches the database &mdash; not messages, not recipients, not audio.</li>
+              <li>Recipient emails are encrypted and sealed with HMAC integrity protection.</li>
+              <li>The server never stores your security key in plaintext.</li>
+              <li>Sent items remain readable for 30 days (Guardian/Time Capsule), then permanently purge.</li>
+              <li>Forever Letters are never auto-deleted &mdash; only manual deletion removes them.</li>
+              <li>Account deletion is immediate and irreversible &mdash; all data is destroyed.</li>
             </ul>
+          </div>
+        </section>
+
+        <section id="encryption" class="section">
+          <div class="section__header">
+            <span class="eyebrow">Deep dive</span>
+            <h2>How tampering protection &amp; encryption work.</h2>
+            <p>
+              Users have asked how we protect against tampering, how data is stored on the server,
+              and what proof exists that we cannot read your entries. Here is the full technical explanation.
+            </p>
+          </div>
+          <div class="protocol-grid">
+            <article class="card step reveal">
+              <span class="step__number">Encryption</span>
+              <h3>What happens when you save an entry</h3>
+              <p>
+                1. Your device generates a random 256-bit AES-GCM key (the <strong>data key</strong>).<br>
+                2. Your message and recipient email are encrypted with this data key.<br>
+                3. The data key itself is wrapped in a <strong>dual envelope</strong>:
+                one half encrypted with your <strong>device secret</strong> (stored in Android Keystore / iOS Keychain),
+                one half encrypted with the <strong>server secret</strong> (an environment variable the server holds).<br>
+                4. An <strong>HMAC integrity seal</strong> is computed over the recipient ciphertext, data key envelope, and entry metadata.<br>
+                5. Only ciphertext, the sealed envelope, and the HMAC tag are uploaded. The plaintext never leaves your device.
+              </p>
+            </article>
+            <article class="card step reveal">
+              <span class="step__number">Delivery</span>
+              <h3>What happens when an entry is delivered</h3>
+              <p>
+                1. The server reads the encrypted entry and the dual key envelope.<br>
+                2. It decrypts only <strong>its half</strong> of the key envelope using the server secret. This produces the <strong>security key</strong>.<br>
+                3. The security key and a viewer link are emailed to the recipient.<br>
+                4. The recipient opens <strong>view.afterword-app.com</strong>, pastes the security key, and the browser
+                decrypts the entry using the <strong>Web Crypto API</strong>. No data is sent back to the server.<br>
+                5. For <strong>zero-knowledge entries</strong>, step 2 is skipped entirely &mdash; the server envelope is empty.
+                The sender must share the security key manually.
+              </p>
+            </article>
+            <article class="card step reveal">
+              <span class="step__number">Tamper Seal</span>
+              <h3>How HMAC integrity protection works</h3>
+              <p>
+                Every vault entry includes an <strong>HMAC-SHA256</strong> tag computed on your device.
+                The HMAC covers the encrypted recipient email, the encrypted data key, and entry metadata.
+                The HMAC key is derived from your device secret.<br><br>
+                <strong>What this proves:</strong> If anyone modifies any sealed field on the server
+                (a rogue admin, a database breach, or a compromised API), the HMAC will not match
+                when verified during delivery.<br><br>
+                <strong>Critical design choice:</strong> HMAC mismatches are <strong>advisory only</strong>.
+                A mismatch is logged but <strong>never blocks delivery</strong>. This prevents a
+                denial-of-service attack where an attacker corrupts the HMAC to stop your entries
+                from being sent. Your entries are always delivered, even if tampered with &mdash; the
+                mismatch audit trail proves the tampering occurred.
+              </p>
+            </article>
+            <article class="card step reveal">
+              <span class="step__number">Proof</span>
+              <h3>What the server can and cannot see</h3>
+              <p>
+                <strong>The server stores:</strong><br>
+                &bull; Ciphertext (encrypted message, encrypted recipient, encrypted audio)<br>
+                &bull; Dual key envelope (device-encrypted half + server-encrypted half)<br>
+                &bull; HMAC integrity tag<br>
+                &bull; Metadata (timestamps, entry status, scheduled dates)<br><br>
+                <strong>The server can never:</strong><br>
+                &bull; Read your message plaintext (requires your device key to unwrap the data key)<br>
+                &bull; Read recipient email addresses (encrypted with the data key)<br>
+                &bull; Swap recipients (changing the ciphertext would be detected by the HMAC seal)<br>
+                &bull; Decrypt zero-knowledge entries (the server envelope is empty)<br>
+                &bull; Recover data after account deletion (all rows are permanently erased)<br><br>
+                <strong>The server can:</strong><br>
+                &bull; Decrypt its half of the key envelope during delivery (this produces the security key for the recipient)<br>
+                &bull; See entry metadata (status, dates, tier) necessary for protocol execution<br>
+                &bull; See your email address (for authentication and account management)
+              </p>
+            </article>
           </div>
         </section>
 
         <section id="protocol" class="section">
           <div class="section__header">
             <span class="eyebrow">Protocol flow</span>
-            <h2>Two modes, one vault. Choose how your entries are delivered.</h2>
+            <h2>Three modes, one vault. Choose how your entries are delivered.</h2>
             <p>
               Guardian Vault uses a heartbeat timer. Time Capsule schedules each
-              entry for a specific date. Both are end-to-end encrypted.
+              entry for a specific date. Forever Letters delivers annually. All are end-to-end encrypted.
             </p>
           </div>
           <div class="protocol-grid">
             <article class="card step reveal">
               <span class="step__number">Guardian Vault</span>
               <h3>Heartbeat-protected</h3>
-              <p>Set a check-in timer (7&ndash;3650 days). If you miss it, all entries execute at once. Press Soul Fire to reset the timer.</p>
+              <p>Set a check-in timer (7&ndash;3650 days). If you miss it, all entries execute at once. Press Soul Fire to reset the timer. Push notifications remind you at 66% and 33%.</p>
             </article>
             <article class="card step reveal">
               <span class="step__number">Time Capsule</span>
               <h3>Scheduled delivery</h3>
-              <p>Pick a future date for each entry. No timer, no check-ins. Each entry is delivered on its scheduled date automatically.</p>
+              <p>Pick a future date for each entry. No timer, no check-ins. Each entry is delivered on its scheduled date automatically. 30-day grace then auto-purge.</p>
+            </article>
+            <article class="card step reveal">
+              <span class="step__number">Forever Letters</span>
+              <h3>Recurring annual delivery</h3>
+              <p>Pick a date. Every year on that date, your recipient receives the same encrypted message with a secure viewer link and key. Your words live on, year after year. Pro &amp; Lifetime only.</p>
             </article>
             <article class="card step reveal">
               <span class="step__number">01</span>
               <h3>Secure your vault</h3>
-              <p>Write messages or audio. Everything encrypts locally. Toggle zero-knowledge for entries you want fully private.</p>
+              <p>Write messages or record audio. Everything encrypts locally. Toggle zero-knowledge for Guardian/Time Capsule entries you want fully private.</p>
             </article>
             <article class="card step reveal">
               <span class="step__number">02</span>
               <h3>Protocol executes</h3>
-              <p>Afterword sends or erases entries exactly as instructed. Sent items stay available for 30 days, then purge.</p>
+              <p>Afterword sends or erases entries exactly as instructed. Guardian and Time Capsule entries stay available for 30 days, then purge. Forever Letters never purge.</p>
             </article>
           </div>
         </section>
@@ -264,10 +364,11 @@
             <article class="card plan plan--featured reveal">
               <div class="plan__tag">Most popular</div>
               <h3>Pro</h3>
-              <p class="plan__price">$1.99 / mo · $19.99 / yr</p>
+              <p class="plan__price">$1.99 / mo &middot; $19.99 / yr</p>
               <ul>
                 <li>20 text entries</li>
                 <li>Secure Erase mode</li>
+                <li>Forever Letters (recurring annual delivery)</li>
                 <li>Encrypted audio vault (1 min)</li>
                 <li>Custom timer (7&ndash;365 days)</li>
                 <li>Scheduled delivery (up to 1 year ahead)</li>
@@ -281,6 +382,7 @@
               <ul>
                 <li>30 text entries</li>
                 <li>Everything in Pro, forever</li>
+                <li>Forever Letters (recurring annual delivery)</li>
                 <li>Encrypted audio vault (10 min)</li>
                 <li>Extended timer (up to 10 years)</li>
                 <li>Scheduled delivery (up to 10 years ahead)</li>
@@ -303,6 +405,12 @@
             </div>
             <div class="comparison__row">
               <span data-label="Feature">Secure Erase</span>
+              <span data-label="Free">No</span>
+              <span data-label="Pro">Yes</span>
+              <span data-label="Lifetime">Yes</span>
+            </div>
+            <div class="comparison__row">
+              <span data-label="Feature">Forever Letters</span>
               <span data-label="Free">No</span>
               <span data-label="Pro">Yes</span>
               <span data-label="Lifetime">Yes</span>
@@ -366,47 +474,81 @@
           <div class="faq-grid">
             <div class="faq__item reveal">
               <h3>Can Afterword read my messages?</h3>
-              <p>No. Encryption happens on-device and keys never leave you. With zero-knowledge mode, even the server cannot decrypt your data key.</p>
+              <p>No. Encryption happens on-device using AES-256-GCM and keys never leave your device. The server only stores ciphertext. With zero-knowledge mode, even the server cannot decrypt your data key.</p>
             </div>
             <div class="faq__item reveal">
-              <h3>What&rsquo;s the difference between Guardian Vault and Time Capsule?</h3>
+              <h3>What are the three modes?</h3>
               <p>
-                Guardian Vault uses a single check-in timer for all entries &mdash;
-                miss it and everything executes. Time Capsule lets you schedule each
-                entry for a specific date with no check-ins needed.
+                <strong>Guardian Vault</strong> uses a check-in timer for all entries &mdash;
+                miss it and everything executes. <strong>Time Capsule</strong> lets you schedule each
+                entry for a specific date. <strong>Forever Letters</strong> sends a recurring message
+                every year on the same date. Guardian and Time Capsule work on all plans;
+                Forever Letters requires Pro or Lifetime.
+              </p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>How does tampering protection work?</h3>
+              <p>
+                Every entry includes an HMAC-SHA256 integrity seal computed on your device. The seal covers
+                the encrypted recipient, encrypted data key, and metadata. If anyone modifies a sealed field
+                on the server, the HMAC will not match. Mismatches are logged but never block delivery &mdash;
+                this prevents denial-of-service attacks where an attacker could corrupt the seal to stop your
+                entries from being sent.
+              </p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>How is my data encrypted?</h3>
+              <p>
+                Each entry gets a unique AES-256-GCM key. That key is wrapped in a dual envelope &mdash;
+                one half encrypted with your device secret, one half with the server secret. On delivery,
+                the server decrypts only its half and sends the resulting security key to your recipient.
+                The recipient decrypts in their browser. Neither party alone can access your data.
               </p>
             </div>
             <div class="faq__item reveal">
               <h3>What is zero-knowledge mode?</h3>
               <p>
                 A per-entry toggle that keeps the encryption key only on your device. The
-                server stores no copy, so even we cannot decrypt. You manually share the
-                key with your beneficiary.
+                server envelope is empty. Even we cannot decrypt. You manually share the
+                key with your beneficiary. Available on Guardian Vault and Time Capsule entries.
+              </p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>How does Forever Letters work?</h3>
+              <p>
+                Pick a date and write a message or record audio. Every year on that date, your
+                recipient gets the same encrypted message with a viewer link and security key.
+                Forever Letters run independently of your Guardian or Time Capsule settings.
+                You can view, edit, or delete a Forever Letter anytime.
               </p>
             </div>
             <div class="faq__item reveal">
               <h3>What if I miss a check-in?</h3>
               <p>
                 In Guardian Vault mode, the protocol executes. Sent items stay visible
-                for 30 days, then purge. In Time Capsule mode, there is no check-in &mdash;
-                entries deliver on their scheduled date.
+                for 30 days, then purge. Time Capsule and Forever Letters do not require
+                check-ins &mdash; they deliver automatically on their scheduled dates.
               </p>
             </div>
             <div class="faq__item reveal">
-              <h3>Can I update recipients?</h3>
-              <p>Yes. Edit any active entry and it re-encrypts on save.</p>
-            </div>
-            <div class="faq__item reveal">
               <h3>How do beneficiaries access items?</h3>
-              <p>They use view.afterword-app.com with the security key from the email. For zero-knowledge entries, the sender shares the key separately.</p>
+              <p>They open view.afterword-app.com and enter the security key from the delivery email. Decryption happens entirely in their browser using the Web Crypto API. For zero-knowledge entries, the sender shares the key separately.</p>
             </div>
             <div class="faq__item reveal">
               <h3>How many entries can I create?</h3>
-              <p>Free: 3 entries. Pro: 20 entries. Lifetime: 30 entries. Slots are recovered after sent entries are purged.</p>
+              <p>Free: 3 entries. Pro: 20 entries. Lifetime: 30 entries. Slots are recovered after sent entries are purged (30 days after delivery).</p>
             </div>
             <div class="faq__item reveal">
               <h3>Can I switch between modes?</h3>
-              <p>Yes, in Account Settings. You must clear all active entries before switching modes.</p>
+              <p>Yes, in Account Settings. You must clear all active Guardian/Time Capsule entries before switching. Forever Letters are not affected by mode switching &mdash; they work independently.</p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>What happens when I downgrade?</h3>
+              <p>Text entries are preserved but you cannot create new ones over the free limit. Audio entries, Forever Letters, and entries scheduled beyond 30 days are adjusted or removed automatically. Themes and Soul Fire styles reset to free defaults.</p>
+            </div>
+            <div class="faq__item reveal">
+              <h3>What happens if I delete my account?</h3>
+              <p>All vault entries, Forever Letters, encryption keys, key backups, and profile data are permanently destroyed. This is immediate and irreversible. Your subscription is lost and cannot be restored.</p>
             </div>
           </div>
         </section>
@@ -446,6 +588,7 @@
         <div class="footer__links">
           <a href="#overview">Overview</a>
           <a href="#security">Security</a>
+          <a href="#encryption">How Encryption Works</a>
           <a href="#plans">Plans</a>
           <a href="privacy.html">Privacy Policy</a>
           <a href="mailto:afterword.app@gmail.com">Contact</a>

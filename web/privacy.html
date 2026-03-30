@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Afterword privacy policy.">
+  <meta name="description" content="Afterword privacy policy — how we protect your data across Guardian Vault, Time Capsule, and Forever Letters modes.">
   <meta name="theme-color" content="#050505">
   <title>Afterword · Privacy Policy</title>
 
@@ -43,48 +43,73 @@
         <div class="section__header policy-hero__header">
           <span class="eyebrow">Privacy Policy</span>
           <h1>Afterword Privacy Policy</h1>
-          <p class="policy-hero__meta">Effective date: March 5, 2026</p>
+          <p class="policy-hero__meta">Effective date: March 31, 2026</p>
         </div>
 
         <div class="card policy-card">
           <p>
-            Afterword is a secure, time-locked digital vault. This policy explains what information we collect,
+            Afterword is a secure, time-locked digital vault with three operating modes:
+            Guardian Vault (check-in timer), Time Capsule (scheduled delivery), and Forever Letters
+            (recurring annual delivery). This policy explains what information we collect,
             how we use it, and the choices you have.
           </p>
 
           <h2>1) What we collect</h2>
           <ul>
             <li><strong>Account information</strong>: email address, authentication identifiers.</li>
-            <li><strong>Profile settings</strong>: sender name, subscription status, timer settings, theme selections.</li>
+            <li><strong>Profile settings</strong>: sender name, subscription status, timer settings, theme selections, app operating mode (Guardian Vault, Time Capsule).</li>
             <li><strong>Encrypted vault data</strong>: encrypted messages, encrypted recipient addresses, encrypted audio.
-              We store ciphertext and integrity seals, not plaintext.</li>
+              We store ciphertext, dual key envelopes, and HMAC integrity seals &mdash; not plaintext.</li>
+            <li><strong>Delivery metadata</strong>: scheduled delivery dates (Time Capsule), recurring delivery dates and last-sent-year tracking (Forever Letters), grace period timestamps.</li>
             <li><strong>Device and app info</strong>: push notification tokens and basic diagnostics needed to deliver notifications reliably.</li>
             <li><strong>Purchase information</strong>: subscription entitlement state (processed via our billing providers).</li>
           </ul>
 
           <h2>2) What we do not collect</h2>
           <ul>
-            <li><strong>We do not collect your message plaintext</strong>.</li>
-            <li><strong>We do not collect beneficiary security keys</strong>. Decryption happens locally in the beneficiary’s browser.</li>
+            <li><strong>We do not collect your message plaintext</strong>. All content is encrypted on your device with AES-256-GCM before upload.</li>
+            <li><strong>We do not collect beneficiary security keys</strong>. Decryption happens locally in the beneficiary's browser using the Web Crypto API.</li>
+            <li><strong>We do not collect analytics, advertising identifiers, location data, contacts, browsing history, or any telemetry.</strong></li>
           </ul>
 
-          <h2>3) How we use information</h2>
+          <h2>3) How encryption works</h2>
+          <p>
+            Every vault entry is encrypted with a unique AES-256-GCM key generated on your device.
+            The data key is then wrapped in a <strong>dual envelope</strong>: one half encrypted with
+            your device secret (stored in secure hardware), one half encrypted with a server secret.
+            Neither party alone can decrypt your data.
+          </p>
+          <p>
+            Each entry includes an <strong>HMAC-SHA256 integrity seal</strong> computed on your device.
+            This seal covers the encrypted recipient, data key envelope, and metadata. If any sealed
+            field is modified on the server, the HMAC will not match. Mismatches are logged but never
+            block delivery &mdash; this prevents denial-of-service attacks.
+          </p>
+          <p>
+            <strong>Zero-knowledge mode</strong> (per entry, Guardian Vault and Time Capsule only):
+            the server envelope stores an empty value. Only your device holds the decryption key.
+            If lost, the entry is permanently unrecoverable.
+          </p>
+
+          <h2>4) How we use information</h2>
           <ul>
             <li>To create and manage your account.</li>
             <li>To store your encrypted vault items and enforce integrity checks.</li>
-            <li>To operate the check-in timer, warnings, and protocol execution.</li>
+            <li>To operate the check-in timer, warnings, and protocol execution (Guardian Vault).</li>
+            <li>To deliver entries on scheduled dates (Time Capsule) or annually (Forever Letters).</li>
             <li>To deliver push notifications and service emails.</li>
+            <li>To verify subscription entitlements securely.</li>
             <li>To provide customer support when you contact us.</li>
           </ul>
 
-          <h2>4) Legal bases</h2>
+          <h2>5) Legal bases</h2>
           <ul>
             <li><strong>Contract</strong>: providing the service you request.</li>
             <li><strong>Legitimate interests</strong>: security, abuse prevention, and reliability.</li>
             <li><strong>Consent</strong>: where required (for example, notification permissions on your device).</li>
           </ul>
 
-          <h2>5) Sharing and third parties</h2>
+          <h2>6) Sharing and third parties</h2>
           <p>
             We use trusted providers to operate Afterword. They may process limited data on our behalf:
           </p>
@@ -95,27 +120,30 @@
             <li><strong>Resend</strong>: email delivery for warnings and beneficiary release messages.</li>
           </ul>
           <p>
-            We do not sell your personal information.
+            No third party has access to your decrypted vault content. We do not sell your personal information.
           </p>
 
-          <h2>6) Retention</h2>
+          <h2>7) Retention</h2>
           <ul>
             <li>Encrypted vault items are retained until you delete them, your account is deleted, or the protocol lifecycle triggers deletion.</li>
-            <li>When items are released to a beneficiary, they are available for a limited period and then automatically purged.</li>
+            <li><strong>Guardian Vault and Time Capsule</strong>: sent entries are available for 30 days (grace period), then permanently purged. Vault slots are recovered after purge.</li>
+            <li><strong>Forever Letters</strong>: never automatically deleted. They deliver annually until you manually delete them or delete your account.</li>
             <li>Operational logs and delivery metadata may be retained briefly for reliability and abuse prevention.</li>
           </ul>
 
-          <h2>7) Security</h2>
+          <h2>8) Security</h2>
           <p>
-            Afterword is designed so the service cannot read your vault contents. Encryption occurs on your device.
-            We also use integrity seals (HMAC) to detect tampering. No system is perfectly secure, but we design
+            Afterword is designed so the service cannot read your vault contents. Encryption occurs on your device
+            using AES-256-GCM with unique per-entry keys. We use HMAC-SHA256 integrity seals to detect tampering.
+            Recipients decrypt entries entirely in their browser using the Web Crypto API &mdash; the security key
+            is never sent back to our servers. No system is perfectly secure, but we design
             and operate Afterword with security as a core requirement.
           </p>
 
-          <h2>8) Your choices and rights</h2>
+          <h2>9) Your choices and rights</h2>
           <ul>
-            <li>You can edit or delete vault entries in the app.</li>
-            <li>You can delete your account from the app (which deletes associated stored data).</li>
+            <li>You can edit or delete vault entries and Forever Letters in the app.</li>
+            <li>You can delete your account from the app (which permanently destroys all stored data).</li>
             <li>You can manage notification permissions in your device settings.</li>
             <li>If applicable in your region, you may request access, correction, or deletion of personal information by contacting us.</li>
           </ul>
@@ -125,12 +153,12 @@
             <strong>If you have uninstalled the app, you can request full account deletion by emailing afterword.app@gmail.com from your registered email address.</strong>
           </p>
 
-          <h2>9) Children</h2>
+          <h2>10) Children</h2>
           <p>
             Afterword is strictly intended for users aged 18 and older. We do not knowingly collect information from anyone under the age of 18.
           </p>
 
-          <h2>10) Contact</h2>
+          <h2>11) Contact</h2>
           <p>
             Email: <a href="mailto:afterword.app@gmail.com">afterword.app@gmail.com</a>
           </p>

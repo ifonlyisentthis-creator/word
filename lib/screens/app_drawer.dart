@@ -357,7 +357,7 @@ class AppDrawer extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(
-                'Afterword v1.0',
+                'Afterword v1.1',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: Colors.white24,
                   fontSize: 11,

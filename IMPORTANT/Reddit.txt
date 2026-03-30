@@ -1,0 +1,141 @@
+# TITLE OPTIONS (pick one):
+
+**Option 1:** I built an app because my friend died before he could say goodbye to his family. Now strangers are using it for deathbed confessions, letters to exes, and messages they're too scared to send while alive.
+
+**Option 2:** What would you say if you knew you'd never get another chance? I built an app for exactly that.
+
+**Option 3:** I spent 8 months building a digital "dead man's switch" for messages. People are using it in ways I never expected.
+
+---
+
+# POST BODY:
+
+Life doesn't send calendar invites before it ends.
+
+My friend passed away suddenly two years ago. No warning, no goodbye, nothing. His family found out he'd been working on letters to each of them — drafts sitting in his notes app that he kept putting off "for later." Later never came.
+
+That stuck with me. How many of us have things we want to say but keep waiting for the "right moment"? A confession. An apology. A thank you that feels too awkward to say out loud. Words for someone we've lost touch with.
+
+So I built **Afterword**.
+
+---
+
+## What is it?
+
+At its core, Afterword is a time-locked digital vault. You write messages, record audio, store whatever you want — and it only gets delivered when YOU want it to, or when you're no longer around to stop it.
+
+The original idea was for final messages — things you want people to know after you're gone. But people have started using it for stuff I never imagined:
+
+- Letters to future selves
+- Confessions they're not ready to share yet
+- Messages to exes they've moved on from (but still have things to say)
+- Birthday/anniversary messages scheduled years in advance
+- "If something happens to me" instructions for family
+- Recovery affirmations that get sent if they relapse
+- Love letters to partners, to be delivered on their 50th anniversary
+
+It's become less about death and more about saying the things we won't say while we're standing right in front of someone.
+
+---
+
+## Three Ways to Use It
+
+### 1. Guardian Vault (Dead Man's Switch)
+
+This is the OG mode. You set a timer — say, 30 days. Every time you open the app and check in, the timer resets. If you don't check in and the timer runs out? Your messages get delivered to whoever you specified.
+
+Think of it like a heartbeat monitor for your digital legacy. As long as you're around and checking in, nothing happens. The moment you stop... your words find their way to the people who need them.
+
+**Use case:** Final letters, passwords/account info for family, "if I disappear" messages, anything you want delivered only if you're not around to deliver it yourself.
+
+### 2. Time Capsule Mode
+
+Schedule messages for specific dates. Could be tomorrow, could be 10 years from now.
+
+Set it and forget it. On that exact date, it arrives. You could schedule a message to your kid for their 18th birthday when they're still 3. A letter to your future self. An anniversary reminder. A "remember when" to an old friend.
+
+Each message has its own delivery date. No timers, no check-ins — just scheduled delivery.
+
+**Use case:** Future letters, milestone messages, scheduled surprises, anything with a specific "open on" date.
+
+### 3. Forever Letters
+
+This one's my favorite. Annual recurring messages that go out every year on the same date, forever.
+
+Write a birthday message to your daughter. Every single year, on her birthday, she gets a letter from you. Even after you're gone. Could be encouragement, could be memories, could be terrible dad jokes — whatever you want.
+
+It's like leaving a piece of yourself that keeps showing up, year after year.
+
+**Use case:** Annual birthday letters, anniversary messages, holiday traditions, ongoing encouragement to someone in recovery.
+
+---
+
+## Security (I'm Obsessive About This)
+
+This is where I need to nerd out for a second, because I've seen too many "secure" apps that are anything but.
+
+### End-to-End Encryption
+
+Every message is encrypted on YOUR device before it ever leaves. I'm talking AES-256-GCM encryption with keys derived using Argon2id. The encrypted blob is what gets stored — I literally cannot read your messages even if I wanted to.
+
+### Zero-Knowledge Mode
+
+For the truly paranoid (respect), there's a zero-knowledge option. With this enabled, not even the server has the decryption key. The recipient gets a security key separately that they need to unlock the message. Without it? The message is meaningless gibberish.
+
+**How it works:** You get a security key when you create the entry. You can share that key however you want — write it down, put it in a safe, give it to a lawyer, tattoo it somewhere. The message can't be unlocked without it.
+
+### Tamper Detection
+
+Every piece of encrypted data has an HMAC signature attached. If someone (including me, a hacker, anyone) tries to modify the encrypted content, the signature check fails and we reject it. You'd get notified that tampering was detected.
+
+### Server-Side Decryption Architecture
+
+For non-ZK messages, the decryption key is split: part on the server, part derived from your entry. Neither half is useful alone. At delivery time, they combine to decrypt. But here's the thing — this only happens at the moment of delivery, not before.
+
+### What About Google or Other Cloud Services?
+
+Some apps use Google Cloud KMS or AWS KMS for encryption. Those are solid enterprise services, but here's the difference:
+
+- **Them:** Keys are managed by Google/AWS. At the end of the day, they have theoretical access.
+- **Afterword:** Keys are derived client-side or split in ways where no single party (including me) can decrypt on their own.
+
+It's not that Google IAM is bad — it's that this app needed a trust model where even the developer is locked out. Your deathbed confession shouldn't be readable by anyone until the exact right moment.
+
+---
+
+## The Uncomfortable Part
+
+Building this made me confront my own mortality in ways I didn't expect. Testing the timer and imagining what I'd actually write if I knew time was running out. Realizing how many unsent messages I'm carrying around.
+
+Some of you will use this for lighthearted stuff — and that's great. Scheduled birthday messages, time capsule jokes, whatever.
+
+But some of you might be here because there's something heavy you've been carrying. Something you need to say but can't. Words stuck in your throat for years.
+
+This is your chance to get them out. To know that eventually — on your terms — they'll be heard.
+
+---
+
+## What's Next
+
+The app is live now. Free tier lets you try everything, paid tier removes limits.
+
+I'm not going to pretend I have some massive team or VC funding. It's just me, building something I wished existed when my friend died.
+
+If you have questions, feature ideas, or just want to tell me this is dumb — I'm here. Hit me up in the comments or DM.
+
+And if you do use it, maybe consider what you'd want to say if you couldn't say it in person. Sometimes just writing it down changes something.
+
+---
+
+**Links:**
+- [App Store link]
+- [Play Store link]
+- [Website]
+
+---
+
+*PS: Yes, I've thought about what happens if MY app disappears. There's a contingency system in place. Your messages don't vanish if my server goes down. Happy to explain if anyone's curious.*
+
+---
+
+**TL;DR:** Built an app for messages you want delivered later — when you're gone, on a specific date, or annually forever. Bank-grade encryption, tamper protection, optional zero-knowledge mode where even I can't read your stuff. Free to try.
