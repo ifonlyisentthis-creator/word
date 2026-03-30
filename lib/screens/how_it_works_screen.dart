@@ -115,11 +115,16 @@ class HowItWorksScreen extends StatelessWidget {
                       _BulletPoint('Delivered vault entries auto-purge after 30 days.'),
                       const SizedBox(height: 24),
                       _SectionTitle('Plans'),
-                      _BulletPoint('Free — 3 text items, 30-day timer, push notifications at 66% and 33%.'),
-                      _BulletPoint('Pro — Unlimited text items, encrypted audio vault (1 min), '
+                      _BulletPoint('Free — 3 entries, 30-day timer, push notifications at 66% and 33%.'),
+                      _BulletPoint('Pro — 20 entries, encrypted audio vault (1 min), '
                           'custom timer (7–365 days), Secure Erase mode, email warning 24h before expiry.'),
-                      _BulletPoint('Lifetime — Everything in Pro, plus extended audio vault '
+                      _BulletPoint('Lifetime — 30 entries, extended audio vault '
                           '(10 min), timer up to 10 years, all 8 themes and Soul Fire styles.'),
+                      const SizedBox(height: 24),
+                      _SectionTitle('Modes'),
+                      _BulletPoint('Guardian Vault — single global timer. Miss a check-in and all entries fire.'),
+                      _BulletPoint('Time Capsule — schedule each entry for a specific date. No check-ins needed.'),
+                      _BulletPoint('Zero-Knowledge — per-entry toggle. Server never stores the key. You manage it.'),
                     ],
                   ),
                 ),

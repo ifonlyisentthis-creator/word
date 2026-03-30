@@ -41,7 +41,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
                     children: [
                       Text(
-                        'Last updated: February 2026',
+                        'Last updated: March 2026',
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: Colors.white38),
                       ),
@@ -54,8 +54,10 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         '• Vault entries (stored as encrypted ciphertext — never in plaintext)\n'
                         '• Recipient email addresses (encrypted on your device before upload)\n'
                         '• Subscription status (managed by your device\'s app store)\n'
-                        '• Push notification token (for timer reminders only)\n'
-                        '• Encrypted key backup (optional — only if you enable recovery phrase)\n\n'
+                        '• Push notification token (for timer reminders in Guardian Vault mode only)\n'
+                        '• Encrypted key backup (optional — only if you enable recovery phrase)\n'
+                        '• App operating mode preference (Guardian Vault or Time Capsule)\n'
+                        '• Scheduled delivery dates (stored as timestamps for Time Capsule entries)\n\n'
                         'We do not collect analytics, advertising identifiers, location data, '
                         'contacts, browsing history, or any telemetry.',
                         style: bodyStyle,
@@ -67,10 +69,18 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         'All vault content — text messages, recipient addresses, and audio recordings — '
                         'is encrypted on your device before upload. Content encryption keys '
                         'are generated locally on your device.\n\n'
-                        'When your check-in timer expires, our secure server retrieves the delivery '
-                        'key and sends it to your designated recipient. The recipient then decrypts '
-                        'the content entirely in their own browser — the key is never sent back to '
-                        'our servers after delivery.\n\n'
+                        'Afterword offers two operating modes:\n\n'
+                        '• Guardian Vault — A global check-in timer protects all entries. '
+                        'When the timer expires, our secure server retrieves the delivery '
+                        'key and sends it to your designated recipient.\n\n'
+                        '• Time Capsule — Each entry is scheduled for a specific future date. '
+                        'On that date, the entry is delivered automatically. No check-ins are needed.\n\n'
+                        'In both modes, the recipient decrypts the content entirely in their own '
+                        'browser — the key is never sent back to our servers after delivery.\n\n'
+                        'Zero-knowledge mode is available per entry on all plans. When enabled, '
+                        'the encryption key is stored only on your device — the server never '
+                        'receives or stores a copy. You must share the key with your beneficiary '
+                        'manually. If the key is lost, the entry is permanently unrecoverable.\n\n'
                         'Integrity seals protect against tampering. '
                         'Audio files are encrypted before storage in a private, '
                         'access-controlled bucket.',
@@ -81,9 +91,10 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         '• Authenticate your identity via secure sign-in\n'
-                        '• Store and deliver your encrypted vault entries when your timer expires\n'
-                        '• Send push notifications for timer reminders\n'
-                        '• Send email warnings to subscribed users before expiry\n'
+                        '• Store and deliver your encrypted vault entries when your timer expires '
+                        'or on your scheduled delivery date\n'
+                        '• Send push notifications for timer reminders (Guardian Vault mode only)\n'
+                        '• Send email warnings to subscribed users before expiry (Guardian Vault mode only)\n'
                         '• Verify subscription entitlements securely\n\n'
                         'We do not sell, share, rent, or use your data for advertising or profiling.',
                         style: bodyStyle,
@@ -115,9 +126,11 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Active data is retained as long as your account exists. '
-                        'Sent vault entries are automatically purged 30 days after delivery. '
-                        'After the 30-day grace period, your account resets to a fresh state '
-                        'and all previously sent data is permanently erased.\n\n'
+                        'Sent vault entries are automatically purged 30 days after delivery '
+                        '(in both Guardian Vault and Time Capsule modes). '
+                        'After the 30-day grace period, the entry data is permanently erased '
+                        'and vault slots are recovered.\n\n'
+                        'Vault entry limits: Free — 3 entries, Pro — 20 entries, Lifetime — 30 entries.\n\n'
                         'You can permanently delete your account and all associated data '
                         'at any time from Account Settings. This action is immediate and irreversible — '
                         'all vault entries, encryption keys, key backups, and profile data are destroyed.',

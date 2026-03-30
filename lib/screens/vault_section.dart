@@ -990,15 +990,34 @@ class _VaultEntryTile extends StatelessWidget {
                   ],
                 ),
 
-                if (entry.scheduledAt != null) ...[
+                if (entry.scheduledAt != null && entry.status == VaultStatus.active) ...[
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Icon(Icons.calendar_today, size: 12, color: theme.colorScheme.primary.withValues(alpha: 0.7)),
+                      Icon(Icons.schedule, size: 12, color: theme.colorScheme.primary.withValues(alpha: 0.7)),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          'Delivers ${entry.scheduledAt!.day} ${_monthAbbr(entry.scheduledAt!.month)} ${entry.scheduledAt!.year}',
+                          _deliveryCountdown(entry.scheduledAt!),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.85),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else if (entry.scheduledAt != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle_outline, size: 12, color: theme.colorScheme.secondary.withValues(alpha: 0.7)),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          'Delivered ${entry.scheduledAt!.day} ${_monthAbbr(entry.scheduledAt!.month)} ${entry.scheduledAt!.year.toString().substring(2)}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.white60,
                             fontSize: 11,
@@ -1010,7 +1029,7 @@ class _VaultEntryTile extends StatelessWidget {
                   ),
                 ],
 
-                if (entry.graceUntil != null) ...[
+                if (entry.graceUntil != null && entry.status == VaultStatus.sent) ...[
                   const SizedBox(height: 4),
                   Row(
                     children: [
@@ -1018,7 +1037,7 @@ class _VaultEntryTile extends StatelessWidget {
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          'Grace ${entry.graceUntil!.day} ${_monthAbbr(entry.graceUntil!.month)} ${entry.graceUntil!.year}',
+                          'Grace ${entry.graceUntil!.day} ${_monthAbbr(entry.graceUntil!.month)} ${entry.graceUntil!.year.toString().substring(2)}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.white54,
                             fontSize: 11,
@@ -2030,9 +2049,13 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                   contentPadding: EdgeInsets.zero,
                   dense: true,
                   title: Text(
-                    'I confirm this content is lawful and intended for legitimate '
-                    'personal use. I understand that if I stop checking in, my vault '
-                    'entries will be delivered or erased based on the timer I set.',
+                    widget.isScheduledMode
+                        ? 'I confirm this content is lawful and intended for legitimate '
+                          'personal use. I understand my vault entry will be delivered '
+                          'on the date I selected.'
+                        : 'I confirm this content is lawful and intended for legitimate '
+                          'personal use. I understand that if I stop checking in, my vault '
+                          'entries will be delivered or erased based on the timer I set.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Colors.white60,
                       height: 1.4,
@@ -2858,6 +2881,17 @@ String _monthAbbr(int m) => const [
   '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ][m];
+
+String _deliveryCountdown(DateTime scheduledAt) {
+  final now = DateTime.now();
+  final diff = scheduledAt.difference(now);
+  if (diff.isNegative) return 'Delivering soon';
+  if (diff.inDays > 1) return 'Delivers in ${diff.inDays} days';
+  if (diff.inDays == 1) return 'Delivers tomorrow';
+  if (diff.inHours > 1) return 'Delivers in ${diff.inHours}h';
+  if (diff.inMinutes > 1) return 'Delivers in ${diff.inMinutes}m';
+  return 'Delivering soon';
+}
 
 class _VaultChip extends StatelessWidget {
   const _VaultChip({required this.label});

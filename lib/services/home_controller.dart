@@ -59,6 +59,8 @@ class HomeController extends ChangeNotifier {
 
   bool _hasVaultEntries = false;
   int _vaultEntryCount = 0;
+  DateTime? _nextScheduledAt;
+  int _sentEntryCount = 0;
 
   Profile? get profile => _profile;
 
@@ -90,6 +92,8 @@ class HomeController extends ChangeNotifier {
 
   bool get hasVaultEntries => _hasVaultEntries;
   int get vaultEntryCount => _vaultEntryCount;
+  DateTime? get nextScheduledAt => _nextScheduledAt;
+  int get sentEntryCount => _sentEntryCount;
 
   bool get isScheduledMode => _profile?.isScheduledMode ?? false;
   String get appMode => _profile?.appMode ?? 'vault';
@@ -458,17 +462,42 @@ class HomeController extends ChangeNotifier {
     try {
       final rows = await Supabase.instance.client
           .from('vault_entries')
-          .select('id')
+          .select('id, scheduled_at')
           .eq('user_id', _user!.id)
           .eq('status', 'active');
       final list = rows as List;
       _hasVaultEntries = list.isNotEmpty;
       _vaultEntryCount = list.length;
+
+      // Find earliest upcoming scheduled delivery
+      DateTime? earliest;
+      for (final row in list) {
+        final raw = row['scheduled_at'];
+        if (raw != null) {
+          final dt = DateTime.tryParse(raw as String);
+          if (dt != null && (earliest == null || dt.isBefore(earliest))) {
+            earliest = dt;
+          }
+        }
+      }
+      _nextScheduledAt = earliest;
+
       if (kDebugMode) {
         debugPrint(
           '[NOTIF] Vault entries: $_vaultEntryCount, hasEntries=$_hasVaultEntries',
         );
       }
+    } catch (_) {
+      // Best-effort; leave current value.
+    }
+    // Sent entry count (best-effort, for Time Capsule display)
+    try {
+      final sentRows = await Supabase.instance.client
+          .from('vault_entries')
+          .select('id')
+          .eq('user_id', _user!.id)
+          .eq('status', 'sent');
+      _sentEntryCount = (sentRows as List).length;
     } catch (_) {
       // Best-effort; leave current value.
     }

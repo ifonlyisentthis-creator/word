@@ -20,7 +20,7 @@ class VaultController extends ChangeNotifier {
 
   static const int maxEntriesFree = 3;
   static const int maxEntriesPro = 20;
-  static const int maxEntriesLifetime = 50;
+  static const int maxEntriesLifetime = 30;
 
   static int maxEntriesFor({required bool isPro, required bool isLifetime}) {
     if (isLifetime) return maxEntriesLifetime;

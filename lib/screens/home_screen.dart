@@ -515,7 +515,9 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                           disabledReason: isInGracePeriod
                               ? null
                               : atLimit
-                                  ? '$tierName plan allows up to $maxEntries entries. Upgrade to add more.'
+                                  ? isLifetime
+                                      ? 'Lifetime plan maximum reached ($maxEntries entries).'
+                                      : '$tierName plan allows up to $maxEntries entries. Upgrade to add more.'
                                   : null,
                           onViewAll: () {
                             Navigator.push(
@@ -1617,41 +1619,40 @@ class _TimeCapsuleHowItWorks extends StatelessWidget {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: primary.withValues(alpha: 0.08),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.lightbulb_outline, size: 16, color: primary.withValues(alpha: 0.7)),
-              const SizedBox(width: 8),
-              Text(
-                'How it works',
-                style: TextStyle(
-                  color: primary.withValues(alpha: 0.9),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
+    return _SurfaceCard(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.lightbulb_outline, size: 14, color: primary),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _HowItWorksStep(number: '1', text: 'Create a vault and pick a delivery date.', theme: theme),
-          const SizedBox(height: 8),
-          _HowItWorksStep(number: '2', text: 'Your message is encrypted on-device.', theme: theme),
-          const SizedBox(height: 8),
-          _HowItWorksStep(number: '3', text: 'On the date, your recipient gets an email with a secure link.', theme: theme),
-        ],
+                const SizedBox(width: 10),
+                Text(
+                  'HOW IT WORKS',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: primary.withValues(alpha: 0.9),
+                    letterSpacing: 1.4,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _HowItWorksStep(number: '1', text: 'Create a vault and pick a delivery date.', theme: theme),
+            const SizedBox(height: 10),
+            _HowItWorksStep(number: '2', text: 'Your message is encrypted on-device.', theme: theme),
+            const SizedBox(height: 10),
+            _HowItWorksStep(number: '3', text: 'On that date, your recipient gets a secure link.', theme: theme),
+          ],
+        ),
       ),
     );
   }
@@ -1714,82 +1715,176 @@ class _TimeCapsuleCard extends StatelessWidget {
   final bool isPro;
   final bool isLifetime;
 
+  String _nextDeliveryLabel(DateTime? nextAt) {
+    if (nextAt == null) return 'No deliveries scheduled';
+    final now = DateTime.now();
+    final diff = nextAt.difference(now);
+    if (diff.isNegative) return 'Delivering soon';
+    if (diff.inDays > 1) return '${diff.inDays} days';
+    if (diff.inDays == 1) return 'Tomorrow';
+    if (diff.inHours > 1) return '${diff.inHours}h ${diff.inMinutes.remainder(60)}m';
+    if (diff.inMinutes > 1) return '${diff.inMinutes}m';
+    return 'Delivering soon';
+  }
+
   @override
   Widget build(BuildContext context) {
     final flutterTheme = Theme.of(context);
+    final primary = flutterTheme.colorScheme.primary;
     final maxEntries = VaultController.maxEntriesFor(isPro: isPro, isLifetime: isLifetime);
     final entryCount = controller.vaultEntryCount;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: flutterTheme.colorScheme.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: flutterTheme.colorScheme.outline.withValues(alpha: 0.1),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.schedule_send, color: flutterTheme.colorScheme.primary, size: 22),
-              const SizedBox(width: 10),
-              Text(
-                'Time Capsule',
-                style: TextStyle(
-                  color: flutterTheme.colorScheme.onSurface,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+    final sentCount = controller.sentEntryCount;
+    final nextAt = controller.nextScheduledAt;
+    final hasEntries = entryCount > 0;
+
+    final td = context.watch<ThemeProvider>().themeData;
+    final activeColor = td.statusChipColor ?? flutterTheme.colorScheme.secondary;
+    final statusLabel = !hasEntries ? 'STANDBY' : 'CAPSULES SEALED';
+    final statusColor = !hasEntries ? Colors.white38 : activeColor;
+
+    return _SurfaceCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Status chip row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: flutterTheme.textTheme.labelSmall?.copyWith(
+                        color: statusColor,
+                        letterSpacing: 1.6,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Schedule vaults for delivery on specific dates. Each vault has its own independent timer.',
-            style: TextStyle(
-              color: flutterTheme.colorScheme.onSurface.withValues(alpha: 0.5),
-              fontSize: 13,
-              height: 1.4,
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.schedule_send, size: 14, color: primary.withValues(alpha: 0.7)),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Time Capsule',
+                      style: flutterTheme.textTheme.labelSmall?.copyWith(
+                        color: Colors.white54,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _StatPill(label: 'Active', value: '$entryCount', theme: flutterTheme),
-              const SizedBox(width: 8),
-              _StatPill(label: 'Limit', value: '$maxEntries', theme: flutterTheme),
-            ],
-          ),
-        ],
+
+            const SizedBox(height: 14),
+
+            // Next delivery headline
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  _nextDeliveryLabel(nextAt),
+                  style: flutterTheme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                if (hasEntries && nextAt != null) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'next delivery',
+                      style: flutterTheme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white54,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+
+            const SizedBox(height: 14),
+
+            // Capacity bar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: _EasterEggTimerBar(
+                progress: maxEntries == 0 ? 0.0 : (1.0 - entryCount / maxEntries).clamp(0.0, 1.0),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Stats row
+            Row(
+              children: [
+                _CapsuleStatChip(
+                  icon: Icons.lock_outline,
+                  label: '$entryCount active',
+                  color: primary,
+                ),
+                const SizedBox(width: 8),
+                if (sentCount > 0) ...[
+                  _CapsuleStatChip(
+                    icon: Icons.check_circle_outline,
+                    label: '$sentCount delivered',
+                    color: activeColor,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                _CapsuleStatChip(
+                  icon: Icons.all_inclusive,
+                  label: '$maxEntries max',
+                  color: Colors.white38,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _StatPill extends StatelessWidget {
-  const _StatPill({required this.label, required this.value, required this.theme});
+class _CapsuleStatChip extends StatelessWidget {
+  const _CapsuleStatChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+  final IconData icon;
   final String label;
-  final String value;
-  final ThemeData theme;
+  final Color color;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        '$label: $value',
-        style: TextStyle(
-          color: theme.colorScheme.primary,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
         ),
-      ),
+      ],
     );
   }
 }

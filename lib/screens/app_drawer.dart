@@ -320,7 +320,6 @@ class AppDrawer extends StatelessWidget {
                       );
                     },
                   ),
-                  const Divider(color: Colors.white12, indent: 20, endIndent: 20),
                 ],
               ),
             ),

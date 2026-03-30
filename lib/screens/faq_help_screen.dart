@@ -137,7 +137,7 @@ class FaqHelpScreen extends StatelessWidget {
                       _FaqItem(
                         question: 'How many vault entries can I create?',
                         answer:
-                            'Free: 3 entries. Pro: 20 entries. Lifetime: 50 entries. '
+                            'Free: 3 entries. Pro: 20 entries. Lifetime: 30 entries. '
                             'Slots are recovered after sent entries are purged '
                             '(30 days after delivery).',
                       ),
