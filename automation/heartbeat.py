@@ -2123,6 +2123,147 @@ def process_scheduled_entries(
     return sent_count
 
 
+def process_recurring_entries(
+    client,
+    profile: dict,
+    entries: list[dict],
+    server_secret: str,
+    resend_key: str,
+    from_email: str,
+    viewer_base_url: str,
+    now: datetime,
+) -> int:
+    """Process recurring (Forever Letters) entries whose annual date has arrived.
+
+    Recurring entries are never marked as 'sent'. Instead, last_sent_year is
+    updated so we only send once per calendar year.  Feb 29 entries fire on
+    Feb 28 in non-leap years.
+
+    Returns the number of entries successfully sent this run.
+    """
+    import calendar
+
+    sender_name = profile.get("sender_name") or "Afterword"
+    user_id = str(profile.get("id", "?"))
+    current_year = now.year
+    today_month = now.month
+    today_day = now.day
+    sent_count = 0
+
+    due_entries = []
+    for entry in entries:
+        if (entry.get("entry_mode") or "standard") != "recurring":
+            continue
+        scheduled_at_str = entry.get("scheduled_at")
+        if not scheduled_at_str:
+            continue
+        scheduled_at = parse_iso(scheduled_at_str)
+        if scheduled_at is None:
+            continue
+
+        # Already sent this year?
+        last_sent_year = entry.get("last_sent_year")
+        if last_sent_year is not None and int(last_sent_year) >= current_year:
+            continue
+
+        entry_month = scheduled_at.month
+        entry_day = scheduled_at.day
+
+        # Handle Feb 29 in non-leap years: fire on Feb 28
+        if entry_month == 2 and entry_day == 29:
+            if not calendar.isleap(current_year):
+                entry_day = 28
+
+        if entry_month == today_month and entry_day == today_day:
+            due_entries.append(entry)
+
+    if not due_entries:
+        return 0
+
+    print(f"User {user_id} (recurring): {len(due_entries)} Forever Letter(s) due today")
+
+    hmac_key_encrypted = profile.get("hmac_key_encrypted")
+    hmac_key_bytes = None
+    if hmac_key_encrypted:
+        try:
+            hmac_key_bytes = decrypt_with_server_secret(hmac_key_encrypted, server_secret)
+        except Exception as exc:  # noqa: BLE001
+            print(f"WARNING: Failed to decrypt HMAC key for recurring user {user_id}: {exc}")
+
+    for entry in due_entries:
+        entry_id = str(entry.get("id", "?"))
+        entry_title = str(entry.get("title", "Untitled"))
+        is_zk = entry.get("is_zero_knowledge", False)
+
+        try:
+            # Decrypt recipient email (same pattern as scheduled entries)
+            recipient_encrypted = entry.get("recipient_email_encrypted") or ""
+            if not recipient_encrypted:
+                print(f"Skipping recurring entry {entry_id}: no recipient")
+                continue
+
+            recipient_ciphertext = extract_server_ciphertext(recipient_encrypted)
+            recipient_email = decrypt_with_server_secret(
+                recipient_ciphertext, server_secret
+            ).decode("utf-8").strip()
+
+            if not _EMAIL_RE.match(recipient_email):
+                print(f"Skipping recurring entry {entry_id}: invalid recipient email")
+                continue
+
+            viewer_link = build_viewer_link(viewer_base_url, entry_id)
+
+            if is_zk:
+                email_payload = build_zk_unlock_email_payload(
+                    recipient_email, entry_id, sender_name, entry_title,
+                    viewer_link, from_email,
+                )
+            else:
+                data_key_encrypted = entry.get("data_key_encrypted")
+                if not data_key_encrypted:
+                    print(f"CRITICAL: Missing data_key for recurring entry {entry_id}")
+                    continue
+
+                data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
+                data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
+                security_key = base64.b64encode(data_key_bytes).decode("utf-8")
+                email_payload = build_unlock_email_payload(
+                    recipient_email, entry_id, sender_name, entry_title,
+                    viewer_link, security_key, from_email,
+                )
+
+            # Send via batch API (single-item batch for idempotency key support)
+            idem_key = f"recurring-{entry_id}-{current_year}"
+            response = _post_json_with_retries(
+                "https://api.resend.com/emails/batch",
+                headers={
+                    "Authorization": f"Bearer {resend_key}",
+                    "Content-Type": "application/json",
+                },
+                payload=[email_payload],
+                idempotency_key=idem_key,
+            )
+            if response.status_code >= 400:
+                _mark_resend_quota_exhausted(response)
+                raise RuntimeError(
+                    f"Resend error for recurring entry {entry_id}: "
+                    f"{response.status_code} {response.text}"
+                )
+
+            # Update last_sent_year (entry stays active)
+            client.table("vault_entries").update({
+                "last_sent_year": current_year,
+            }).eq("id", entry_id).execute()
+
+            sent_count += 1
+            print(f"Recurring entry {entry_id} ('{entry_title}') sent for year {current_year}")
+
+        except Exception as exc:  # noqa: BLE001
+            print(f"SEND FAILED recurring entry {entry_id} user {user_id}: {exc}")
+
+    return sent_count
+
+
 def cleanup_sent_entries(client) -> None:
     """Grace-based cleanup: when grace period ends, delete sent entries.
 
@@ -2448,6 +2589,7 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
 def _build_downgrade_email(
     sender_name: str,
     had_audio: bool,
+    had_recurring: bool = False,
     reason: str = "refund or expiration",
 ) -> tuple[str, str, str]:
     """Build downgrade notification email content.
@@ -2464,6 +2606,11 @@ def _build_downgrade_email(
         if had_audio
         else ""
     )
+    text_recurring_line = (
+        "- Forever Letters (recurring annual deliveries) have been removed\n"
+        if had_recurring
+        else ""
+    )
     subject = "Afterword — Subscription update"
     text = (
         f"Hi {sender_name},\n\n"
@@ -2474,6 +2621,7 @@ def _build_downgrade_email(
         "- Custom themes and styles have been reset to defaults\n"
         f"{text_preserved_line}"
         f"{text_audio_line}"
+        f"{text_recurring_line}"
         "\n\n"
         "You can continue using Afterword on the free tier, or "
         "resubscribe at any time to restore premium features.\n\n"
@@ -2492,6 +2640,10 @@ def _build_downgrade_email(
         '<li style="margin-bottom:6px">Audio vault entries have been removed (requires paid subscription)</li>'
         if had_audio else ''
     )
+    html_recurring_li = (
+        '<li style="margin-bottom:6px">Forever Letters (recurring annual deliveries) have been removed</li>'
+        if had_recurring else ''
+    )
     html = (
         f'<p style="margin:0 0 16px">Hi {safe_name},</p>'
         f'<p style="margin:0 0 16px">Your Afterword subscription has been updated due to a {reason}. '
@@ -2502,6 +2654,7 @@ def _build_downgrade_email(
         '<li style="margin-bottom:6px">Custom themes and styles have been reset to defaults</li>'
         f'{html_preserved_li}'
         f'{html_audio_li}'
+        f'{html_recurring_li}'
         '</ul>'
         '<p style="margin:0 0 24px">You can continue using Afterword on the free tier, or '
         'resubscribe at any time to restore premium features.</p>'
@@ -2701,6 +2854,12 @@ def handle_subscription_downgrade(
     has_audio = bool(active_audio_entries)
     audio_entries: list[dict] = []
 
+    # Detect recurring (Forever Letters) entries
+    has_recurring = any(
+        (entry.get("entry_mode") or "standard") == "recurring"
+        for entry in active_entries
+    )
+
     # Check for audio entries if we have any pro/lifetime indicators, or if
     # active_entries didn't include audio (audio is now pro+lifetime feature).
     has_pro_indicators = has_custom_timer or has_custom_theme or has_custom_soul_fire
@@ -2753,13 +2912,13 @@ def handle_subscription_downgrade(
     # Strong indicators: timer != 30 (impossible without pro) or audio entries
     # (impossible without pro/lifetime). Theme/soul_fire alone are weak signals
     # that can arise from bugs or testing — silently reset, no email.
-    is_genuine_downgrade = has_custom_timer or has_audio
+    is_genuine_downgrade = has_custom_timer or has_audio or has_recurring
     email_needed = bool(email) and is_genuine_downgrade
 
     email_content: tuple[str, str, str] | None = None
     if email_needed:
         email_content = _build_downgrade_email(
-            sender_name, had_audio=has_audio,
+            sender_name, had_audio=has_audio, had_recurring=has_recurring,
         )
 
     # 1. Reset profile to free defaults
@@ -2794,6 +2953,19 @@ def handle_subscription_downgrade(
             delete_entry(client, entry)
         if audio_entries:
             print(f"Deleted {len(audio_entries)} audio entries for downgraded user {uid}")
+
+    # 2b. Delete all recurring (Forever Letters) entries — pro/lifetime only feature
+    recurring_entries = (
+        client.table("vault_entries")
+        .select("id,audio_file_path")
+        .eq("user_id", uid)
+        .eq("entry_mode", "recurring")
+        .execute()
+    ).data or []
+    for entry in recurring_entries:
+        delete_entry(client, entry)
+    if recurring_entries:
+        print(f"Deleted {len(recurring_entries)} recurring (forever letter) entries for downgraded user {uid}")
 
     # 3. Send notification email
     if email_content:
@@ -2893,7 +3065,7 @@ def main() -> int:
 
             .select(
 
-                "id,user_id,title,action_type,data_type,status,payload_encrypted,recipient_email_encrypted,data_key_encrypted,hmac_signature,audio_file_path,is_zero_knowledge,scheduled_at,grace_until"
+                "id,user_id,title,action_type,data_type,status,payload_encrypted,recipient_email_encrypted,data_key_encrypted,hmac_signature,audio_file_path,is_zero_knowledge,scheduled_at,grace_until,entry_mode"
 
             )
 
@@ -2963,6 +3135,15 @@ def main() -> int:
                       )
                   except Exception as exc:  # noqa: BLE001
                       print(f"Scheduled processing failed for {user_id}: {exc}")
+
+                  # Process recurring (Forever Letters) entries — same entries list
+                  try:
+                      process_recurring_entries(
+                          client, profile, active_entries, server_secret,
+                          resend_key, from_email, viewer_base_url, now,
+                      )
+                  except Exception as exc:  # noqa: BLE001
+                      print(f"Recurring processing failed for {user_id}: {exc}")
               continue
 
           last_check_in = parse_iso(profile.get("last_check_in"))
@@ -3085,6 +3266,15 @@ def main() -> int:
                   now,
 
               )
+
+              # Process recurring (Forever Letters) for guardian-mode users too
+              try:
+                  process_recurring_entries(
+                      client, profile, active_entries, server_secret,
+                      resend_key, from_email, viewer_base_url, now,
+                  )
+              except Exception as exc:  # noqa: BLE001
+                  print(f"Recurring processing failed for guardian user {user_id}: {exc}")
 
               # Mark user as having had vault activity (prevents bot auto-deletion)
               try:

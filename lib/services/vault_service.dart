@@ -174,9 +174,10 @@ class VaultService {
         'audio_file_path': audioFilePath,
         'audio_duration_seconds': audioDurationSeconds,
         'is_zero_knowledge': draft.isZeroKnowledge,
+        'entry_mode': draft.entryMode,
         if (draft.scheduledAt != null)
           'scheduled_at': draft.scheduledAt!.toUtc().toIso8601String(),
-        if (draft.scheduledAt != null)
+        if (draft.scheduledAt != null && draft.entryMode != 'recurring')
           'grace_until': draft.scheduledAt!.toUtc()
               .add(const Duration(days: 30)).toIso8601String(),
       }).select().single();

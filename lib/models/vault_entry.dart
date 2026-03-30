@@ -12,12 +12,14 @@ class VaultEntry {
     required this.hmacSignature,
     required this.createdAt,
     this.isZeroKnowledge = false,
+    this.entryMode = 'standard',
     this.scheduledAt,
     this.graceUntil,
     this.updatedAt,
     this.sentAt,
     this.audioFilePath,
     this.audioDurationSeconds,
+    this.lastSentYear,
   });
 
   final String id;
@@ -31,6 +33,7 @@ class VaultEntry {
   final String dataKeyEncrypted;
   final String hmacSignature;
   final bool isZeroKnowledge;
+  final String entryMode;
   final DateTime? scheduledAt;
   final DateTime? graceUntil;
   final DateTime createdAt;
@@ -38,6 +41,9 @@ class VaultEntry {
   final DateTime? sentAt;
   final String? audioFilePath;
   final int? audioDurationSeconds;
+  final int? lastSentYear;
+
+  bool get isRecurring => entryMode == 'recurring';
 
   factory VaultEntry.fromMap(Map<String, dynamic> map) {
     return VaultEntry(
@@ -54,6 +60,7 @@ class VaultEntry {
       dataKeyEncrypted: map['data_key_encrypted'] as String,
       hmacSignature: map['hmac_signature'] as String,
       isZeroKnowledge: map['is_zero_knowledge'] as bool? ?? false,
+      entryMode: map['entry_mode'] as String? ?? 'standard',
       scheduledAt: map['scheduled_at'] != null
           ? DateTime.parse(map['scheduled_at'] as String)
           : null,
@@ -69,10 +76,11 @@ class VaultEntry {
           : null,
       audioFilePath: map['audio_file_path'] as String?,
       audioDurationSeconds: map['audio_duration_seconds'] as int?,
+      lastSentYear: map['last_sent_year'] as int?,
     );
   }
 
-  bool get isEditable => status == VaultStatus.active;
+  bool get isEditable => status == VaultStatus.active && !isRecurring;
 }
 
 enum VaultActionType { send, destroy }
@@ -154,6 +162,7 @@ class VaultEntryDraft {
     this.audioDurationSeconds,
     this.isZeroKnowledge = false,
     this.scheduledAt,
+    this.entryMode = 'standard',
   });
 
   final String title;
@@ -165,4 +174,5 @@ class VaultEntryDraft {
   final VaultDataType dataType;
   final bool isZeroKnowledge;
   final DateTime? scheduledAt;
+  final String entryMode;
 }
