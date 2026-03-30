@@ -21,9 +21,11 @@ class SoulFireHaptics {
     (0.75, _H.medium), (0.92, _H.medium),
   ];
   static const _goldenPulse = [
-    (0.20, _H.heavy), (0.26, _H.light),
-    (0.52, _H.heavy), (0.58, _H.light),
-    (0.84, _H.heavy),
+    (0.12, _H.selection), (0.18, _H.light),
+    (0.30, _H.selection), (0.36, _H.light),
+    (0.50, _H.medium), (0.56, _H.light),
+    (0.70, _H.medium), (0.76, _H.light),
+    (0.88, _H.heavy),
   ];
   static const _nebulaHeart = [
     (0.15, _H.light), (0.18, _H.light), (0.21, _H.selection),
@@ -89,7 +91,7 @@ class SoulFireHaptics {
   static void onHoldStart(SoulFireStyleId style) {
     switch (style) {
       case SoulFireStyleId.etherealOrb:   HapticFeedback.selectionClick();
-      case SoulFireStyleId.goldenPulse:   HapticFeedback.mediumImpact();
+      case SoulFireStyleId.goldenPulse:   HapticFeedback.lightImpact();
       case SoulFireStyleId.nebulaHeart:   HapticFeedback.lightImpact();
       case SoulFireStyleId.voidPortal:    HapticFeedback.heavyImpact();
       case SoulFireStyleId.plasmaBurst:   HapticFeedback.selectionClick();
@@ -132,14 +134,18 @@ class SoulFireHaptics {
         await Future.delayed(const Duration(milliseconds: 80));
         HapticFeedback.heavyImpact();
 
-      // Warm resonance
+      // Celestial supernova — ascending crescendo then shockwave
       case SoulFireStyleId.goldenPulse:
-        HapticFeedback.heavyImpact();
-        await Future.delayed(const Duration(milliseconds: 60));
-        HapticFeedback.heavyImpact();
-        await Future.delayed(const Duration(milliseconds: 60));
+        HapticFeedback.selectionClick();
+        await Future.delayed(const Duration(milliseconds: 30));
         HapticFeedback.lightImpact();
+        await Future.delayed(const Duration(milliseconds: 30));
+        HapticFeedback.mediumImpact();
         await Future.delayed(const Duration(milliseconds: 40));
+        HapticFeedback.heavyImpact();
+        await Future.delayed(const Duration(milliseconds: 50));
+        HapticFeedback.heavyImpact();
+        await Future.delayed(const Duration(milliseconds: 30));
         HapticFeedback.lightImpact();
 
       // Magnetic spike storm

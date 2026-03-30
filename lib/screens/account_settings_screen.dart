@@ -35,6 +35,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _controller.addListener(_onControllerChanged);
     _senderController =
         TextEditingController(text: _controller.profile?.senderName ?? '');
     _senderController.addListener(() {
@@ -46,8 +47,13 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     });
   }
 
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _controller.removeListener(_onControllerChanged);
     _senderController.dispose();
     super.dispose();
   }

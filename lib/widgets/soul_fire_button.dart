@@ -503,175 +503,500 @@ class _OrbPainter extends CustomPainter {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 1b. GOLDEN PULSE (Free) — Sparkler Cascade
-  //     Firework sparkler effect: hundreds of golden sparks
-  //     fly outward in parabolic arcs leaving luminous trails.
-  //     Crackling embers. Molten gold core. Celebratory.
-  //     Colors: white-hot, gold, deep amber, copper trails.
+  // 1b. GOLDEN PULSE (Free) — Celestial Aurealis
+  //     A liquid sun with churning solar prominences,
+  //     orbiting Saturn-like golden rings, constellation
+  //     network of stars linked by gossamer threads,
+  //     sacred geometry on hold, and a full-screen
+  //     supernova aurora burst on completion.
+  //     Colors: molten gold, rose gold, champagne, amber.
   // ═══════════════════════════════════════════════════════
   void _paintGoldenPulse(
       Canvas canvas, Offset center, double r, double bs) {
-    const hotWhite = Color(0xFFFFF8E1);
-    const brightGold = Color(0xFFFFD54F);
+    const moltenGold = Color(0xFFFFD700);
+    const champagne = Color(0xFFFFF8E1);
     const deepAmber = Color(0xFFFF8F00);
-    const copper = Color(0xFFBF6000);
-    const darkCore = Color(0xFF1A0800);
+    const solarBronze = Color(0xFFCD7F32);
+    const hotWhite = Color(0xFFFFFCF0);
 
-    // Warm atmospheric glow
-    canvas.drawCircle(
-      center, r * 2.0 * bs,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          deepAmber.withValues(alpha: 0.04 + hold * 0.08),
-          copper.withValues(alpha: 0.02),
-          Colors.transparent,
-        ], stops: const [0.0, 0.4, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: r * 2.0)),
-    );
+    final rng = Random(42);
 
-    // Main body — dark molten sphere
-    canvas.drawCircle(
-      center, r * bs,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          darkCore,
-          const Color(0xFF2A1000),
-          _lerpHold(copper, brightGold),
-        ], stops: const [0.0, 0.5, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: r)),
-    );
-
-    // SPARKLER SPARKS — parabolic arcs radiating from the surface
-    final sRng = Random(77);
-    final sparkCount = 30 + (hold * 24).round();
-    for (int i = 0; i < sparkCount; i++) {
-      final baseAngle = (i / sparkCount) * 2 * pi + orbit * 2 * pi * 0.15;
-      final sparkPhase = (orbit * 3.0 + i * 0.37 + sRng.nextDouble() * 0.5) % 1.0;
-      final life = sparkPhase;
-      // Parabolic arc: sparks fly out then curve down with gravity
-      final outDist = r * (0.85 + life * 0.9 + hold * 0.5) * bs;
-      final gravity = life * life * r * 0.35 * (i.isEven ? 1 : -1);
-      final sparkX = center.dx + cos(baseAngle) * outDist;
-      final sparkY = center.dy + sin(baseAngle) * outDist + gravity;
-      final sparkPos = Offset(sparkX, sparkY);
-      final fadeAlpha = ((1.0 - life) * (0.45 + hold * 0.5)).clamp(0.0, 1.0);
-      final sparkSize = (2.0 + sRng.nextDouble() * 2.5) * (1.0 - life * 0.6);
-      final sparkColor = i % 3 == 0
-          ? hotWhite
-          : i % 3 == 1
-              ? brightGold
-              : deepAmber;
-
-      // Spark dot
-      canvas.drawCircle(
-        sparkPos, sparkSize,
-        Paint()
-          ..color = sparkColor.withValues(alpha: fadeAlpha)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, sparkSize * 0.5),
-      );
-
-      // Short luminous trail behind each spark
-      if (life > 0.05) {
-        final trailDist = outDist - r * 0.12;
-        final trailGravity = (life - 0.05) * (life - 0.05) * r * 0.35 * (i.isEven ? 1 : -1);
-        final trailPos = Offset(
-          center.dx + cos(baseAngle) * trailDist,
-          center.dy + sin(baseAngle) * trailDist + trailGravity,
-        );
-        canvas.drawLine(
-          trailPos, sparkPos,
-          Paint()
-            ..color = copper.withValues(alpha: fadeAlpha * 0.5)
-            ..strokeWidth = sparkSize * 0.6
-            ..strokeCap = StrokeCap.round,
-        );
-      }
+    // ── LAYER 0: Full-canvas aurora on completion ──
+    if (flash > 0) {
+      _paintGoldenSupernova(canvas, center, r, bs, rng);
+      return; // supernova takes over the entire frame
     }
 
-    // CRACKLING EMBERS — tiny bright flickers close to the surface
-    for (int i = 0; i < 16; i++) {
-      final emberAngle = (i / 16) * 2 * pi + orbit * 2 * pi * 0.4 + breath * 0.3;
-      final flicker = (sin(orbit * 2 * pi * 5 + i * 2.3) * 0.5 + 0.5).clamp(0.0, 1.0);
-      final emberDist = r * (0.70 + sRng.nextDouble() * 0.28 + hold * 0.08) * bs;
-      final emberPos = center + Offset(cos(emberAngle) * emberDist, sin(emberAngle) * emberDist);
-      final emberAlpha = (flicker * 0.6 + hold * 0.3).clamp(0.0, 1.0);
-      canvas.drawCircle(
-        emberPos, 1.5 + flicker * 1.5,
-        Paint()..color = hotWhite.withValues(alpha: emberAlpha),
-      );
+    // ── LAYER 1: Vast ambient nebula ──
+    final nebulaR = r * 2.2 * bs;
+    canvas.drawCircle(center, nebulaR, Paint()
+      ..shader = RadialGradient(colors: [
+        deepAmber.withValues(alpha: 0.03 + hold * 0.06),
+        solarBronze.withValues(alpha: 0.015 + hold * 0.02),
+        Colors.transparent,
+      ], stops: const [0.0, 0.45, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: nebulaR)));
+
+    // ── LAYER 2: Orbiting golden rings (Saturn-like) ──
+    _paintGoldenRings(canvas, center, r, bs);
+
+    // ── LAYER 3: Constellation network ──
+    _paintConstellations(canvas, center, r, bs, rng);
+
+    // ── LAYER 4: Solar surface — churning liquid gold sphere ──
+    _paintSolarBody(canvas, center, r, bs, rng);
+
+    // ── LAYER 5: Solar prominences — arcing flame loops ──
+    _paintProminences(canvas, center, r, bs, rng);
+
+    // ── LAYER 6: Floating golden dust motes ──
+    _paintGoldenDust(canvas, center, r, bs, rng);
+
+    // ── LAYER 7: Sacred geometry on hold ──
+    if (hold > 0.05) {
+      _paintSacredGeometry(canvas, center, r, bs);
     }
 
-    // EXPANDING SPARK RINGS on hold — concentric bursts
-    if (hold > 0.1) {
-      for (int i = 0; i < 3; i++) {
-        final ringPhase = (orbit * 2.0 + i * 0.33) % 1.0;
-        final ringR = r * (0.9 + ringPhase * 0.8 * hold) * bs;
-        final ringAlpha = ((1.0 - ringPhase) * hold * 0.3).clamp(0.0, 1.0);
-        canvas.drawCircle(
-          center, ringR,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5 + hold
-            ..color = brightGold.withValues(alpha: ringAlpha),
-        );
-      }
-    }
-
-    // White-hot core
-    final coreR = r * (0.16 + breath * 0.05 + hold * 0.20);
-    canvas.drawCircle(
-      center, coreR,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          hotWhite.withValues(alpha: 0.95),
-          brightGold.withValues(alpha: 0.5),
-          Colors.transparent,
-        ], stops: const [0.0, 0.35, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: coreR)),
-    );
+    // ── LAYER 8: Core glow ──
+    final coreR = r * (0.18 + breath * 0.06 + hold * 0.22);
+    canvas.drawCircle(center, coreR, Paint()
+      ..shader = RadialGradient(colors: [
+        hotWhite.withValues(alpha: 0.90 + hold * 0.10),
+        champagne.withValues(alpha: 0.45),
+        Colors.transparent,
+      ], stops: const [0.0, 0.40, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: coreR)));
 
     // Specular highlight
-    final specR = r * 0.25;
-    final specC = center + Offset(-r * 0.14, -r * 0.18);
-    canvas.drawCircle(
-      specC, specR,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          Colors.white.withValues(alpha: 0.12 + hold * 0.08),
-          Colors.transparent,
-        ]).createShader(Rect.fromCircle(center: specC, radius: specR)),
-    );
+    final specR = r * 0.22;
+    final specC = center + Offset(-r * 0.15, -r * 0.20);
+    canvas.drawCircle(specC, specR, Paint()
+      ..shader = RadialGradient(colors: [
+        Colors.white.withValues(alpha: 0.14 + hold * 0.08),
+        Colors.transparent,
+      ]).createShader(Rect.fromCircle(center: specC, radius: specR)));
 
-    // GRAND SPARKLER BURST on completion — massive outward explosion
-    if (flash > 0) {
-      final burstR = r * (1.0 + flash * 2.0) * bs;
-      canvas.drawCircle(center, burstR, Paint()
+    // ── LAYER 9: Pulsing golden rim ──
+    final rimWidth = 1.0 + breath * 0.8 + hold * 2.5;
+    final rimAlpha = (0.10 + breath * 0.06 + hold * 0.30).clamp(0.0, 1.0);
+    canvas.drawCircle(center, r * bs, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = rimWidth
+      ..color = moltenGold.withValues(alpha: rimAlpha));
+
+    // Second thinner champagne rim for depth
+    canvas.drawCircle(center, r * bs + rimWidth + 1.0, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5 + hold * 0.5
+      ..color = champagne.withValues(alpha: rimAlpha * 0.4));
+  }
+
+  // ── Solar Body: Churning liquid gold surface ──
+  void _paintSolarBody(
+      Canvas canvas, Offset center, double r, double bs, Random rng) {
+    const darkCore = Color(0xFF1A0A00);
+    const solarBronze = Color(0xFFCD7F32);
+    const moltenGold = Color(0xFFFFD700);
+
+    // Main sphere
+    canvas.drawCircle(center, r * bs, Paint()
+      ..shader = RadialGradient(colors: [
+        _lerpHold(darkCore, const Color(0xFF1A0500)),
+        _lerpHold(const Color(0xFF3D1F00), const Color(0xFF4A2500)),
+        _lerpHold(solarBronze, moltenGold),
+      ], stops: const [0.0, 0.45, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: r)));
+
+    // Turbulent solar granulations — shifting cells on the surface
+    for (int i = 0; i < 18; i++) {
+      final seed = rng.nextDouble();
+      final cellAngle = (i / 18) * 2 * pi + orbit * 2 * pi * (0.08 + seed * 0.05);
+      final cellDist = r * (0.20 + seed * 0.55) * bs;
+      final cellPos = center + Offset(cos(cellAngle) * cellDist, sin(cellAngle) * cellDist);
+      final cellR = r * (0.06 + seed * 0.08 + breath * 0.02);
+      final pulseFactor = sin(orbit * 2 * pi * 3 + i * 1.7) * 0.5 + 0.5;
+      final cellAlpha = (pulseFactor * 0.08 + hold * 0.10).clamp(0.0, 1.0);
+
+      canvas.drawCircle(cellPos, cellR, Paint()
         ..shader = RadialGradient(colors: [
-          hotWhite.withValues(alpha: (1 - flash) * 0.6),
-          brightGold.withValues(alpha: (1 - flash) * 0.3),
+          _lerpHold(moltenGold, const Color(0xFFFFF0C0)).withValues(alpha: cellAlpha),
           Colors.transparent,
-        ], stops: const [0.0, 0.4, 1.0])
-            .createShader(Rect.fromCircle(center: center, radius: burstR)));
-      // Radial spark lines in the burst
-      for (int i = 0; i < 16; i++) {
-        final bAngle = (i / 16) * 2 * pi + flash * 0.3;
-        final bStart = center + Offset(cos(bAngle) * r * 0.5, sin(bAngle) * r * 0.5);
-        final bEnd = center + Offset(cos(bAngle) * burstR * 0.85, sin(bAngle) * burstR * 0.85);
-        canvas.drawLine(bStart, bEnd, Paint()
-          ..color = hotWhite.withValues(alpha: (1 - flash) * 0.4)
-          ..strokeWidth = 2.5 * (1 - flash)
-          ..strokeCap = StrokeCap.round);
+        ]).createShader(Rect.fromCircle(center: cellPos, radius: cellR)));
+    }
+
+    // Solar flare bright spots — intense white-gold patches
+    for (int i = 0; i < 6; i++) {
+      final flareAngle = (i / 6) * 2 * pi + orbit * 2 * pi * 0.12 + breath * 0.8;
+      final flarePhase = (sin(orbit * 2 * pi * 2 + i * 2.1) * 0.5 + 0.5);
+      final flareDist = r * 0.45 * bs;
+      final flarePos = center + Offset(cos(flareAngle) * flareDist, sin(flareAngle) * flareDist);
+      final flareAlpha = (flarePhase * 0.12 + hold * 0.15).clamp(0.0, 1.0);
+
+      canvas.drawCircle(flarePos, r * 0.07 + flarePhase * r * 0.03, Paint()
+        ..color = const Color(0xFFFFF8E1).withValues(alpha: flareAlpha)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.04));
+    }
+  }
+
+  // ── Solar Prominences: Flame arcs rising off the surface ──
+  void _paintProminences(
+      Canvas canvas, Offset center, double r, double bs, Random rng) {
+    const deepAmber = Color(0xFFFF8F00);
+    const moltenGold = Color(0xFFFFD700);
+    const champagne = Color(0xFFFFF8E1);
+
+    final prominenceCount = 5 + (hold * 4).round();
+    for (int i = 0; i < prominenceCount; i++) {
+      final seed = rng.nextDouble();
+      final baseAngle = (i / prominenceCount) * 2 * pi + orbit * 2 * pi * 0.06;
+      final arcHeight = r * (0.15 + seed * 0.25 + hold * 0.20) * bs;
+      final arcWidth = r * (0.08 + seed * 0.12);
+      final lifePhase = (orbit * (1.5 + seed * 0.8) + seed * 5) % 1.0;
+      final fadeIn = (lifePhase * 3).clamp(0.0, 1.0);
+      final fadeOut = ((1 - lifePhase) * 2.5).clamp(0.0, 1.0);
+      final prominence = fadeIn * fadeOut;
+
+      if (prominence < 0.05) continue;
+
+      final surfacePoint = center + Offset(
+        cos(baseAngle) * r * bs,
+        sin(baseAngle) * r * bs,
+      );
+      final peakPoint = center + Offset(
+        cos(baseAngle) * (r + arcHeight) * bs,
+        sin(baseAngle) * (r + arcHeight) * bs,
+      );
+      // Control points for the arc (perpendicular to the radial line)
+      final perpAngle = baseAngle + pi / 2;
+      final cp1 = center + Offset(
+        cos(baseAngle) * (r + arcHeight * 0.6) + cos(perpAngle) * arcWidth,
+        sin(baseAngle) * (r + arcHeight * 0.6) + sin(perpAngle) * arcWidth,
+      );
+      final cp2 = center + Offset(
+        cos(baseAngle) * (r + arcHeight * 0.6) - cos(perpAngle) * arcWidth,
+        sin(baseAngle) * (r + arcHeight * 0.6) - sin(perpAngle) * arcWidth,
+      );
+
+      final arcPath = Path()
+        ..moveTo(surfacePoint.dx, surfacePoint.dy)
+        ..quadraticBezierTo(cp1.dx, cp1.dy, peakPoint.dx, peakPoint.dy)
+        ..quadraticBezierTo(cp2.dx, cp2.dy, surfacePoint.dx, surfacePoint.dy);
+
+      final arcAlpha = (prominence * (0.06 + hold * 0.15)).clamp(0.0, 1.0);
+      final arcColor = i.isEven
+          ? _lerpHold(deepAmber, moltenGold)
+          : _lerpHold(moltenGold, champagne);
+
+      // Glow
+      canvas.drawPath(arcPath, Paint()
+        ..color = arcColor.withValues(alpha: arcAlpha * 0.30)
+        ..style = PaintingStyle.fill
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3.0 + hold * 2));
+
+      // Core stroke
+      canvas.drawPath(arcPath, Paint()
+        ..color = champagne.withValues(alpha: arcAlpha * 0.60)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8 + hold * 0.8
+        ..strokeCap = StrokeCap.round);
+    }
+  }
+
+  // ── Orbiting Golden Rings ──
+  void _paintGoldenRings(
+      Canvas canvas, Offset center, double r, double bs) {
+    const moltenGold = Color(0xFFFFD700);
+    const champagne = Color(0xFFFFF8E1);
+    const roseGold = Color(0xFFE8B4B8);
+
+    // Two tilted, counter-rotating elliptical rings
+    for (int ring = 0; ring < 2; ring++) {
+      final ringOrbit = orbit * 2 * pi * (ring == 0 ? 0.10 : -0.07);
+      final tiltPhase = sin(ringOrbit + ring * 1.5);
+      final ringRx = r * (1.35 + ring * 0.15 + breath * 0.04) * bs;
+      final ringRy = r * (0.25 + tiltPhase.abs() * 0.15) * bs;
+      final ringColor = ring == 0
+          ? _lerpHold(moltenGold, champagne)
+          : _lerpHold(roseGold, moltenGold);
+      final ringAlpha = (0.08 + hold * 0.12 + breath * 0.03).clamp(0.0, 1.0);
+      final ringWidth = 1.0 + hold * 1.2;
+
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(ringOrbit + ring * 0.8);
+      // Glow ring
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: ringRx * 2, height: ringRy * 2),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = ringWidth + 3.0
+          ..color = ringColor.withValues(alpha: ringAlpha * 0.15)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3.0),
+      );
+      // Core ring
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: ringRx * 2, height: ringRy * 2),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = ringWidth
+          ..color = ringColor.withValues(alpha: ringAlpha * 0.55),
+      );
+      // Tiny glinting particles along the ring
+      for (int p = 0; p < 8; p++) {
+        final pAngle = (p / 8) * 2 * pi + orbit * 2 * pi * 0.25;
+        final px = cos(pAngle) * ringRx;
+        final py = sin(pAngle) * ringRy;
+        final glint = (sin(orbit * 2 * pi * 4 + p * 3.0 + ring * 2) * 0.5 + 0.5);
+        if (glint > 0.3) {
+          canvas.drawCircle(Offset(px, py), 1.2 + glint * 1.0, Paint()
+            ..color = champagne.withValues(alpha: glint * ringAlpha));
+        }
+      }
+      canvas.restore();
+    }
+  }
+
+  // ── Constellation Network ──
+  void _paintConstellations(
+      Canvas canvas, Offset center, double r, double bs, Random rng) {
+    const champagne = Color(0xFFFFF8E1);
+    const moltenGold = Color(0xFFFFD700);
+
+    // Star positions on a slow outer orbit
+    final stars = <Offset>[];
+    for (int i = 0; i < 12; i++) {
+      final seed = rng.nextDouble();
+      final starAngle = (i / 12) * 2 * pi + orbit * 2 * pi * 0.03 + seed * 0.5;
+      final starDist = r * (1.15 + seed * 0.45) * bs;
+      stars.add(center + Offset(cos(starAngle) * starDist, sin(starAngle) * starDist));
+    }
+
+    // Gossamer threads connecting nearby stars
+    final threadAlpha = (0.03 + hold * 0.08 + breath * 0.02).clamp(0.0, 1.0);
+    for (int i = 0; i < stars.length; i++) {
+      for (int j = i + 1; j < stars.length; j++) {
+        final dist = (stars[i] - stars[j]).distance;
+        if (dist < r * 0.9) {
+          final proximity = 1.0 - (dist / (r * 0.9));
+          canvas.drawLine(stars[i], stars[j], Paint()
+            ..color = _lerpHold(moltenGold, champagne)
+                .withValues(alpha: threadAlpha * proximity * 0.5)
+            ..strokeWidth = 0.3 + proximity * 0.4
+            ..strokeCap = StrokeCap.round);
+        }
       }
     }
 
-    // Gold rim with sparkle
-    canvas.drawCircle(
-      center, r * bs,
-      Paint()
+    // Star points — tiny twinkling dots
+    for (int i = 0; i < stars.length; i++) {
+      final twinkle = (sin(orbit * 2 * pi * 3 + i * 2.3) * 0.5 + 0.5);
+      final starAlpha = (twinkle * 0.25 + hold * 0.20 + breath * 0.05).clamp(0.0, 1.0);
+      final starSize = 1.2 + twinkle * 1.5;
+
+      // Glow
+      canvas.drawCircle(stars[i], starSize + 2.5, Paint()
+        ..color = moltenGold.withValues(alpha: starAlpha * 0.15));
+      // Core
+      canvas.drawCircle(stars[i], starSize, Paint()
+        ..color = champagne.withValues(alpha: starAlpha));
+    }
+  }
+
+  // ── Floating Golden Dust Motes ──
+  void _paintGoldenDust(
+      Canvas canvas, Offset center, double r, double bs, Random rng) {
+    const champagne = Color(0xFFFFF8E1);
+    const moltenGold = Color(0xFFFFD700);
+
+    for (int i = 0; i < 20; i++) {
+      final seed = rng.nextDouble();
+      final phase = (orbit * (0.15 + seed * 0.10) + seed * 7.0) % 1.0;
+      final angle = seed * 2 * pi + phase * pi * 0.3;
+      final dist = r * (0.3 + seed * 1.3) * bs;
+      final drift = sin(phase * 2 * pi + i * 1.3) * r * 0.04;
+      final motePos = center + Offset(cos(angle) * dist + drift, sin(angle) * dist);
+
+      final fadeIn = (phase * 4).clamp(0.0, 1.0);
+      final fadeOut = ((1 - phase) * 3).clamp(0.0, 1.0);
+      final moteAlpha = (fadeIn * fadeOut * (0.06 + hold * 0.10)).clamp(0.0, 1.0);
+
+      if (moteAlpha > 0.01) {
+        final moteSize = 0.5 + seed * 1.5;
+        final moteColor = i.isEven ? champagne : moltenGold;
+        canvas.drawCircle(motePos, moteSize, Paint()
+          ..color = moteColor.withValues(alpha: moteAlpha));
+      }
+    }
+  }
+
+  // ── Sacred Geometry on Hold ──
+  void _paintSacredGeometry(
+      Canvas canvas, Offset center, double r, double bs) {
+    const moltenGold = Color(0xFFFFD700);
+    const champagne = Color(0xFFFFF8E1);
+
+    final geoAlpha = (hold * 0.25).clamp(0.0, 1.0);
+    final geoRot = orbit * 2 * pi * 0.08;
+
+    // Rotating pentagram (5-pointed star)
+    final pentaR = r * (0.55 + hold * 0.15) * bs;
+    final pentaPath = Path();
+    for (int i = 0; i < 5; i++) {
+      // Connect every other vertex to form a star
+      final angle = geoRot + (i * 4 * pi / 5) - pi / 2;
+      final point = center + Offset(cos(angle) * pentaR, sin(angle) * pentaR);
+      if (i == 0) { pentaPath.moveTo(point.dx, point.dy); }
+      else { pentaPath.lineTo(point.dx, point.dy); }
+    }
+    pentaPath.close();
+    // Glow
+    canvas.drawPath(pentaPath, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0 + hold * 2.0
+      ..color = _lerpHold(moltenGold, champagne).withValues(alpha: geoAlpha * 0.12)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3.0));
+    // Core
+    canvas.drawPath(pentaPath, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5 + hold * 0.5
+      ..color = champagne.withValues(alpha: geoAlpha * 0.40)
+      ..strokeCap = StrokeCap.round);
+
+    // Enclosing circle
+    canvas.drawCircle(center, pentaR, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.4 + hold * 0.4
+      ..color = moltenGold.withValues(alpha: geoAlpha * 0.20));
+
+    // Inner pentagon
+    final innerR = pentaR * 0.382; // golden ratio inverse
+    final innerPath = Path();
+    for (int i = 0; i < 5; i++) {
+      final angle = geoRot + (i * 2 * pi / 5) - pi / 2;
+      final point = center + Offset(cos(angle) * innerR, sin(angle) * innerR);
+      if (i == 0) { innerPath.moveTo(point.dx, point.dy); }
+      else { innerPath.lineTo(point.dx, point.dy); }
+    }
+    innerPath.close();
+    canvas.drawPath(innerPath, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.3 + hold * 0.4
+      ..color = champagne.withValues(alpha: geoAlpha * 0.30));
+  }
+
+  // ── Grand Supernova Completion: Aurora ribbons across entire canvas ──
+  void _paintGoldenSupernova(
+      Canvas canvas, Offset center, double r, double bs, Random rng) {
+    const hotWhite = Color(0xFFFFFCF0);
+    const moltenGold = Color(0xFFFFD700);
+    const champagne = Color(0xFFFFF8E1);
+    const deepAmber = Color(0xFFFF8F00);
+    const roseGold = Color(0xFFE8B4B8);
+
+    final fadeOut = (1 - flash).clamp(0.0, 1.0);
+
+    // Full-canvas golden wash
+    final washR = r * (1.5 + flash * 4.0);
+    canvas.drawCircle(center, washR, Paint()
+      ..shader = RadialGradient(colors: [
+        hotWhite.withValues(alpha: fadeOut * 0.35),
+        moltenGold.withValues(alpha: fadeOut * 0.20),
+        deepAmber.withValues(alpha: fadeOut * 0.08),
+        Colors.transparent,
+      ], stops: const [0.0, 0.25, 0.55, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: washR)));
+
+    // Aurora ribbons — sinusoidal golden bands sweeping outward
+    for (int ribbon = 0; ribbon < 6; ribbon++) {
+      final ribbonPath = Path();
+      final baseAngle = (ribbon / 6) * 2 * pi + flash * 1.5 + orbit * pi;
+      final ribbonColor = ribbon.isEven ? moltenGold : roseGold;
+      final waveFreq = 2.0 + ribbon * 0.5;
+
+      for (int seg = 0; seg <= 40; seg++) {
+        final t = seg / 40.0;
+        final dist = r * (0.2 + flash * 3.2 * t);
+        final waveAmp = r * 0.1 * (1 - t) * flash;
+        final wave = sin(t * waveFreq * pi + ribbon * 1.5) * waveAmp;
+        final angle = baseAngle + wave / dist.clamp(1.0, double.infinity);
+        final x = center.dx + cos(angle) * dist;
+        final y = center.dy + sin(angle) * dist;
+        if (seg == 0) { ribbonPath.moveTo(x, y); }
+        else { ribbonPath.lineTo(x, y); }
+      }
+
+      // Glow ribbon
+      canvas.drawPath(ribbonPath, Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5 + hold * 2.0 + breath * 0.5
-        ..color = brightGold.withValues(alpha: 0.12 + hold * 0.25 + breath * 0.06),
-    );
+        ..strokeWidth = 4.0 + (1 - flash) * 6.0
+        ..color = ribbonColor.withValues(alpha: fadeOut * 0.10)
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6.0));
+      // Core ribbon
+      canvas.drawPath(ribbonPath, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0 + (1 - flash) * 2.0
+        ..color = champagne.withValues(alpha: fadeOut * 0.30)
+        ..strokeCap = StrokeCap.round);
+    }
+
+    // Shooting stars radiating outward
+    for (int i = 0; i < 24; i++) {
+      final starAngle = (i / 24) * 2 * pi + flash * 0.6 + i * 0.3;
+      final starStart = r * (0.3 + flash * 1.5);
+      final starEnd = r * (0.8 + flash * 3.5);
+      final startPos = center + Offset(cos(starAngle) * starStart, sin(starAngle) * starStart);
+      final endPos = center + Offset(cos(starAngle) * starEnd, sin(starAngle) * starEnd);
+      final starAlpha = fadeOut * (0.3 + (sin(i * 1.7) * 0.5 + 0.5) * 0.3);
+      final starColor = i % 3 == 0 ? hotWhite : i % 3 == 1 ? moltenGold : deepAmber;
+
+      canvas.drawLine(startPos, endPos, Paint()
+        ..color = starColor.withValues(alpha: starAlpha.clamp(0.0, 1.0))
+        ..strokeWidth = 2.0 * fadeOut + 0.5
+        ..strokeCap = StrokeCap.round);
+
+      // Tiny dot at the tip
+      canvas.drawCircle(endPos, 1.5 * fadeOut + 0.5, Paint()
+        ..color = hotWhite.withValues(alpha: (starAlpha * 1.2).clamp(0.0, 1.0)));
+    }
+
+    // Expanding ring shockwaves
+    for (int ring = 0; ring < 3; ring++) {
+      final ringPhase = (flash + ring * 0.12).clamp(0.0, 1.0);
+      final ringR = r * (0.5 + ringPhase * 3.0);
+      final ringFade = (1 - ringPhase).clamp(0.0, 1.0);
+      canvas.drawCircle(center, ringR, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (2.5 * ringFade) + 0.3
+        ..color = moltenGold.withValues(alpha: ringFade * 0.30));
+    }
+
+    // Central nova flash — blindingly bright white-gold core
+    final novaR = r * (0.6 + (1 - flash) * 0.8) * bs;
+    canvas.drawCircle(center, novaR, Paint()
+      ..shader = RadialGradient(colors: [
+        hotWhite.withValues(alpha: fadeOut * 0.80),
+        moltenGold.withValues(alpha: fadeOut * 0.35),
+        Colors.transparent,
+      ], stops: const [0.0, 0.35, 1.0])
+          .createShader(Rect.fromCircle(center: center, radius: novaR)));
+
+    // Scattered golden sparkles across the full canvas
+    for (int i = 0; i < 32; i++) {
+      final seed = rng.nextDouble();
+      final sparkAngle = seed * 2 * pi + i * 0.9;
+      final sparkDist = r * (0.5 + flash * 3.0 * seed);
+      final sparkPos = center + Offset(
+        cos(sparkAngle) * sparkDist,
+        sin(sparkAngle) * sparkDist,
+      );
+      final sparkTwinkle = (sin(i * 3.7 + flash * 8) * 0.5 + 0.5);
+      final sparkAlpha = (fadeOut * sparkTwinkle * 0.40).clamp(0.0, 1.0);
+      if (sparkAlpha > 0.02) {
+        canvas.drawCircle(sparkPos, 1.0 + seed * 1.5, Paint()
+          ..color = champagne.withValues(alpha: sparkAlpha));
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════
