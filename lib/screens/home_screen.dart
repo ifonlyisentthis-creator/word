@@ -409,16 +409,21 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                   // Timer OR Grace period card (grace replaces timer)
                   // In scheduled mode, show Time Capsule card instead of timer
-                  // Wait for profile before rendering to avoid flash of wrong mode
-                  if (profile == null)
-                    const _SkeletonCard()
-                  else if (controller.isScheduledMode) ...[
+                  // Use cached mode (via controller.isScheduledMode fallback) even
+                  // when profile is still loading so the correct card shape renders
+                  // immediately — no skeleton → real card layout shift.
+                  if (controller.isScheduledMode) ...[
                     const SizedBox(height: 16),
-                    RepaintBoundary(child: _TimeCapsuleCard(theme: context.watch<ThemeProvider>().themeData, controller: controller, isPro: isPro, isLifetime: isLifetime)),
+                    if (profile == null)
+                      const _SkeletonCard()
+                    else
+                      RepaintBoundary(child: _TimeCapsuleCard(theme: context.watch<ThemeProvider>().themeData, controller: controller, isPro: isPro, isLifetime: isLifetime)),
                     const SizedBox(height: 16),
                     RepaintBoundary(child: _TimeCapsuleHowItWorks()),
                     const SizedBox(height: 16),
-                  ] else if (isInGracePeriod)
+                  ] else if (profile == null)
+                    const _SkeletonCard()
+                  else if (isInGracePeriod)
                     RepaintBoundary(
                       child: _GracePeriodCard(
                         executedAt: controller.protocolExecutedAt,
