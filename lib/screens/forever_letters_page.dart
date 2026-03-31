@@ -1646,13 +1646,14 @@ class _CreateForeverLetterSheetState
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
-    // Forever Letters use month/day for annual delivery — allow picking any
-    // day in the calendar year (past dates deliver next year).
-    final firstDay = DateTime(now.year, 1, 1);
-    final lastDay = DateTime(now.year, 12, 31);
+    // Forever Letters: pick any date from today to 12 months ahead.
+    // This ensures the first delivery is always in the future — a Feb 20
+    // birthday picked on March 31 shows as Feb 20 next year, not this year.
+    final firstDay = DateTime(now.year, now.month, now.day);
+    final lastDay = DateTime(now.year + 1, now.month, now.day);
     final initial = _selectedDate != null
-        ? DateTime(now.year, _selectedDate!.month, _selectedDate!.day)
-        : DateTime(now.year, now.month, now.day);
+        ? DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day)
+        : firstDay;
     final clampedInitial = initial.isBefore(firstDay)
         ? firstDay
         : (initial.isAfter(lastDay) ? lastDay : initial);

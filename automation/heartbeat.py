@@ -2178,6 +2178,11 @@ def process_recurring_entries(
         if last_sent_year is not None and int(last_sent_year) >= current_year:
             continue
 
+        # If the stored year is in the future, the first delivery isn't due
+        # until that year (e.g. user picked Feb 20 next year on March 31).
+        if scheduled_at.year > current_year:
+            continue
+
         entry_month = scheduled_at.month
         entry_day = scheduled_at.day
 

@@ -1459,11 +1459,17 @@ class _VaultEntrySheetState extends State<VaultEntrySheet> {
                       onTap: () async {
                         final now = DateTime.now();
                         final maxDays = widget.isLifetime ? 3650 : (widget.isPro ? 365 : 30);
+                        final firstDay = now.add(const Duration(days: 1));
+                        final lastDay = now.add(Duration(days: maxDays));
+                        final defaultDate = firstDay;
+                        final initial = _scheduledAt != null && !_scheduledAt!.isBefore(firstDay) && !_scheduledAt!.isAfter(lastDay)
+                            ? _scheduledAt!
+                            : defaultDate;
                         final picked = await showDatePicker(
                           context: context,
-                          initialDate: _scheduledAt ?? now.add(const Duration(days: 1)),
-                          firstDate: now.add(const Duration(days: 1)),
-                          lastDate: now.add(Duration(days: maxDays)),
+                          initialDate: initial,
+                          firstDate: firstDay,
+                          lastDate: lastDay,
                           builder: (context, child) {
                             return Theme(
                               data: Theme.of(context).copyWith(
