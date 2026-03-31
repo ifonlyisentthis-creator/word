@@ -523,7 +523,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                     child: Builder(
                       builder: (context) {
                         final maxEntries = VaultController.maxEntriesFor(isPro: isPro, isLifetime: isLifetime);
-                        final atLimit = controller.vaultEntryCount >= maxEntries;
+                        final atLimit = controller.totalSlotCount >= maxEntries;
                         final tierName = isLifetime ? 'Lifetime' : (isPro ? 'Pro' : 'Free');
                         return _VaultSummaryCard(
                           entryCount: controller.vaultEntryCount,

@@ -55,20 +55,20 @@ FOR INSERT WITH CHECK (
       WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')
     )
   )
-  -- Tier-based entry count limits
+  -- Tier-based entry count limits (active + sent in grace period)
   AND (
     SELECT CASE
       WHEN p.subscription_status = 'lifetime' THEN
         (SELECT count(*) FROM vault_entries ve
-         WHERE ve.user_id = auth.uid() AND ve.status = 'active') < 30
+         WHERE ve.user_id = auth.uid() AND ve.status IN ('active', 'sent')) < 30
       WHEN p.subscription_status = 'pro' THEN
         (SELECT count(*) FROM vault_entries ve
-         WHERE ve.user_id = auth.uid() AND ve.status = 'active') < 20
+         WHERE ve.user_id = auth.uid() AND ve.status IN ('active', 'sent')) < 20
       ELSE
-        -- Free: max 3 active text items
+        -- Free: max 3 text items (active + sent in grace)
         (SELECT count(*) FROM vault_entries ve
          WHERE ve.user_id = auth.uid()
-           AND ve.status = 'active'
+           AND ve.status IN ('active', 'sent')
            AND ve.data_type = 'text') < 3
     END
     FROM profiles p

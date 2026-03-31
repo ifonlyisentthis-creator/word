@@ -287,9 +287,11 @@ class VaultController extends ChangeNotifier {
       return 'Write something before saving.';
     }
 
-    // Tier-based vault count limits
-    final activeEntriesCount = _entries
-        .where((entry) => entry.status == VaultStatus.active)
+    // Tier-based vault count limits (active + sent in grace count toward limit)
+    final slotCount = _entries
+        .where((entry) =>
+            entry.status == VaultStatus.active ||
+            entry.status == VaultStatus.sent)
         .length;
     final maxEntries = maxEntriesFor(isPro: isPro, isLifetime: isLifetime);
 
@@ -298,7 +300,7 @@ class VaultController extends ChangeNotifier {
         return 'Upgrade to unlock Secure Erase mode.';
       }
     }
-    if (isNew && activeEntriesCount >= maxEntries) {
+    if (isNew && slotCount >= maxEntries) {
       final tierName = isLifetime ? 'Lifetime' : (isPro ? 'Pro' : 'Free');
       return '$tierName plan allows up to $maxEntries entries.';
     }

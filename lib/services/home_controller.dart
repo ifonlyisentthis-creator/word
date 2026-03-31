@@ -94,6 +94,9 @@ class HomeController extends ChangeNotifier {
 
   bool get hasVaultEntries => _hasVaultEntries;
   int get vaultEntryCount => _vaultEntryCount;
+  /// Total entries occupying slots: active + sent (in grace period).
+  /// Matches the server-side RLS count so the UI stays consistent.
+  int get totalSlotCount => _vaultEntryCount + _sentEntryCount;
   DateTime? get nextScheduledAt => _nextScheduledAt;
   DateTime? get nextScheduledCreatedAt => _nextScheduledCreatedAt;
   int get nextScheduledCount => _nextScheduledCount;

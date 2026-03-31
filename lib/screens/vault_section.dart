@@ -213,10 +213,12 @@ class _VaultSectionView extends StatelessWidget {
         .where((entry) => entry.status == VaultStatus.sent)
         .toList();
 
-    // Total active count includes recurring — they occupy vault slots.
+    // Total slot count includes active + sent (in grace) — they occupy vault slots.
     // Used for capacity checks (Add Entry button), not for display.
     final totalActiveCount = controller.entries
-        .where((entry) => entry.status == VaultStatus.active)
+        .where((entry) =>
+            entry.status == VaultStatus.active ||
+            entry.status == VaultStatus.sent)
         .length;
 
     final maxEntries = VaultController.maxEntriesFor(isPro: isPro, isLifetime: isLifetime);

@@ -72,7 +72,8 @@ class _ForeverLettersPageState extends State<ForeverLettersPage> {
         });
 
   int get _totalActiveEntries =>
-      _controller.entries.where((e) => e.status == VaultStatus.active).length;
+      _controller.entries.where((e) =>
+        e.status == VaultStatus.active || e.status == VaultStatus.sent).length;
 
   @override
   Widget build(BuildContext context) {
