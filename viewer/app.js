@@ -280,7 +280,7 @@ async function unlock() {
       throw new Error("not_found");
     }
 
-    if (entry.status && entry.status !== "sent") {
+    if (entry.status && entry.status !== "sent" && entry.status !== "active") {
       throw new Error("unavailable");
     }
 

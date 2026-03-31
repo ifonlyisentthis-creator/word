@@ -351,7 +351,7 @@ CREATE OR REPLACE FUNCTION public.viewer_entry_status(entry_id uuid)
 RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE rec record;
 BEGIN
-  SELECT ve.status, p.sender_name
+  SELECT ve.status, ve.entry_mode, p.sender_name
   INTO rec
   FROM vault_entries ve
   JOIN profiles p ON p.id = ve.user_id
@@ -360,7 +360,12 @@ BEGIN
   IF NOT FOUND THEN
     RETURN json_build_object('state', 'expired', 'sender_name', null::text);
   END IF;
+  -- Sent entries are always available (guardian + TC grace period)
   IF rec.status = 'sent' THEN
+    RETURN json_build_object('state', 'available', 'sender_name', rec.sender_name);
+  END IF;
+  -- Recurring entries stay 'active' forever — they ARE available after delivery
+  IF rec.entry_mode = 'recurring' AND rec.status = 'active' THEN
     RETURN json_build_object('state', 'available', 'sender_name', rec.sender_name);
   END IF;
   RETURN json_build_object('state', 'unavailable');
@@ -384,11 +389,12 @@ BEGIN
     ve.payload_encrypted,
     ve.audio_file_path,
     ve.audio_duration_seconds,
-    ve.status
+    ve.status,
+    ve.entry_mode
   INTO rec
   FROM vault_entries ve
   WHERE ve.id = entry_id
-    AND ve.status = 'sent';
+    AND (ve.status = 'sent' OR (ve.entry_mode = 'recurring' AND ve.status = 'active'));
 
   IF NOT FOUND THEN
     RETURN NULL;
