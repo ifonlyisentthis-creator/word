@@ -1392,7 +1392,15 @@ def claim_entry_for_sending(client, entry_id: str) -> bool:
 
     )
 
-    return bool(response.data)
+    if not response.data:
+        return False
+
+    # Double-guard: verify the write actually persisted (triggers can silently revert)
+    verify = client.table("vault_entries").select("status").eq("id", entry_id).execute()
+    if not verify.data or verify.data[0].get("status") != "sending":
+        print(f"CRITICAL: claim_entry_for_sending write was silently reverted for {entry_id} — trigger or DB issue")
+        return False
+    return True
 
 
 
@@ -1415,7 +1423,15 @@ def mark_entry_sent(client, entry_id: str, sent_at: datetime) -> bool:
 
     ).eq("id", entry_id).eq("status", "sending").execute()
 
-    return bool(response.data)
+    if not response.data:
+        return False
+
+    # Double-guard: verify the write actually persisted (triggers can silently revert)
+    verify = client.table("vault_entries").select("status").eq("id", entry_id).execute()
+    if not verify.data or verify.data[0].get("status") != "sent":
+        print(f"CRITICAL: mark_entry_sent write was silently reverted for {entry_id} — trigger or DB issue")
+        return False
+    return True
 
 
 def requeue_stale_sending_entries(client, now: datetime) -> int:
@@ -2069,8 +2085,13 @@ def process_scheduled_entries(
                                     client.table("vault_entries").update({
                                         "grace_until": grace_until,
                                     }).eq("id", entry_id).execute()
-                                    gu_ok = True
-                                    break
+                                    # Double-guard: verify grace_until persisted
+                                    verify = client.table("vault_entries").select("grace_until").eq("id", entry_id).execute()
+                                    if verify.data and verify.data[0].get("grace_until"):
+                                        gu_ok = True
+                                        break
+                                    else:
+                                        print(f"WARNING: grace_until write silently reverted for {entry_id} (attempt {_gu_attempt + 1})")
                                 except Exception:  # noqa: BLE001
                                     if _gu_attempt < 2:
                                         time.sleep(0.5)
@@ -2285,8 +2306,13 @@ def process_recurring_entries(
                     client.table("vault_entries").update({
                         "last_sent_year": current_year,
                     }).eq("id", entry_id).execute()
-                    year_updated = True
-                    break
+                    # Double-guard: verify the write persisted
+                    verify = client.table("vault_entries").select("last_sent_year").eq("id", entry_id).execute()
+                    if verify.data and int(verify.data[0].get("last_sent_year", 0)) == current_year:
+                        year_updated = True
+                        break
+                    else:
+                        print(f"WARNING: last_sent_year write silently reverted for recurring entry {entry_id} (attempt {_yr_attempt + 1})")
                 except Exception as yr_exc:  # noqa: BLE001
                     if _yr_attempt == 2:
                         print(f"WARNING: Failed to update last_sent_year for recurring entry {entry_id} after 3 attempts: {yr_exc}")
