@@ -1519,7 +1519,7 @@ def heal_inconsistent_profiles(client, now: datetime) -> None:
                     "push_66_sent_at": None,
                     "push_33_sent_at": None,
                     "last_entry_at": None,
-                }).eq("id", uid).execute()
+                }).eq("id", uid).eq("status", "inactive").execute()
                 healed_2 += 1
         if healed_2:
             print(f"Healed {healed_2} orphaned inactive profiles (no protocol_executed_at)")
@@ -1701,7 +1701,7 @@ def process_expired_entries(
                 continue
 
             if not _EMAIL_RE.match(recipient_email):
-                print(f"CRITICAL: Invalid recipient email format for send entry {entry_id} user {user_id}: '{recipient_email}' — entry preserved")
+                print(f"CRITICAL: Invalid recipient email format for send entry {entry_id} user {user_id} — entry preserved")
                 release_entry_lock(client, entry_id)
                 continue
 
@@ -1959,7 +1959,7 @@ def process_scheduled_entries(
                 continue
 
             if not _EMAIL_RE.match(recipient_email):
-                print(f"CRITICAL: Invalid recipient for scheduled entry {entry_id}: '{recipient_email}'")
+                print(f"CRITICAL: Invalid recipient email format for scheduled entry {entry_id}")
                 release_entry_lock(client, entry_id)
                 continue
 
@@ -2235,7 +2235,11 @@ def process_recurring_entries(
 
             viewer_link = build_viewer_link(viewer_base_url, entry_id)
 
-            # Recurring entries never use ZK mode — always include security key
+            # Forever Letters cannot use ZK mode — skip if misconfigured
+            if entry.get("is_zero_knowledge", False):
+                print(f"CRITICAL: Recurring entry {entry_id} has is_zero_knowledge=True — Forever Letters do not support ZK mode, skipping")
+                continue
+
             data_key_encrypted = entry.get("data_key_encrypted")
             if not data_key_encrypted:
                 print(f"CRITICAL: Missing data_key for recurring entry {entry_id}")
@@ -3258,15 +3262,9 @@ def main() -> int:
                       print(f"Downgrade handling failed for scheduled user {user_id}: {dg_exc}")
 
               if active_entries:
-                  try:
-                      process_scheduled_entries(
-                          client, profile, active_entries, server_secret,
-                          resend_key, from_email, viewer_base_url, now,
-                      )
-                  except Exception as exc:  # noqa: BLE001
-                      print(f"Scheduled processing failed for {user_id}: {exc}")
-
-                  # Process recurring (Forever Letters) entries — same entries list
+                  # Process recurring (Forever Letters) FIRST — they are time-critical
+                  # (birthdays, anniversaries) and must not be blocked by rate limits
+                  # from bulk scheduled entries.
                   try:
                       process_recurring_entries(
                           client, profile, active_entries, server_secret,
@@ -3274,6 +3272,14 @@ def main() -> int:
                       )
                   except Exception as exc:  # noqa: BLE001
                       print(f"Recurring processing failed for {user_id}: {exc}")
+
+                  try:
+                      process_scheduled_entries(
+                          client, profile, active_entries, server_secret,
+                          resend_key, from_email, viewer_base_url, now,
+                      )
+                  except Exception as exc:  # noqa: BLE001
+                      print(f"Scheduled processing failed for {user_id}: {exc}")
               continue
 
           last_check_in = parse_iso(profile.get("last_check_in"))
@@ -3398,6 +3404,17 @@ def main() -> int:
                           print(f"Recurring processing failed for {user_id}: {exc}")
                   continue
 
+              # Process recurring (Forever Letters) FIRST — they are time-critical
+              # (birthdays, anniversaries) and must not be blocked by rate limits
+              # from bulk guardian entry delivery.
+              try:
+                  process_recurring_entries(
+                      client, profile, active_entries, server_secret,
+                      resend_key, from_email, viewer_base_url, now,
+                  )
+              except Exception as exc:  # noqa: BLE001
+                  print(f"Recurring processing failed for guardian user {user_id}: {exc}")
+
               had_send, input_send_count = process_expired_entries(
 
                   client,
@@ -3419,15 +3436,6 @@ def main() -> int:
                   now,
 
               )
-
-              # Process recurring (Forever Letters) for guardian-mode users too
-              try:
-                  process_recurring_entries(
-                      client, profile, active_entries, server_secret,
-                      resend_key, from_email, viewer_base_url, now,
-                  )
-              except Exception as exc:  # noqa: BLE001
-                  print(f"Recurring processing failed for guardian user {user_id}: {exc}")
 
               # Mark user as having had vault activity (prevents bot auto-deletion)
               try:
@@ -3531,6 +3539,7 @@ def main() -> int:
                               print(f"User {user_id}: inline audio deletion failed ({_ae_exc}), PASS 0 will retry")
 
                       # Delete recurring (Forever Letters) entries
+                      # No status filter — catch entries in 'sending' too (matches handler)
                       if had_recurring_at_start:
                           try:
                               _inline_recurring = (
@@ -3538,7 +3547,6 @@ def main() -> int:
                                   .select("id,audio_file_path")
                                   .eq("user_id", user_id)
                                   .eq("entry_mode", "recurring")
-                                  .eq("status", "active")
                                   .execute()
                               ).data or []
                               for _re in _inline_recurring:
@@ -3596,8 +3604,7 @@ def main() -> int:
                   )
               else:
                   # Truly destroy-only → no grace needed, reset to fresh immediately.
-                  # Also clear pro artifacts since PASS 0 (downgrade) is skipped.
-                  client.table("profiles").update({
+                  _destroy_update: dict = {
                       "status": "active",
                       "timer_days": 30,
                       "last_check_in": now.isoformat(),
@@ -3606,10 +3613,13 @@ def main() -> int:
                       "push_66_sent_at": None,
                       "push_33_sent_at": None,
                       "last_entry_at": None,
-                      "selected_theme": None,
-                      "selected_soul_fire": None,
                       "downgrade_email_pending": False,
-                  }).eq("id", user_id).execute()
+                  }
+                  # Only clear theme/soul_fire for free users — paid users keep them
+                  if sub_status == "free":
+                      _destroy_update["selected_theme"] = None
+                      _destroy_update["selected_soul_fire"] = None
+                  client.table("profiles").update(_destroy_update).eq("id", user_id).execute()
                   print(f"User {user_id}: destroy-only vault cleared, account reset to fresh")
 
                   # Delete pro-only entries that survive destroy (audio/recurring/far-scheduled)
@@ -3801,6 +3811,73 @@ def main() -> int:
         f"  Active entries seen: {processed_entries}\n"
         f"  Runtime: {elapsed_total:.1f}s"
     )
+
+    # ── Post-loop: Forever Letters for inactive (grace-period) profiles ──
+    # During Guardian grace, profiles are inactive and skipped by the main
+    # loop.  But Forever Letters must still fire on their annual date —
+    # a birthday letter shouldn't be delayed 30 days because of grace.
+    try:
+        now = datetime.now(timezone.utc)
+        _grace_last_id: str | None = None
+        _grace_recurring_sent = 0
+        while True:
+            _gq = (
+                client.table("profiles")
+                .select(PROFILE_SELECT_FIELDS)
+                .eq("status", "inactive")
+                .order("id")
+                .limit(PROFILE_BATCH_SIZE)
+            )
+            if _grace_last_id is not None:
+                _gq = _gq.gt("id", _grace_last_id)
+            _grace_batch = _gq.execute().data or []
+            if not _grace_batch:
+                break
+            _grace_user_ids = [str(p["id"]) for p in _grace_batch]
+            # Only fetch recurring entries (no need for all entry types)
+            _grace_entries = fetch_all_rows(
+                client.table("vault_entries")
+                .select(
+                    "id,user_id,title,action_type,data_type,status,"
+                    "payload_encrypted,recipient_email_encrypted,"
+                    "data_key_encrypted,hmac_signature,audio_file_path,"
+                    "is_zero_knowledge,scheduled_at,grace_until,"
+                    "entry_mode,last_sent_year"
+                )
+                .eq("status", "active")
+                .eq("entry_mode", "recurring")
+                .in_("user_id", _grace_user_ids)
+                .order("id")
+            )
+            if _grace_entries:
+                _ge_by_user: dict[str, list[dict]] = {}
+                for _ge in _grace_entries:
+                    _ge_by_user.setdefault(str(_ge["user_id"]), []).append(_ge)
+                for _gp in _grace_batch:
+                    _gp_uid = str(_gp["id"])
+                    # Skip free users — their recurring entries should have been
+                    # deleted by inline downgrade.  If deletion failed, do NOT
+                    # send pro-only content for a free user; PASS 0 will clean up
+                    # when the profile reactivates after grace.
+                    _gp_sub = (_gp.get("subscription_status") or "free").lower()
+                    if _gp_sub == "free":
+                        continue
+                    _gp_entries = _ge_by_user.get(_gp_uid, [])
+                    if not _gp_entries:
+                        continue
+                    try:
+                        _gs = process_recurring_entries(
+                            client, _gp, _gp_entries, server_secret,
+                            resend_key, from_email, viewer_base_url, now,
+                        )
+                        _grace_recurring_sent += _gs
+                    except Exception as _gr_exc:  # noqa: BLE001
+                        print(f"Recurring processing failed for inactive user {_gp_uid}: {_gr_exc}")
+            _grace_last_id = str(_grace_batch[-1]["id"])
+        if _grace_recurring_sent:
+            print(f"Grace-period recurring: sent {_grace_recurring_sent} Forever Letter(s) for inactive profiles")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Grace-period recurring processing failed: {exc}")
 
     try:
         cleanup_sent_entries(client)

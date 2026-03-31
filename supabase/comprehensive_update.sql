@@ -578,6 +578,32 @@ DROP TRIGGER IF EXISTS set_push_devices_updated_at ON push_devices;
 CREATE TRIGGER set_push_devices_updated_at
 BEFORE UPDATE ON push_devices FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- 6g2. Guard entry_mode from client-side tampering
+-- entry_mode must be set at INSERT and never changed.
+-- Changing 'standard' to 'recurring' would make entries immortal (bypass timer).
+CREATE OR REPLACE FUNCTION public.guard_entry_mode()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF new.entry_mode IS DISTINCT FROM old.entry_mode
+     AND COALESCE(current_setting('request.jwt.claim.role', true), '') <> 'service_role' THEN
+    RAISE EXCEPTION 'entry_mode cannot be changed after creation';
+  END IF;
+  -- Also guard server-managed columns from client mutation
+  IF COALESCE(current_setting('request.jwt.claim.role', true), '') <> 'service_role' THEN
+    new.status := old.status;
+    new.sent_at := old.sent_at;
+    new.grace_until := old.grace_until;
+    new.last_sent_year := old.last_sent_year;
+  END IF;
+  RETURN new;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS vault_entries_guard_entry_mode ON vault_entries;
+CREATE TRIGGER vault_entries_guard_entry_mode
+BEFORE UPDATE ON vault_entries
+FOR EACH ROW EXECUTE FUNCTION public.guard_entry_mode();
+
 -- 6g. Guard theme/soul fire on subscription downgrade
 CREATE OR REPLACE FUNCTION public.guard_preferences_on_downgrade()
 RETURNS trigger LANGUAGE plpgsql AS $$
@@ -711,6 +737,14 @@ FOR INSERT WITH CHECK (
       WHERE p.id = auth.uid() AND p.subscription_status = 'lifetime'
     )
   )
+  -- Recurring (Forever Letters) requires Pro/Lifetime
+  AND (
+    COALESCE(entry_mode, 'standard') <> 'recurring'
+    OR EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = auth.uid() AND p.subscription_status IN ('pro','lifetime')
+    )
+  )
   -- Free users: max 3 active text items
   AND (
     EXISTS (
@@ -785,7 +819,8 @@ USING (bucket_id = 'vault-audio' AND (storage.foldername(name))[1] = auth.uid():
 
 -- Helper: SECURITY DEFINER so the storage policy can check vault_entries
 -- even after we revoke direct anon SELECT on the table.
-DROP FUNCTION IF EXISTS public.is_sent_audio_path(text);
+-- NOTE: Do NOT drop — storage policy vault_audio_read_sent_anon depends on it.
+-- Use CREATE OR REPLACE to update the body in place.
 CREATE OR REPLACE FUNCTION public.is_sent_audio_path(file_path text)
 RETURNS boolean
 LANGUAGE sql
@@ -795,7 +830,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM vault_entries ve
     WHERE ve.audio_file_path = file_path
-      AND ve.status = 'sent'
+      AND (ve.status = 'sent' OR (ve.entry_mode = 'recurring' AND ve.status = 'active'))
   );
 $$;
 REVOKE ALL ON FUNCTION public.is_sent_audio_path(text) FROM public;
@@ -886,6 +921,10 @@ CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices (user_id);
 CREATE INDEX IF NOT EXISTS idx_tombstones_user ON vault_entry_tombstones (user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_subscription ON profiles (subscription_status) WHERE status = 'active';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_push_devices_user_token ON push_devices (user_id, fcm_token);
+-- Grace-period cleanup: per-entry grace lookup for Time Capsule entries
+CREATE INDEX IF NOT EXISTS idx_vault_entries_grace_until ON vault_entries (grace_until) WHERE status = 'sent';
+-- Audio viewer access: avoid sequential scan in is_sent_audio_path
+CREATE INDEX IF NOT EXISTS idx_vault_entries_audio_path ON vault_entries (audio_file_path) WHERE audio_file_path IS NOT NULL;
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  SECTION 12 — UNSCHEDULE OLD CRON JOBS                                ║
