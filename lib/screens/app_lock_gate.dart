@@ -284,215 +284,226 @@ class _AppLockGateState extends State<AppLockGate>
   @override
 
   Widget build(BuildContext context) {
+    // ALWAYS keep the child in the tree so its state (HomeController,
+    // profile, theme) survives lock/unlock cycles.  Hide it behind the
+    // lock overlay with Offstage + TickerMode to save CPU while locked.
+    final locked = !_isUnlocked && _isSupportedPlatform;
 
-    if (_isUnlocked || !_isSupportedPlatform) {
+    return Stack(
+      children: [
+        // Child stays mounted but hidden when locked — no rebuild flash.
+        TickerMode(
+          enabled: !locked,
+          child: Offstage(
+            offstage: locked,
+            child: widget.child,
+          ),
+        ),
 
-      return widget.child;
+        // Lock overlay
+        if (locked)
+          Scaffold(
 
-    }
+            body: Stack(
 
+              children: [
 
+                const RepaintBoundary(child: AmbientBackground()),
 
-    return Scaffold(
+                SafeArea(
 
-      body: Stack(
+                  child: Center(
 
-        children: [
+                    child: ConstrainedBox(
 
-          const RepaintBoundary(child: AmbientBackground()),
+                      constraints: const BoxConstraints(maxWidth: 360),
 
-          SafeArea(
+                      child: Container(
 
-            child: Center(
+                        padding: const EdgeInsets.all(24),
 
-              child: ConstrainedBox(
-
-                constraints: const BoxConstraints(maxWidth: 360),
-
-                child: Container(
-
-                  padding: const EdgeInsets.all(24),
-
-                  margin: const EdgeInsets.symmetric(horizontal: 24),
-
-                  decoration: BoxDecoration(
-
-                    gradient: const LinearGradient(
-
-                      begin: Alignment.topLeft,
-
-                      end: Alignment.bottomRight,
-
-                      colors: [Color(0xFF1B1B1B), Color(0xFF0E0E0E)],
-
-                    ),
-
-                    borderRadius: BorderRadius.circular(24),
-
-                    border: Border.all(color: Colors.white12),
-
-                    boxShadow: [
-
-                      BoxShadow(
-
-                        color: Colors.black.withValues(alpha: 0.4),
-
-                        blurRadius: 18,
-
-                        offset: const Offset(0, 14),
-
-                      ),
-
-                    ],
-
-                  ),
-
-                  child: Column(
-
-                    mainAxisSize: MainAxisSize.min,
-
-                    children: [
-
-                      Container(
-
-                        padding: const EdgeInsets.all(16),
+                        margin: const EdgeInsets.symmetric(horizontal: 24),
 
                         decoration: BoxDecoration(
 
-                          color: Colors.white10,
+                          gradient: const LinearGradient(
 
-                          shape: BoxShape.circle,
+                            begin: Alignment.topLeft,
 
-                          border: Border.all(color: Colors.white24),
+                            end: Alignment.bottomRight,
 
-                        ),
-
-                        child: Icon(
-
-                          Icons.lock_outline,
-
-                          size: 36,
-
-                          color: Theme.of(context).colorScheme.primary,
-
-                        ),
-
-                      ),
-
-                      const SizedBox(height: 18),
-
-                      Text(
-
-                        'Unlock Afterword',
-
-                        style: Theme.of(context).textTheme.titleLarge,
-
-                      ),
-
-                      const SizedBox(height: 8),
-
-                      Text(
-
-                        'Device security keeps your vault sealed.',
-
-                        textAlign: TextAlign.center,
-
-                        style: Theme.of(context)
-
-                            .textTheme
-
-                            .bodySmall
-
-                            ?.copyWith(color: Colors.white60),
-
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      if (_isAuthenticating)
-
-                        const CircularProgressIndicator()
-
-                      else
-
-                        SizedBox(
-
-                          width: double.infinity,
-
-                          child: FilledButton.icon(
-
-                            onPressed: _authenticate,
-
-                            icon: const Icon(Icons.fingerprint),
-
-                            label: const Text('Unlock Vault'),
+                            colors: [Color(0xFF1B1B1B), Color(0xFF0E0E0E)],
 
                           ),
 
-                        ),
+                          borderRadius: BorderRadius.circular(24),
 
-                      if (kDebugMode && !_isAuthenticating)
+                          border: Border.all(color: Colors.white12),
 
-                        SizedBox(
+                          boxShadow: [
 
-                          width: double.infinity,
+                            BoxShadow(
 
-                          child: TextButton(
+                              color: Colors.black.withValues(alpha: 0.4),
 
-                            onPressed: () {
+                              blurRadius: 18,
 
-                              setState(() {
+                              offset: const Offset(0, 14),
 
-                                _isUnlocked = true;
+                            ),
 
-                                _errorMessage = null;
-
-                              });
-
-                            },
-
-                            child: const Text('Skip (Debug)'),
-
-                          ),
+                          ],
 
                         ),
 
-                      if (_errorMessage != null) ...[
+                        child: Column(
 
-                        const SizedBox(height: 12),
+                          mainAxisSize: MainAxisSize.min,
 
-                        Text(
+                          children: [
 
-                          _errorMessage!,
+                            Container(
 
-                          textAlign: TextAlign.center,
+                              padding: const EdgeInsets.all(16),
 
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              decoration: BoxDecoration(
 
-                                color: Theme.of(context).colorScheme.error,
+                                color: Colors.white10,
+
+                                shape: BoxShape.circle,
+
+                                border: Border.all(color: Colors.white24),
 
                               ),
 
+                              child: Icon(
+
+                                Icons.lock_outline,
+
+                                size: 36,
+
+                                color: Theme.of(context).colorScheme.primary,
+
+                              ),
+
+                            ),
+
+                            const SizedBox(height: 18),
+
+                            Text(
+
+                              'Unlock Afterword',
+
+                              style: Theme.of(context).textTheme.titleLarge,
+
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            Text(
+
+                              'Device security keeps your vault sealed.',
+
+                              textAlign: TextAlign.center,
+
+                              style: Theme.of(context)
+
+                                  .textTheme
+
+                                  .bodySmall
+
+                                  ?.copyWith(color: Colors.white60),
+
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            if (_isAuthenticating)
+
+                              const CircularProgressIndicator()
+
+                            else
+
+                              SizedBox(
+
+                                width: double.infinity,
+
+                                child: FilledButton.icon(
+
+                                  onPressed: _authenticate,
+
+                                  icon: const Icon(Icons.fingerprint),
+
+                                  label: const Text('Unlock Vault'),
+
+                                ),
+
+                              ),
+
+                            if (kDebugMode && !_isAuthenticating)
+
+                              SizedBox(
+
+                                width: double.infinity,
+
+                                child: TextButton(
+
+                                  onPressed: () {
+
+                                    setState(() {
+
+                                      _isUnlocked = true;
+
+                                      _errorMessage = null;
+
+                                    });
+
+                                  },
+
+                                  child: const Text('Skip (Debug)'),
+
+                                ),
+
+                              ),
+
+                            if (_errorMessage != null) ...[
+
+                              const SizedBox(height: 12),
+
+                              Text(
+
+                                _errorMessage!,
+
+                                textAlign: TextAlign.center,
+
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+
+                                      color: Theme.of(context).colorScheme.error,
+
+                                    ),
+
+                              ),
+
+                            ],
+
+                          ],
+
                         ),
 
-                      ],
+                      ),
 
-                    ],
+                    ),
 
                   ),
 
                 ),
 
-              ),
+              ],
 
             ),
 
           ),
-
-        ],
-
-      ),
-
+      ],
     );
 
   }
