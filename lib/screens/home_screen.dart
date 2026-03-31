@@ -60,11 +60,13 @@ class HomeScreen extends StatelessWidget {
     }
 
     final rc = context.read<RevenueCatController>();
-    final subStatus = rc.isLifetime
-        ? 'lifetime'
-        : rc.isPro
-        ? 'pro'
-        : 'free';
+    final tp = context.read<ThemeProvider>();
+    // Use RevenueCat if ready, otherwise fall back to locally cached
+    // subscription status (loaded from secure storage during splash).
+    // This prevents a flash of free-tier UI while RevenueCat initializes.
+    final subStatus = rc.isConfigured
+        ? (rc.isLifetime ? 'lifetime' : rc.isPro ? 'pro' : 'free')
+        : tp.subscriptionStatus;
 
     return ChangeNotifierProvider(
       key: ValueKey(user.id),
@@ -350,9 +352,16 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
     final isInGracePeriod = controller.isInGracePeriod;
 
-    final isLifetime = revenueCat.isLifetime;
+    // Use RevenueCat if ready, otherwise fall back to cached sub status
+    // to avoid a flash of free-tier UI while RevenueCat initializes.
+    final cachedSub = context.watch<ThemeProvider>().subscriptionStatus;
+    final isLifetime = revenueCat.isConfigured
+        ? revenueCat.isLifetime
+        : cachedSub == 'lifetime';
 
-    final isPro = revenueCat.isPro || isLifetime;
+    final isPro = revenueCat.isConfigured
+        ? (revenueCat.isPro || revenueCat.isLifetime)
+        : (cachedSub == 'pro' || cachedSub == 'lifetime');
 
     return Scaffold(
       key: _scaffoldKey,
