@@ -360,8 +360,8 @@ BEGIN
   IF NOT FOUND THEN
     RETURN json_build_object('state', 'expired', 'sender_name', null::text);
   END IF;
-  -- Sent entries are always available (guardian + TC grace period)
-  IF rec.status = 'sent' THEN
+  -- Sent/sending entries are available (sending = email dispatched, DB update in flight)
+  IF rec.status IN ('sent', 'sending') THEN
     RETURN json_build_object('state', 'available', 'sender_name', rec.sender_name);
   END IF;
   -- Recurring entries stay 'active' forever — they ARE available after delivery
@@ -394,7 +394,7 @@ BEGIN
   INTO rec
   FROM vault_entries ve
   WHERE ve.id = entry_id
-    AND (ve.status = 'sent' OR (ve.entry_mode = 'recurring' AND ve.status = 'active'));
+    AND (ve.status IN ('sent', 'sending') OR (ve.entry_mode = 'recurring' AND ve.status = 'active'));
 
   IF NOT FOUND THEN
     RETURN NULL;
@@ -830,7 +830,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM vault_entries ve
     WHERE ve.audio_file_path = file_path
-      AND (ve.status = 'sent' OR (ve.entry_mode = 'recurring' AND ve.status = 'active'))
+      AND (ve.status IN ('sent', 'sending') OR (ve.entry_mode = 'recurring' AND ve.status = 'active'))
   );
 $$;
 REVOKE ALL ON FUNCTION public.is_sent_audio_path(text) FROM public;
