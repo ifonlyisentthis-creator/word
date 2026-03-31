@@ -11,14 +11,18 @@ class ThemeProvider extends ChangeNotifier {
   static const _keyTheme = 'cached_theme';
   static const _keySoulFire = 'cached_soul_fire';
   static const _keySub = 'cached_sub_status';
+  static const _keyAppMode = 'cached_app_mode';
 
   AppThemeId _themeId = AppThemeId.oledVoid;
   SoulFireStyleId _soulFireId = SoulFireStyleId.etherealOrb;
   String _subscriptionStatus = 'free';
+  String _appMode = 'vault';
 
   AppThemeId get themeId => _themeId;
   SoulFireStyleId get soulFireId => _soulFireId;
   String get subscriptionStatus => _subscriptionStatus;
+  String get appMode => _appMode;
+  bool get isScheduledMode => _appMode == 'scheduled';
 
   AppThemeData get themeData => AppThemeData.fromId(_themeId);
   ThemeData get flutterTheme => themeData.toFlutterTheme();
@@ -30,7 +34,9 @@ class ThemeProvider extends ChangeNotifier {
       final cachedTheme = await _storage.read(key: _keyTheme);
       final cachedSf = await _storage.read(key: _keySoulFire);
       final cachedSub = await _storage.read(key: _keySub) ?? 'free';
+      final cachedMode = await _storage.read(key: _keyAppMode) ?? 'vault';
       _subscriptionStatus = cachedSub;
+      _appMode = cachedMode;
       if (cachedTheme != null) {
         try {
           final parsed = AppThemeId.values.firstWhere((e) => e.key == cachedTheme);
@@ -56,6 +62,7 @@ class ThemeProvider extends ChangeNotifier {
         _storage.write(key: _keyTheme, value: _themeId.key),
         _storage.write(key: _keySoulFire, value: _soulFireId.key),
         _storage.write(key: _keySub, value: _subscriptionStatus),
+        _storage.write(key: _keyAppMode, value: _appMode),
       ]);
     } catch (_) {}
   }
@@ -66,8 +73,10 @@ class ThemeProvider extends ChangeNotifier {
     final oldSub = _subscriptionStatus;
     final oldTheme = _themeId;
     final oldSf = _soulFireId;
+    final oldMode = _appMode;
 
     _subscriptionStatus = profile.subscriptionStatus;
+    _appMode = profile.appMode;
 
     // Parse theme from profile, fallback to default if invalid or locked
     final savedTheme = profile.selectedTheme;
@@ -106,7 +115,8 @@ class ThemeProvider extends ChangeNotifier {
 
     if (_subscriptionStatus != oldSub ||
         _themeId != oldTheme ||
-        _soulFireId != oldSf) {
+        _soulFireId != oldSf ||
+        _appMode != oldMode) {
       notifyListeners();
       _saveToCache();
     }
@@ -151,6 +161,7 @@ class ThemeProvider extends ChangeNotifier {
     _themeId = AppThemeId.oledVoid;
     _soulFireId = SoulFireStyleId.etherealOrb;
     _subscriptionStatus = 'free';
+    _appMode = 'vault';
     notifyListeners();
     _saveToCache();
   }

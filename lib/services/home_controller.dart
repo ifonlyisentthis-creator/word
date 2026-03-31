@@ -99,8 +99,8 @@ class HomeController extends ChangeNotifier {
   int get nextScheduledCount => _nextScheduledCount;
   int get sentEntryCount => _sentEntryCount;
 
-  bool get isScheduledMode => _profile?.isScheduledMode ?? false;
-  String get appMode => _profile?.appMode ?? 'vault';
+  bool get isScheduledMode => _profile?.isScheduledMode ?? _themeProvider.isScheduledMode;
+  String get appMode => _profile?.appMode ?? _themeProvider.appMode;
 
   @override
   void notifyListeners() {
@@ -269,7 +269,8 @@ class HomeController extends ChangeNotifier {
           profile.timerDays != _profile!.timerDays ||
           profile.status != _profile!.status ||
           profile.subscriptionStatus != _profile!.subscriptionStatus ||
-          profile.protocolExecutedAt != _profile!.protocolExecutedAt;
+          profile.protocolExecutedAt != _profile!.protocolExecutedAt ||
+          profile.appMode != _profile!.appMode;
 
       _setProtocolState(profile);
 
@@ -344,6 +345,7 @@ class HomeController extends ChangeNotifier {
       _profile = profile;
 
       _setProtocolState(profile);
+      _themeProvider.syncFromProfile(profile);
 
       _errorMessage = null;
 
@@ -476,6 +478,7 @@ class HomeController extends ChangeNotifier {
           .timeout(_networkTimeout);
       if (_isDisposed) return null;
       _setProtocolState(_profile!);
+      _themeProvider.syncFromProfile(_profile!);
       _errorMessage = null;
       notifyListeners();
       return null;
