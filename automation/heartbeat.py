@@ -2075,17 +2075,11 @@ def process_scheduled_entries(
                                     if _gu_attempt < 2:
                                         time.sleep(0.5)
                             if not gu_ok:
-                                # Revert sent→active so next run retries.
-                                # Can't use release_entry_lock (requires status=sending).
-                                print(f"WARNING: grace_until failed for {entry_id}, reverting to active")
-                                try:
-                                    client.table("vault_entries").update({
-                                        "status": "active",
-                                        "sent_at": None,
-                                    }).eq("id", entry_id).eq("status", "sent").execute()
-                                except Exception:  # noqa: BLE001
-                                    pass
-                                break
+                                # Email already sent — do NOT revert to active.
+                                # Reverting would cause duplicate emails on next run.
+                                # Missing grace_until just means the entry won't
+                                # auto-cleanup, which is far safer than re-sending.
+                                print(f"WARNING: grace_until failed for scheduled entry {entry_id}, keeping status=sent (no revert)")
                             marked = True
                             break
                     except Exception as mark_exc:  # noqa: BLE001
