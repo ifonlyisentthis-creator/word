@@ -1121,6 +1121,7 @@ def build_unlock_email_payload(
         f"  {key_plain}\n\n"
         "Please keep this sequence safe. For your privacy, this is an "
         "automated delivery and this inbox is not monitored for replies.\n\n"
+        "If you don't recognise the sender, feel free to ignore this.\n\n"
         "Take care,\n\n"
         "The Afterword Team\n"
         "https://afterword-app.com"
@@ -1148,6 +1149,7 @@ def build_unlock_email_payload(
         f'{key_html}</p>'
         '<p>Please keep this sequence safe. For your privacy, this is an '
         'automated delivery and this inbox is not monitored for replies.</p>'
+        "<p>If you don't recognise the sender, feel free to ignore this.</p>"
         '<p>Take care,</p>'
         '<p>The Afterword Team<br>'
         '<a href="https://afterword-app.com" style="color:#1155cc;'
@@ -1199,6 +1201,7 @@ def build_zk_unlock_email_payload(
         "they may have left for you.\n\n"
         "For your privacy, this is an automated delivery and this inbox "
         "is not monitored for replies.\n\n"
+        "If you don't recognise the sender, feel free to ignore this.\n\n"
         "Take care,\n\n"
         "The Afterword Team\n"
         "https://afterword-app.com"
@@ -1222,6 +1225,7 @@ def build_zk_unlock_email_payload(
         'they may have left for you.</p>'
         '<p>For your privacy, this is an automated delivery and this inbox '
         'is not monitored for replies.</p>'
+        "<p>If you don't recognise the sender, feel free to ignore this.</p>"
         '<p>Take care,</p>'
         '<p>The Afterword Team<br>'
         '<a href="https://afterword-app.com" style="color:#1155cc;'
