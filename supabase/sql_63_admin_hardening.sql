@@ -229,7 +229,7 @@ BEGIN
   FROM (
     SELECT
       ve.id, ve.title, ve.data_type, ve.entry_mode, ve.action_type,
-      ve.status, ve.is_recurring, ve.last_sent_year,
+      ve.status, ve.last_sent_year,
       ve.is_zero_knowledge, ve.audio_file_path,
       ve.scheduled_at, ve.grace_until, ve.sent_at, ve.created_at
     FROM vault_entries ve
