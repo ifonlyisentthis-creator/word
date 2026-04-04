@@ -124,6 +124,12 @@ function pct(part, total) {
   return ((part / total) * 100).toFixed(1) + "%";
 }
 
+function ensureArray(val) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === "string") { try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; } catch { return []; } }
+  return [];
+}
+
 // Encrypted / sensitive fields that must never be displayed
 const HIDDEN_FIELDS = new Set([
   "payload_encrypted",
@@ -806,8 +812,8 @@ async function loadHeartbeat(page) {
 }
 
 function hbStatusDot(run) {
-  const errors = run.errors || [];
-  const warnings = run.warnings || [];
+  const errors = ensureArray(run.errors);
+  const warnings = ensureArray(run.warnings);
   if (errors.length > 0) return "error";
   if (warnings.length > 0) return "warn";
   return "ok";
@@ -818,8 +824,8 @@ function renderHeartbeatTimeline(rows) {
     ${rows.map((r) => {
       const dot = hbStatusDot(r);
       const runtime = r.runtime_seconds != null ? `${Number(r.runtime_seconds).toFixed(1)}s` : "-";
-      const errors = r.errors || [];
-      const warnings = r.warnings || [];
+      const errors = ensureArray(r.errors);
+      const warnings = ensureArray(r.warnings);
       return `
         <div class="hb-card">
           <div class="hb-card__header">
