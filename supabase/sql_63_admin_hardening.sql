@@ -282,7 +282,11 @@ BEGIN
 
   SELECT count(*) INTO total_count
   FROM vault_entries ve
-  WHERE (p_status IS NULL OR ve.status = p_status)
+  WHERE (
+    p_status IS NULL
+    OR (p_status = 'grace' AND ve.status = 'sent' AND ve.grace_until IS NOT NULL AND ve.grace_until > now())
+    OR (p_status <> 'grace' AND ve.status = p_status)
+  )
     AND (p_entry_mode IS NULL OR COALESCE(ve.entry_mode, 'standard') = p_entry_mode)
     AND (p_data_type IS NULL OR ve.data_type = p_data_type)
     AND (p_action_type IS NULL OR ve.action_type = p_action_type);
@@ -291,11 +295,15 @@ BEGIN
   FROM (
     SELECT
       ve.id, ve.title, ve.data_type, ve.entry_mode, ve.action_type,
-      ve.status, ve.scheduled_at, ve.sent_at, ve.created_at,
+      ve.status, ve.scheduled_at, ve.sent_at, ve.grace_until, ve.created_at,
       p.email AS user_email
     FROM vault_entries ve
     JOIN profiles p ON p.id = ve.user_id
-    WHERE (p_status IS NULL OR ve.status = p_status)
+    WHERE (
+      p_status IS NULL
+      OR (p_status = 'grace' AND ve.status = 'sent' AND ve.grace_until IS NOT NULL AND ve.grace_until > now())
+      OR (p_status <> 'grace' AND ve.status = p_status)
+    )
       AND (p_entry_mode IS NULL OR COALESCE(ve.entry_mode, 'standard') = p_entry_mode)
       AND (p_data_type IS NULL OR ve.data_type = p_data_type)
       AND (p_action_type IS NULL OR ve.action_type = p_action_type)
