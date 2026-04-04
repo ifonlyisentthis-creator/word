@@ -326,20 +326,20 @@ async function loadDashboard() {
         ${statCard("New Today", s.new_today)}
       </div>
       <div class="stat-grid">
-        ${statCard("Free", s.free_users, s.total_users)}
-        ${statCard("Pro", s.pro_users, s.total_users)}
-        ${statCard("Lifetime", s.lifetime_users, s.total_users)}
+        ${statCard("Free", s.sub_free, s.total_users)}
+        ${statCard("Pro", s.sub_pro, s.total_users)}
+        ${statCard("Lifetime", s.sub_lifetime, s.total_users)}
       </div>
       <div class="stat-grid">
         ${statCard("Total Entries", s.total_entries)}
         ${statCard("Active Entries", s.active_entries)}
         ${statCard("Sent Entries", s.sent_entries)}
-        ${statCard("Sent Today", s.sent_today)}
+        ${statCard("Sent Today", s.entries_sent_today)}
       </div>
       <div class="stat-grid">
-        ${statCard("Text", s.text_entries)}
-        ${statCard("Audio", s.audio_entries)}
-        ${statCard("Recurring", s.recurring_entries)}
+        ${statCard("Text", s.entries_text)}
+        ${statCard("Audio", s.entries_audio)}
+        ${statCard("Recurring", s.entries_recurring)}
       </div>
       <div class="stat-grid">
         ${statCard("Vault Mode Users", s.vault_mode_users)}
@@ -384,11 +384,11 @@ async function loadUsers(page) {
       p_search: f.search || null,
       p_status: f.status === "all" ? null : f.status,
       p_subscription: f.subscription === "all" ? null : f.subscription,
-      p_page: usersPage,
-      p_per_page: USERS_PER_PAGE,
+      p_limit: USERS_PER_PAGE,
+      p_offset: (usersPage - 1) * USERS_PER_PAGE,
     });
     if (error) throw error;
-    const rows = data?.rows || [];
+    const rows = data?.users || [];
     usersTotal = data?.total || 0;
     if (rows.length === 0) {
       container.innerHTML = '<div class="empty">No users found.</div>';
@@ -439,7 +439,7 @@ function renderUsersTable(rows) {
             <td>${statusBadge(r.status)}</td>
             <td>${subBadge(r.subscription_status)}</td>
             <td>${esc(r.app_mode || "vault")}</td>
-            <td>${fmtNum(r.entry_count)}</td>
+            <td>${fmtNum(r.total_entry_count)}</td>
             <td>${timerDisplay(r)}</td>
             <td title="${esc(formatDate(r.last_check_in))}">${timeAgo(r.last_check_in)}</td>
             <td title="${esc(formatDate(r.created_at))}">${timeAgo(r.created_at)}</td>
@@ -476,7 +476,7 @@ function bindUsersEvents() {
       );
       if (!confirmed) return;
       try {
-        const { error } = await getClient().rpc("admin_ban_user", { target_user_id: btn.dataset.id });
+        const { error } = await getClient().rpc("admin_ban_user", { p_user_id: btn.dataset.id });
         if (error) throw error;
         showToast(`${email} has been banned.`, "success");
         loadUsers();
@@ -498,7 +498,7 @@ function bindUsersEvents() {
       );
       if (!confirmed) return;
       try {
-        const { error } = await getClient().rpc("admin_unban_user", { target_user_id: btn.dataset.id });
+        const { error } = await getClient().rpc("admin_unban_user", { p_user_id: btn.dataset.id });
         if (error) throw error;
         showToast(`${email} has been unbanned.`, "success");
         loadUsers();
@@ -520,7 +520,7 @@ function bindUsersEvents() {
       );
       if (!confirmed) return;
       try {
-        const { error } = await getClient().rpc("admin_delete_user", { target_user_id: btn.dataset.id });
+        const { error } = await getClient().rpc("admin_delete_user", { p_user_id: btn.dataset.id });
         if (error) throw error;
         showToast(`${email} has been deleted.`, "success");
         loadUsers();
@@ -555,7 +555,7 @@ async function loadUserDetail(userId) {
   const client = getClient();
   if (!client) return;
   try {
-    const { data, error } = await client.rpc("admin_get_user_detail", { target_user_id: userId });
+    const { data, error } = await client.rpc("admin_get_user_detail", { p_user_id: userId });
     if (error) throw error;
     if (!data) {
       container.innerHTML = '<div class="empty">User not found.</div>';
@@ -638,14 +638,14 @@ function renderUserDetail(d) {
       <h3>Tombstones (${tombstones.length})</h3>
       ${tombstones.length > 0 ? `
         <table class="data-table">
-          <thead><tr><th>Entry ID</th><th>Title</th><th>Deleted At</th><th>Grace Until</th></tr></thead>
+          <thead><tr><th>Entry ID</th><th>Sender Name</th><th>Sent At</th><th>Expired At</th></tr></thead>
           <tbody>
             ${tombstones.map((t) => `
               <tr>
-                <td>${esc(t.entry_id)}</td>
-                <td>${esc(t.title)}</td>
-                <td>${formatDate(t.deleted_at || t.created_at)}</td>
-                <td>${formatDate(t.grace_until)}</td>
+                <td>${esc(t.vault_entry_id)}</td>
+                <td>${esc(t.sender_name)}</td>
+                <td>${formatDate(t.sent_at)}</td>
+                <td>${formatDate(t.expired_at)}</td>
               </tr>`).join("")}
           </tbody>
         </table>` : '<div class="empty">No tombstones.</div>'}
@@ -697,11 +697,11 @@ async function loadEntries(page) {
       p_entry_mode: f.entry_mode === "all" ? null : f.entry_mode,
       p_data_type: f.data_type === "all" ? null : f.data_type,
       p_action_type: f.action_type === "all" ? null : f.action_type,
-      p_page: entriesPage,
-      p_per_page: ENTRIES_PER_PAGE,
+      p_limit: ENTRIES_PER_PAGE,
+      p_offset: (entriesPage - 1) * ENTRIES_PER_PAGE,
     });
     if (error) throw error;
-    const rows = data?.rows || [];
+    const rows = data?.entries || [];
     entriesTotal = data?.total || 0;
     if (rows.length === 0) {
       container.innerHTML = '<div class="empty">No entries found.</div>';
@@ -754,7 +754,7 @@ function bindEntriesEvents() {
       );
       if (!confirmed) return;
       try {
-        const { error } = await getClient().rpc("admin_delete_entry", { target_entry_id: btn.dataset.id });
+        const { error } = await getClient().rpc("admin_delete_entry", { p_entry_id: btn.dataset.id });
         if (error) throw error;
         showToast("Entry deleted.", "success");
         loadEntries();
@@ -787,11 +787,11 @@ async function loadHeartbeat(page) {
   if (!client) return;
   try {
     const { data, error } = await client.rpc("admin_list_heartbeat_runs", {
-      p_page: heartbeatPage,
-      p_per_page: HEARTBEAT_PER_PAGE,
+      p_limit: HEARTBEAT_PER_PAGE,
+      p_offset: (heartbeatPage - 1) * HEARTBEAT_PER_PAGE,
     });
     if (error) throw error;
-    const rows = data?.rows || [];
+    const rows = data?.runs || [];
     heartbeatTotal = data?.total || 0;
     if (rows.length === 0) {
       container.innerHTML = '<div class="empty">No heartbeat runs found.</div>';
@@ -829,16 +829,17 @@ function renderHeartbeatTimeline(rows) {
           </div>
           <div class="hb-metrics">
             ${hbMetric("Profiles", r.profiles_processed)}
-            ${hbMetric("Entries", r.entries_processed)}
+            ${hbMetric("Entries Seen", r.entries_seen)}
             ${hbMetric("Emails Sent", r.emails_sent)}
             ${hbMetric("Emails Failed", r.emails_failed)}
             ${hbMetric("Pushes", r.pushes_sent)}
-            ${hbMetric("Deliveries", r.deliveries)}
-            ${hbMetric("Recurring", r.recurring_processed)}
-            ${hbMetric("Scheduled", r.scheduled_processed)}
-            ${hbMetric("Cleanups", r.cleanups)}
-            ${hbMetric("Bots", r.bots_detected)}
-            ${hbMetric("Downgrades", r.downgrades)}
+            ${hbMetric("Delivered", r.entries_delivered)}
+            ${hbMetric("Destroyed", r.entries_destroyed)}
+            ${hbMetric("Recurring", r.recurring_sent)}
+            ${hbMetric("Scheduled", r.scheduled_delivered)}
+            ${hbMetric("Cleanups", r.entries_cleaned_up)}
+            ${hbMetric("Bots", r.bots_cleaned_up)}
+            ${hbMetric("Downgrades", r.downgrades_processed)}
           </div>
           ${errors.length > 0 ? `
             <details class="hb-expandable hb-errors">
@@ -898,7 +899,7 @@ function renderSettings(admins) {
               <td>
                 ${a.email === currentUserEmail
                   ? '<span class="badge muted">You</span>'
-                  : `<button class="btn btn--sm btn--danger action-remove-admin" data-email="${esc(a.email)}">Remove</button>`}
+                  : `<button class="btn btn--sm btn--danger action-remove-admin" data-userid="${esc(a.user_id)}" data-email="${esc(a.email)}">Remove</button>`}
               </td>
             </tr>`).join("")}
         </tbody>
@@ -922,7 +923,7 @@ function bindSettingsEvents() {
       );
       if (!confirmed) return;
       try {
-        const { error } = await getClient().rpc("admin_remove_admin", { target_email: email });
+        const { error } = await getClient().rpc("admin_remove_admin", { p_user_id: btn.dataset.userid });
         if (error) throw error;
         showToast(`${email} removed from admins.`, "success");
         loadSettings();
@@ -943,7 +944,7 @@ function bindSettingsEvents() {
         return;
       }
       try {
-        const { error } = await getClient().rpc("admin_add_admin", { target_email: email });
+        const { error } = await getClient().rpc("admin_add_admin", { p_email: email });
         if (error) throw error;
         showToast(`${email} added as admin.`, "success");
         emailInput.value = "";
