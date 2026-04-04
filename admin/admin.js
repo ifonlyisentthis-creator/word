@@ -880,6 +880,106 @@ function bindEntriesEvents() {
   if (el) el.addEventListener("change", () => loadEntries(1));
 });
 
+// Entry ID lookup
+const entryIdInput = document.getElementById("entries-id-search");
+const entryIdLookupBtn = document.getElementById("entries-id-lookup");
+if (entryIdLookupBtn && entryIdInput) {
+  const doLookup = async () => {
+    const raw = entryIdInput.value.trim();
+    if (!raw) { showToast("Enter an Entry ID.", "error"); return; }
+    const container = document.getElementById("entries-content");
+    container.innerHTML = '<div class="loading">Looking up entry...</div>';
+    try {
+      const { data, error } = await getClient().rpc("admin_lookup_entry", { p_entry_id: raw });
+      if (error) throw error;
+      if (!data) { container.innerHTML = '<div class="empty">Entry not found.</div>'; return; }
+      container.innerHTML = renderEntryLookup(data);
+      bindEntryLookupEvents(data);
+    } catch (err) {
+      container.innerHTML = '<div class="empty">Lookup failed.</div>';
+      showToast(err.message || "Lookup error", "error");
+    }
+  };
+  entryIdLookupBtn.addEventListener("click", doLookup);
+  entryIdInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doLookup(); });
+}
+
+function renderEntryLookup(d) {
+  const e = d.entry || {};
+  const p = d.sender || {};
+  return `
+    <div class="detail-section">
+      <h3>Entry Details</h3>
+      <div class="detail-grid">
+        ${detailField("Entry ID", e.id)}
+        ${detailField("Title", e.title)}
+        ${detailField("Type", e.data_type)}
+        ${detailField("Mode", e.entry_mode || "standard")}
+        ${detailField("Action", e.action_type)}
+        ${detailField("Status", e.status)}
+        ${detailField("Scheduled At", formatDate(e.scheduled_at))}
+        ${detailField("Sent At", formatDate(e.sent_at))}
+        ${detailField("Created At", formatDate(e.created_at))}
+      </div>
+    </div>
+    <div class="detail-section">
+      <h3>Sender</h3>
+      <div class="detail-grid">
+        ${detailField("User ID", p.id)}
+        ${detailField("Email", p.email)}
+        ${detailField("Name", p.sender_name)}
+        ${detailField("Status", p.status)}
+        ${detailField("Subscription", p.subscription_status)}
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn--sm btn--accent" id="lookup-view-user" data-id="${esc(p.id)}">View User</button>
+        <button class="btn btn--sm btn--danger" id="lookup-ban-user" data-id="${esc(p.id)}" data-email="${esc(p.email)}">Ban User</button>
+        <button class="btn btn--sm btn--danger" id="lookup-delete-entry" data-id="${esc(e.id)}" data-title="${esc(e.title)}">Delete Entry</button>
+      </div>
+    </div>`;
+}
+
+function bindEntryLookupEvents(d) {
+  document.getElementById("lookup-view-user")?.addEventListener("click", () => {
+    switchTab("users");
+    setTimeout(() => loadUserDetail(d.sender?.id), 100);
+  });
+  document.getElementById("lookup-ban-user")?.addEventListener("click", async () => {
+    const email = d.sender?.email;
+    const confirmed = await showModal(
+      "Ban User",
+      `<p>This will <strong>permanently delete</strong> all data for <strong>${esc(email)}</strong> and block them from signing up again.</p>`,
+      "Ban & Delete",
+      { pin: "2000" }
+    );
+    if (!confirmed) return;
+    try {
+      const { error } = await getClient().rpc("admin_ban_user", { p_user_id: d.sender?.id });
+      if (error) throw error;
+      showToast(`${email} has been banned.`, "success");
+    } catch (err) {
+      showToast(err.message || "Ban failed", "error");
+    }
+  });
+  document.getElementById("lookup-delete-entry")?.addEventListener("click", async () => {
+    const title = d.entry?.title || "this entry";
+    const confirmed = await showModal(
+      "Delete Entry",
+      `<p>Permanently delete <strong>${esc(title)}</strong>?</p>`,
+      "Delete"
+    );
+    if (!confirmed) return;
+    try {
+      const { error } = await getClient().rpc("admin_delete_entry", { p_entry_id: d.entry?.id });
+      if (error) throw error;
+      showToast("Entry deleted.", "success");
+      document.getElementById("entries-content").innerHTML = '<div class="empty">Entry deleted.</div>';
+    } catch (err) {
+      showToast(err.message || "Delete failed", "error");
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // 8. Heartbeat tab
 // ---------------------------------------------------------------------------
