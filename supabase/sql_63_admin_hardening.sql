@@ -126,7 +126,11 @@ BEGIN
     p.email ILIKE '%' || p_search || '%' OR
     p.sender_name ILIKE '%' || p_search || '%'
   ))
-  AND (p_status IS NULL OR p.status = p_status)
+  AND (
+    p_status IS NULL
+    OR (p_status = 'grace' AND p.warning_sent_at IS NOT NULL AND p.protocol_executed_at IS NULL)
+    OR (p_status <> 'grace' AND p.status = p_status)
+  )
   AND (p_subscription IS NULL OR p.subscription_status = p_subscription);
 
   SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) INTO users_arr
@@ -140,6 +144,7 @@ BEGIN
       p.app_mode,
       p.timer_days,
       p.last_check_in,
+      p.warning_sent_at,
       p.created_at,
       (SELECT count(*) FROM vault_entries ve WHERE ve.user_id = p.id) AS entry_count
     FROM profiles p
@@ -147,7 +152,11 @@ BEGIN
       p.email ILIKE '%' || p_search || '%' OR
       p.sender_name ILIKE '%' || p_search || '%'
     ))
-    AND (p_status IS NULL OR p.status = p_status)
+    AND (
+      p_status IS NULL
+      OR (p_status = 'grace' AND p.warning_sent_at IS NOT NULL AND p.protocol_executed_at IS NULL)
+      OR (p_status <> 'grace' AND p.status = p_status)
+    )
     AND (p_subscription IS NULL OR p.subscription_status = p_subscription)
     ORDER BY p.created_at DESC
     LIMIT safe_limit
