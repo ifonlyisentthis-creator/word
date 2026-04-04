@@ -81,11 +81,60 @@
       </nav>
 
       <main class="content">
-        <section id="tab-dashboard" class="tab-content"></section>
-        <section id="tab-users" class="tab-content hidden"></section>
-        <section id="tab-entries" class="tab-content hidden"></section>
-        <section id="tab-heartbeat" class="tab-content hidden"></section>
-        <section id="tab-settings" class="tab-content hidden"></section>
+        <section id="tab-dashboard" class="tab-content">
+          <div id="dashboard-content"></div>
+        </section>
+        <section id="tab-users" class="tab-content hidden">
+          <div class="filter-bar">
+            <input id="users-search" type="text" placeholder="Search email or name…" />
+            <select id="users-status">
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="archived">Archived</option>
+            </select>
+            <select id="users-subscription">
+              <option value="all">All tiers</option>
+              <option value="free">Free</option>
+              <option value="pro">Pro</option>
+              <option value="lifetime">Lifetime</option>
+            </select>
+          </div>
+          <div id="users-content"></div>
+        </section>
+        <section id="tab-entries" class="tab-content hidden">
+          <div class="filter-bar">
+            <select id="entries-status">
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="sent">Sent</option>
+              <option value="sending">Sending</option>
+              <option value="grace">Grace</option>
+            </select>
+            <select id="entries-mode">
+              <option value="all">All modes</option>
+              <option value="standard">Standard</option>
+              <option value="recurring">Recurring</option>
+            </select>
+            <select id="entries-type">
+              <option value="all">All types</option>
+              <option value="text">Text</option>
+              <option value="audio">Audio</option>
+            </select>
+            <select id="entries-action">
+              <option value="all">All actions</option>
+              <option value="send">Send</option>
+              <option value="destroy">Destroy</option>
+            </select>
+          </div>
+          <div id="entries-content"></div>
+        </section>
+        <section id="tab-heartbeat" class="tab-content hidden">
+          <div id="heartbeat-content"></div>
+        </section>
+        <section id="tab-settings" class="tab-content hidden">
+          <div id="settings-content"></div>
+        </section>
       </main>
     </div>
 

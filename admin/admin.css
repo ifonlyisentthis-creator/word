@@ -220,7 +220,7 @@ body {
 /* ═══ Stat Cards ═══ */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -237,6 +237,12 @@ body {
   font-weight: 600;
   color: var(--accent);
   line-height: 1.2;
+}
+
+.stat-pct {
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-weight: 400;
 }
 
 .stat-label {
@@ -509,26 +515,39 @@ body {
   padding: 12px;
 }
 
-.hb-errors__toggle {
-  background: none;
-  border: none;
-  color: var(--danger);
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 0;
+.hb-warnings {
+  margin-top: 10px;
+  background: var(--warning-bg);
+  border: 1px solid rgba(245, 199, 119, 0.2);
+  border-radius: 10px;
+  padding: 12px;
 }
 
-.hb-errors__list {
+.hb-expandable summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.hb-errors summary {
+  color: var(--danger);
+}
+
+.hb-warnings summary {
+  color: var(--warning);
+}
+
+.hb-expandable ul {
   margin-top: 8px;
+  list-style: none;
   font-family: "SF Mono", "Fira Code", monospace;
   font-size: 0.8rem;
-  color: var(--danger);
   line-height: 1.7;
-  white-space: pre-wrap;
   word-break: break-word;
 }
+
+.hb-errors ul { color: var(--danger); }
+.hb-warnings ul { color: var(--warning); }
 
 /* ═══ Modal ═══ */
 .modal-overlay {
@@ -749,6 +768,105 @@ body {
 /* ═══ Utility ═══ */
 .hidden {
   display: none !important;
+}
+
+/* ═══ Detail Sections (used by User Detail) ═══ */
+.detail-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.detail-section h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+  color: var(--text);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 24px;
+}
+
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+}
+
+.detail-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.detail-value {
+  font-size: 0.9rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ═══ Settings Add Admin Form ═══ */
+.settings-section {
+  max-width: 800px;
+}
+
+.settings-section h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.add-admin-form {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  align-items: center;
+}
+
+.add-admin-form .input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+  flex: 1;
+}
+
+.add-admin-form .input:focus {
+  border-color: var(--accent);
+}
+
+.add-admin-form .input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+/* ═══ Page info ═══ */
+.page-info {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* ═══ Actions cell ═══ */
+.actions-cell {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* ═══ User row cursor ═══ */
+.user-row {
+  cursor: pointer;
 }
 
 /* ═══ Responsive ═══ */

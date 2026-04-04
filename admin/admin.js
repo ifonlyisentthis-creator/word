@@ -72,13 +72,13 @@ function esc(str) {
 }
 
 function showToast(message, type) {
+  const container = document.getElementById("toast-container");
   const toast = document.createElement("div");
-  toast.className = `toast ${type || "info"}`;
+  toast.className = `toast${type ? " toast--" + type : ""}`;
   toast.textContent = message;
-  document.body.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add("show"));
+  container.appendChild(toast);
   setTimeout(() => {
-    toast.classList.remove("show");
+    toast.classList.add("removing");
     setTimeout(() => toast.remove(), 300);
   }, 3000);
 }
@@ -91,9 +91,9 @@ function showModal(title, body, confirmText, onConfirm) {
       <div class="modal">
         <h3 class="modal-title">${esc(title)}</h3>
         <div class="modal-body">${body}</div>
-        <div class="modal-actions">
-          <button class="btn btn-secondary modal-cancel">Cancel</button>
-          <button class="btn btn-danger modal-confirm">${esc(confirmText || "Confirm")}</button>
+        <div class="modal__actions">
+          <button class="btn btn--ghost modal-cancel">Cancel</button>
+          <button class="btn btn--danger modal-confirm">${esc(confirmText || "Confirm")}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
@@ -267,15 +267,21 @@ const TAB_NAMES = ["dashboard", "users", "entries", "heartbeat", "settings"];
 
 function switchTab(name) {
   TAB_NAMES.forEach((t) => {
-    const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
+    const btn = document.querySelector(`.tab[data-tab="${t}"]`);
     const pane = document.getElementById(`tab-${t}`);
     if (btn) btn.classList.toggle("active", t === name);
-    if (pane) pane.classList.toggle("active", t === name);
+    if (pane) {
+      if (t === name) {
+        pane.classList.remove("hidden");
+      } else {
+        pane.classList.add("hidden");
+      }
+    }
   });
   loadTab(name);
 }
 
-document.querySelectorAll(".tab-btn").forEach((btn) => {
+document.querySelectorAll(".tab[data-tab]").forEach((btn) => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 });
 
@@ -313,29 +319,29 @@ async function loadDashboard() {
     if (error) throw error;
     const s = data || {};
     container.innerHTML = `
-      <div class="stat-row">
+      <div class="stat-grid">
         ${statCard("Total Users", s.total_users)}
         ${statCard("Active", s.active_users)}
         ${statCard("Inactive", s.inactive_users)}
         ${statCard("New Today", s.new_today)}
       </div>
-      <div class="stat-row">
+      <div class="stat-grid">
         ${statCard("Free", s.free_users, s.total_users)}
         ${statCard("Pro", s.pro_users, s.total_users)}
         ${statCard("Lifetime", s.lifetime_users, s.total_users)}
       </div>
-      <div class="stat-row">
+      <div class="stat-grid">
         ${statCard("Total Entries", s.total_entries)}
         ${statCard("Active Entries", s.active_entries)}
         ${statCard("Sent Entries", s.sent_entries)}
         ${statCard("Sent Today", s.sent_today)}
       </div>
-      <div class="stat-row">
+      <div class="stat-grid">
         ${statCard("Text", s.text_entries)}
         ${statCard("Audio", s.audio_entries)}
         ${statCard("Recurring", s.recurring_entries)}
       </div>
-      <div class="stat-row">
+      <div class="stat-grid">
         ${statCard("Vault Mode Users", s.vault_mode_users)}
         ${statCard("Scheduled Mode Users", s.scheduled_mode_users)}
       </div>`;
@@ -397,13 +403,13 @@ async function loadUsers(page) {
 }
 
 function statusBadge(status) {
-  const map = { active: "success", inactive: "warning", archived: "danger" };
-  return `<span class="badge ${map[status] || "muted"}">${esc(status)}</span>`;
+  const map = { active: "badge--active", inactive: "badge--inactive", archived: "badge--archived" };
+  return `<span class="badge ${map[status] || ""}">${esc(status)}</span>`;
 }
 
 function subBadge(sub) {
-  const map = { free: "muted", pro: "accent", lifetime: "success" };
-  return `<span class="badge ${map[sub] || "muted"}">${esc(sub)}</span>`;
+  const map = { free: "badge--free", pro: "badge--pro", lifetime: "badge--lifetime" };
+  return `<span class="badge ${map[sub] || ""}">${esc(sub)}</span>`;
 }
 
 function timerDisplay(row) {
@@ -439,10 +445,10 @@ function renderUsersTable(rows) {
             <td title="${esc(formatDate(r.created_at))}">${timeAgo(r.created_at)}</td>
             <td class="actions-cell">
               ${r.status === "archived"
-                ? `<button class="btn btn-xs btn-success action-unban" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Unban</button>`
-                : `<button class="btn btn-xs btn-warning action-ban" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Ban</button>`
+                ? `<button class="btn btn--sm action-unban" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Unban</button>`
+                : `<button class="btn btn--sm btn--accent action-ban" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Ban</button>`
               }
-              <button class="btn btn-xs btn-danger action-delete-user" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Delete</button>
+              <button class="btn btn--sm btn--danger action-delete-user" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Delete</button>
             </td>
           </tr>`).join("")}
       </tbody>
@@ -570,7 +576,7 @@ function renderUserDetail(d) {
   const tombstones = d.tombstones || [];
 
   return `
-    <button class="btn btn-secondary" id="back-to-users">&larr; Back to Users</button>
+    <button class="btn btn--ghost" id="back-to-users">&larr; Back to Users</button>
     <div class="detail-section">
       <h3>Profile</h3>
       <div class="detail-grid">
@@ -657,8 +663,8 @@ function filterSensitiveEntry(entry) {
 }
 
 function typeBadge(type) {
-  const map = { text: "muted", audio: "accent" };
-  return `<span class="badge ${map[type] || "muted"}">${esc(type)}</span>`;
+  const map = { text: "badge--free", audio: "badge--pro" };
+  return `<span class="badge ${map[type] || ""}">${esc(type)}</span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -730,7 +736,7 @@ function renderEntriesTable(rows) {
             <td title="${esc(formatDate(r.sent_at))}">${timeAgo(r.sent_at)}</td>
             <td title="${esc(formatDate(r.created_at))}">${timeAgo(r.created_at)}</td>
             <td>
-              <button class="btn btn-xs btn-danger action-delete-entry" data-id="${esc(r.id)}" data-title="${esc(r.title)}">Delete</button>
+              <button class="btn btn--sm btn--danger action-delete-entry" data-id="${esc(r.id)}" data-title="${esc(r.title)}">Delete</button>
             </td>
           </tr>`).join("")}
       </tbody>
@@ -802,9 +808,9 @@ async function loadHeartbeat(page) {
 function hbStatusDot(run) {
   const errors = run.errors || [];
   const warnings = run.warnings || [];
-  if (errors.length > 0) return "red";
-  if (warnings.length > 0) return "yellow";
-  return "green";
+  if (errors.length > 0) return "error";
+  if (warnings.length > 0) return "warn";
+  return "ok";
 }
 
 function renderHeartbeatTimeline(rows) {
@@ -816,10 +822,10 @@ function renderHeartbeatTimeline(rows) {
       const warnings = r.warnings || [];
       return `
         <div class="hb-card">
-          <div class="hb-header">
-            <span class="hb-dot hb-dot-${dot}"></span>
-            <span class="hb-time" title="${esc(formatDate(r.started_at))}">${timeAgo(r.started_at)} &middot; ${esc(formatDate(r.started_at))}</span>
-            <span class="badge muted hb-runtime">${runtime}</span>
+          <div class="hb-card__header">
+            <span class="hb-dot hb-dot--${dot}"></span>
+            <span title="${esc(formatDate(r.started_at))}">${timeAgo(r.started_at)} &middot; ${esc(formatDate(r.started_at))}</span>
+            <span class="badge badge--free">${runtime}</span>
           </div>
           <div class="hb-metrics">
             ${hbMetric("Profiles", r.profiles_processed)}
@@ -850,7 +856,7 @@ function renderHeartbeatTimeline(rows) {
 }
 
 function hbMetric(label, value) {
-  return `<div class="hb-metric"><span class="hb-metric-val">${fmtNum(value)}</span><span class="hb-metric-lbl">${esc(label)}</span></div>`;
+  return `<div class="hb-metric"><span class="hb-metric__value">${fmtNum(value)}</span><span class="hb-metric__label">${esc(label)}</span></div>`;
 }
 
 function bindHeartbeatEvents() {
@@ -892,14 +898,14 @@ function renderSettings(admins) {
               <td>
                 ${a.email === currentUserEmail
                   ? '<span class="badge muted">You</span>'
-                  : `<button class="btn btn-xs btn-danger action-remove-admin" data-email="${esc(a.email)}">Remove</button>`}
+                  : `<button class="btn btn--sm btn--danger action-remove-admin" data-email="${esc(a.email)}">Remove</button>`}
               </td>
             </tr>`).join("")}
         </tbody>
       </table>
       <div class="add-admin-form">
         <input type="email" id="new-admin-email" placeholder="Email address" class="input" />
-        <button class="btn btn-primary" id="add-admin-btn">Add Admin</button>
+        <button class="btn btn--accent" id="add-admin-btn">Add Admin</button>
       </div>
     </div>`;
 }
@@ -960,9 +966,9 @@ function renderPagination(currentPage, total, perPage, scope) {
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   return `
     <div class="pagination" data-scope="${scope}">
-      <button class="btn btn-secondary btn-sm page-prev" ${currentPage <= 1 ? "disabled" : ""}>Prev</button>
+      <button class="page-btn page-prev" ${currentPage <= 1 ? "disabled" : ""}>Prev</button>
       <span class="page-info">Page ${currentPage} of ${fmtNum(totalPages)}</span>
-      <button class="btn btn-secondary btn-sm page-next" ${currentPage >= totalPages ? "disabled" : ""}>Next</button>
+      <button class="page-btn page-next" ${currentPage >= totalPages ? "disabled" : ""}>Next</button>
     </div>`;
 }
 
