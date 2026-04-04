@@ -71,3 +71,56 @@ $$;
 REVOKE ALL ON FUNCTION public.admin_list_heartbeat_runs(int, int) FROM public;
 REVOKE ALL ON FUNCTION public.admin_list_heartbeat_runs(int, int) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_list_heartbeat_runs(int, int) TO authenticated;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  3. admin_delete_heartbeat_run() — delete a single run                 ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+CREATE OR REPLACE FUNCTION public.admin_delete_heartbeat_run(p_run_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+
+  DELETE FROM heartbeat_runs WHERE id = p_run_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'heartbeat run not found';
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_delete_heartbeat_run(uuid) FROM public;
+REVOKE ALL ON FUNCTION public.admin_delete_heartbeat_run(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.admin_delete_heartbeat_run(uuid) TO authenticated;
+
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  4. admin_clear_heartbeat_runs() — delete ALL runs                     ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+CREATE OR REPLACE FUNCTION public.admin_clear_heartbeat_runs()
+RETURNS int
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  deleted_count int;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+
+  DELETE FROM heartbeat_runs;
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+
+  RETURN deleted_count;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_clear_heartbeat_runs() FROM public;
+REVOKE ALL ON FUNCTION public.admin_clear_heartbeat_runs() FROM anon;
+GRANT EXECUTE ON FUNCTION public.admin_clear_heartbeat_runs() TO authenticated;

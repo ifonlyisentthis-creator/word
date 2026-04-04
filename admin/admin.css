@@ -573,6 +573,18 @@ body {
   overflow-y: auto;
 }
 
+.hb-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.hb-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
 /* ═══ Modal ═══ */
 .modal-overlay {
   position: fixed;

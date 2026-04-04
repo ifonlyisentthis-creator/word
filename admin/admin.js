@@ -803,7 +803,9 @@ async function loadHeartbeat(page) {
       container.innerHTML = '<div class="empty">No heartbeat runs found.</div>';
       return;
     }
-    container.innerHTML = renderHeartbeatTimeline(rows) + renderPagination(heartbeatPage, heartbeatTotal, HEARTBEAT_PER_PAGE, "heartbeat");
+    container.innerHTML =
+      `<div class="hb-toolbar"><button class="btn btn--sm btn--danger" id="clear-all-runs">Clear All</button></div>` +
+      renderHeartbeatTimeline(rows) + renderPagination(heartbeatPage, heartbeatTotal, HEARTBEAT_PER_PAGE, "heartbeat");
     bindHeartbeatEvents();
   } catch (err) {
     container.innerHTML = '<div class="empty">Failed to load heartbeat runs.</div>';
@@ -862,6 +864,9 @@ function renderHeartbeatTimeline(rows) {
               <summary>Full Log</summary>
               <pre class="hb-log-pre">${esc(r.stdout_log)}</pre>
             </details>` : ""}
+          <div class="hb-card__actions">
+            <button class="btn btn--sm btn--danger action-delete-run" data-id="${esc(r.id)}">Delete</button>
+          </div>
         </div>`;
     }).join("")}
   </div>`;
@@ -872,7 +877,46 @@ function hbMetric(label, value) {
 }
 
 function bindHeartbeatEvents() {
-  // Expandable sections are handled natively by <details>/<summary>
+  // Delete single run
+  document.querySelectorAll(".action-delete-run").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const confirmed = await showModal(
+        "Delete Run",
+        "<p>Delete this heartbeat run log?</p>",
+        "Delete"
+      );
+      if (!confirmed) return;
+      try {
+        const { error } = await getClient().rpc("admin_delete_heartbeat_run", { p_run_id: btn.dataset.id });
+        if (error) throw error;
+        showToast("Run deleted.", "success");
+        loadHeartbeat();
+      } catch (err) {
+        showToast(err.message || "Delete failed", "error");
+      }
+    });
+  });
+
+  // Clear all runs
+  const clearBtn = document.getElementById("clear-all-runs");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", async () => {
+      const confirmed = await showModal(
+        "Clear All Runs",
+        "<p>Delete <strong>all</strong> heartbeat run logs? This cannot be undone.</p>",
+        "Clear All"
+      );
+      if (!confirmed) return;
+      try {
+        const { data, error } = await getClient().rpc("admin_clear_heartbeat_runs");
+        if (error) throw error;
+        showToast(`${data} run(s) deleted.`, "success");
+        loadHeartbeat();
+      } catch (err) {
+        showToast(err.message || "Clear failed", "error");
+      }
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
