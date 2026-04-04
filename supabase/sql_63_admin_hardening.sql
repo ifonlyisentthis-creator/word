@@ -534,7 +534,7 @@ BEGIN
     RAISE EXCEPTION 'confirmation required: pass p_confirm = ''DELETE ALL''';
   END IF;
 
-  DELETE FROM heartbeat_runs;
+  DELETE FROM heartbeat_runs WHERE true;
   GET DIAGNOSTICS deleted_count = ROW_COUNT;
 
   RETURN deleted_count;

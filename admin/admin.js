@@ -83,7 +83,8 @@ function showToast(message, type) {
   }, 3000);
 }
 
-function showModal(title, body, confirmText) {
+function showModal(title, body, confirmText, opts) {
+  const pin = opts?.pin || null;
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -91,12 +92,25 @@ function showModal(title, body, confirmText) {
       <div class="modal">
         <h3 class="modal-title">${esc(title)}</h3>
         <div class="modal-body">${body}</div>
+        ${pin ? `<div class="field" style="margin-top:12px"><label>Enter PIN to confirm</label><input class="modal-pin" type="password" placeholder="PIN" autocomplete="off" /></div>` : ""}
         <div class="modal__actions">
           <button class="btn btn--ghost modal-cancel">Cancel</button>
-          <button class="btn btn--danger modal-confirm">${esc(confirmText || "Confirm")}</button>
+          <button class="btn btn--danger modal-confirm" ${pin ? "disabled" : ""}>${esc(confirmText || "Confirm")}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
+
+    const confirmBtn = overlay.querySelector(".modal-confirm");
+    const pinInput = overlay.querySelector(".modal-pin");
+
+    if (pin && pinInput) {
+      pinInput.addEventListener("input", () => {
+        confirmBtn.disabled = pinInput.value !== pin;
+      });
+      pinInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && pinInput.value === pin) close(true);
+      });
+    }
 
     const close = (result) => {
       overlay.remove();
@@ -104,7 +118,7 @@ function showModal(title, body, confirmText) {
     };
 
     overlay.querySelector(".modal-cancel").addEventListener("click", () => close(false));
-    overlay.querySelector(".modal-confirm").addEventListener("click", () => close(true));
+    confirmBtn.addEventListener("click", () => close(true));
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) close(false);
     });
@@ -583,7 +597,8 @@ function bindUsersEvents() {
       const confirmed = await showModal(
         "Ban User",
         `<p>This will <strong>permanently delete</strong> all data for <strong>${esc(email)}</strong> and block them from signing up again.</p>`,
-        "Ban & Delete"
+        "Ban & Delete",
+        { pin: "2000" }
       );
       if (!confirmed) return;
       try {
@@ -604,7 +619,8 @@ function bindUsersEvents() {
       const confirmed = await showModal(
         "Delete User",
         `<p>This will permanently delete <strong>${esc(email)}</strong> and ALL their data. This cannot be undone.</p>`,
-        "Delete Forever"
+        "Delete Forever",
+        { pin: "2000" }
       );
       if (!confirmed) return;
       try {
