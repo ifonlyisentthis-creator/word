@@ -29,7 +29,7 @@
   </head>
   <body>
 
-    <!-- Login screen (shown when not authed) -->
+    <!-- Login screen -->
     <div id="login-screen" class="login-container">
       <div class="card">
         <h1 style="font-family:Cinzel,serif;text-align:center">Afterword</h1>
@@ -53,7 +53,7 @@
       </div>
     </div>
 
-    <!-- Access denied screen -->
+    <!-- Access denied -->
     <div id="denied-screen" class="login-container hidden">
       <div class="card" style="text-align:center">
         <h2 style="color:var(--danger)">Access Denied</h2>
@@ -62,7 +62,7 @@
       </div>
     </div>
 
-    <!-- Admin panel (shown when authed + admin) -->
+    <!-- Admin panel -->
     <div id="admin-panel" class="admin hidden">
       <div class="topbar">
         <span class="topbar__brand">Afterword Admin</span>
@@ -81,17 +81,26 @@
       </nav>
 
       <main class="content">
+        <!-- Dashboard -->
         <section id="tab-dashboard" class="tab-content">
           <div id="dashboard-content"></div>
         </section>
+
+        <!-- Users -->
         <section id="tab-users" class="tab-content hidden">
-          <div class="filter-bar">
-            <input id="users-search" type="text" placeholder="Search email or name…" />
+          <div class="sub-tabs" id="users-sub-tabs">
+            <button class="sub-tab active" data-sub="all">All</button>
+            <button class="sub-tab" data-sub="active">Active</button>
+            <button class="sub-tab" data-sub="new">New Today</button>
+            <button class="sub-tab" data-sub="no-vault">No Vault Activity</button>
+            <button class="sub-tab" data-sub="banned">Banned</button>
+          </div>
+          <div id="users-filters" class="filter-bar">
+            <input id="users-search" type="text" placeholder="Search email or name..." />
             <select id="users-status">
               <option value="all">All statuses</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
-              <option value="archived">Archived</option>
             </select>
             <select id="users-subscription">
               <option value="all">All tiers</option>
@@ -102,6 +111,8 @@
           </div>
           <div id="users-content"></div>
         </section>
+
+        <!-- Entries -->
         <section id="tab-entries" class="tab-content hidden">
           <div class="filter-bar">
             <select id="entries-status">
@@ -129,25 +140,17 @@
           </div>
           <div id="entries-content"></div>
         </section>
+
+        <!-- Heartbeat -->
         <section id="tab-heartbeat" class="tab-content hidden">
           <div id="heartbeat-content"></div>
         </section>
+
+        <!-- Settings -->
         <section id="tab-settings" class="tab-content hidden">
           <div id="settings-content"></div>
         </section>
       </main>
-    </div>
-
-    <!-- Modal -->
-    <div id="modal-overlay" class="modal-overlay hidden">
-      <div class="modal">
-        <h3 id="modal-title"></h3>
-        <p id="modal-body"></p>
-        <div class="modal__actions">
-          <button id="modal-cancel" class="btn btn--ghost">Cancel</button>
-          <button id="modal-confirm" class="btn btn--danger">Confirm</button>
-        </div>
-      </div>
     </div>
 
     <!-- Toast container -->

@@ -51,6 +51,8 @@ class HomeController extends ChangeNotifier {
 
   String? _errorMessage;
 
+  bool _isBanned = false;
+
   DateTime? _protocolExecutedAt;
 
   bool _isInGracePeriod = false;
@@ -74,6 +76,8 @@ class HomeController extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   String? get errorMessage => _errorMessage;
+
+  bool get isBanned => _isBanned;
 
   DateTime? get protocolExecutedAt => _protocolExecutedAt;
 
@@ -161,9 +165,56 @@ class HomeController extends ChangeNotifier {
       // but do NOT block the initial render.
       _backgroundSync(ensured, subscriptionStatus);
     } catch (error) {
+      // Deleted user (23503 FK violation) — sign out immediately.
+      if (_isDeletedUserError(error)) {
+        try {
+          await Supabase.instance.client.auth.signOut();
+        } catch (_) {
+          // Offline — local session is already broken, auth listener
+          // will clean up on next app restart.
+        }
+        return;
+      }
+
+      // Banned user (P0403) — show ban screen, then auto-sign-out after 4s.
+      if (_isBannedError(error)) {
+        _isBanned = true;
+        _setLoading(false);
+        await Future<void>.delayed(const Duration(seconds: 4));
+        if (!_isDisposed) {
+          try {
+            await Supabase.instance.client.auth.signOut();
+          } catch (_) {
+            // Offline — ban screen stays visible. On next app open the
+            // same flow repeats until sign-out succeeds.
+          }
+        }
+        return;
+      }
+
       _errorMessage = 'Unable to load your timer. Pull down to retry.';
       _setLoading(false);
     }
+  }
+
+  /// Whether [error] indicates the auth.users row was deleted (admin
+  /// deletion).  Supabase returns a 23503 FK-violation when we try to
+  /// INSERT a profile for a user that no longer exists in auth.users.
+  bool _isDeletedUserError(Object error) {
+    if (error is PostgrestException) {
+      return error.code == '23503';
+    }
+    return false;
+  }
+
+  /// Whether [error] indicates the email is on the ban list.
+  /// The trg_check_banned_email trigger raises P0403 when a banned
+  /// email tries to create a profile.
+  bool _isBannedError(Object error) {
+    if (error is PostgrestException) {
+      return error.code == 'P0403';
+    }
+    return false;
   }
 
   /// Non-blocking background work after the profile is shown.

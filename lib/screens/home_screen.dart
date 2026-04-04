@@ -343,6 +343,52 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final controller = context.watch<HomeController>();
 
+    // ── Full-screen ban notice ──────────────────────────────────────────
+    if (controller.isBanned) {
+      return Scaffold(
+        body: Stack(
+          children: [
+            const RepaintBoundary(child: AmbientBackground()),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.block, size: 64, color: Colors.red.shade300),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Account Suspended',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'This account has been suspended.\nYou will be signed out shortly.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white70,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white38),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final revenueCat = context.watch<RevenueCatController>();
 
     final profile = controller.profile;

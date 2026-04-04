@@ -4,7 +4,7 @@
    ========================================================================== */
 
 // ---------------------------------------------------------------------------
-// 1. Supabase Client (lazy singleton — same pattern as the viewer)
+// 1. Supabase Client (lazy singleton)
 // ---------------------------------------------------------------------------
 const _cfg = window.AFTERWORD_ADMIN_CONFIG || {};
 
@@ -83,7 +83,7 @@ function showToast(message, type) {
   }, 3000);
 }
 
-function showModal(title, body, confirmText, onConfirm) {
+function showModal(title, body, confirmText) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -104,10 +104,7 @@ function showModal(title, body, confirmText, onConfirm) {
     };
 
     overlay.querySelector(".modal-cancel").addEventListener("click", () => close(false));
-    overlay.querySelector(".modal-confirm").addEventListener("click", async () => {
-      if (onConfirm) await onConfirm();
-      close(true);
-    });
+    overlay.querySelector(".modal-confirm").addEventListener("click", () => close(true));
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) close(false);
     });
@@ -130,15 +127,9 @@ function ensureArray(val) {
   return [];
 }
 
-// Encrypted / sensitive fields that must never be displayed
 const HIDDEN_FIELDS = new Set([
-  "payload_encrypted",
-  "recipient_email_encrypted",
-  "data_key_encrypted",
-  "hmac_signature",
-  "hmac_key_encrypted",
-  "key_backup_encrypted",
-  "fcm_token",
+  "payload_encrypted", "recipient_email_encrypted", "data_key_encrypted",
+  "hmac_signature", "hmac_key_encrypted", "key_backup_encrypted", "fcm_token",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -148,13 +139,15 @@ const HIDDEN_FIELDS = new Set([
 const loginScreen = document.getElementById("login-screen");
 const deniedScreen = document.getElementById("denied-screen");
 const adminPanel = document.getElementById("admin-panel");
-const loginForm = document.getElementById("login-screen");
 const loginError = document.getElementById("login-status");
 const userEmailDisplay = document.getElementById("admin-email");
 const signOutBtn = document.getElementById("signout-btn");
 
 let currentSession = null;
 let currentUserEmail = null;
+
+// Dashboard stats cache — used for sub-tab counts
+let dashboardStats = null;
 
 async function checkAdmin() {
   const client = getClient();
@@ -199,7 +192,6 @@ async function init() {
     return;
   }
 
-  // Listen for auth changes (session expiry, sign-out from another tab, etc.)
   client.auth.onAuthStateChange((_event, session) => {
     handleSession(session);
   });
@@ -224,7 +216,6 @@ if (loginBtn) {
     try {
       const { error } = await client.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // onAuthStateChange will call handleSession
     } catch (err) {
       loginError.textContent = err.message || "Login failed.";
     }
@@ -277,11 +268,8 @@ function switchTab(name) {
     const pane = document.getElementById(`tab-${t}`);
     if (btn) btn.classList.toggle("active", t === name);
     if (pane) {
-      if (t === name) {
-        pane.classList.remove("hidden");
-      } else {
-        pane.classList.add("hidden");
-      }
+      if (t === name) pane.classList.remove("hidden");
+      else pane.classList.add("hidden");
     }
   });
   loadTab(name);
@@ -293,21 +281,11 @@ document.querySelectorAll(".tab[data-tab]").forEach((btn) => {
 
 function loadTab(name) {
   switch (name) {
-    case "dashboard":
-      loadDashboard();
-      break;
-    case "users":
-      loadUsers();
-      break;
-    case "entries":
-      loadEntries();
-      break;
-    case "heartbeat":
-      loadHeartbeat();
-      break;
-    case "settings":
-      loadSettings();
-      break;
+    case "dashboard": loadDashboard(); break;
+    case "users": loadUsersTab(); break;
+    case "entries": loadEntries(); break;
+    case "heartbeat": loadHeartbeat(); break;
+    case "settings": loadSettings(); break;
   }
 }
 
@@ -324,7 +302,11 @@ async function loadDashboard() {
     const { data, error } = await client.rpc("admin_get_dashboard_stats");
     if (error) throw error;
     const s = data || {};
+    dashboardStats = s;
+    updateSubTabCounts(s);
+
     container.innerHTML = `
+      <div class="section-header">Users</div>
       <div class="stat-grid">
         ${statCard("Total Users", s.total_users)}
         ${statCard("Active", s.active_users)}
@@ -335,7 +317,10 @@ async function loadDashboard() {
         ${statCard("Free", s.sub_free, s.total_users)}
         ${statCard("Pro", s.sub_pro, s.total_users)}
         ${statCard("Lifetime", s.sub_lifetime, s.total_users)}
+        ${statCard("No Vault Activity", s.no_vault_activity, s.total_users)}
       </div>
+
+      <div class="section-header">Entries</div>
       <div class="stat-grid">
         ${statCard("Total Entries", s.total_entries)}
         ${statCard("Active Entries", s.active_entries)}
@@ -347,10 +332,11 @@ async function loadDashboard() {
         ${statCard("Audio", s.entries_audio)}
         ${statCard("Recurring", s.entries_recurring)}
       </div>
+
+      <div class="section-header">App Mode</div>
       <div class="stat-grid">
-        ${statCard("Vault Mode Users", s.vault_mode_users)}
-        ${statCard("Scheduled Mode Users", s.scheduled_mode_users)}
-        ${statCard("No Vault Activity", s.no_vault_activity, s.total_users)}
+        ${statCard("Vault Mode", s.vault_mode_users)}
+        ${statCard("Scheduled Mode", s.scheduled_mode_users)}
       </div>`;
   } catch (err) {
     container.innerHTML = '<div class="empty">Failed to load dashboard.</div>';
@@ -363,13 +349,58 @@ function statCard(label, value, total) {
   return `<div class="stat-card"><div class="stat-value">${fmtNum(value)}${extra}</div><div class="stat-label">${esc(label)}</div></div>`;
 }
 
+function updateSubTabCounts(s) {
+  if (!s) return;
+  const counts = {
+    all: s.total_users,
+    active: s.active_users,
+    new: s.new_today,
+    "no-vault": s.no_vault_activity,
+  };
+  document.querySelectorAll("#users-sub-tabs .sub-tab").forEach((btn) => {
+    const key = btn.dataset.sub;
+    if (key in counts && counts[key] != null) {
+      const label = btn.textContent.replace(/\s*\(\d[\d,]*\)$/, "");
+      btn.textContent = `${label} (${fmtNum(counts[key])})`;
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
-// 6. Users tab
+// 6. Users tab — sub-tab system
 // ---------------------------------------------------------------------------
 
 let usersPage = 1;
 const USERS_PER_PAGE = 25;
 let usersTotal = 0;
+let currentUserSub = "all";
+
+// Sub-tab switching
+document.querySelectorAll("#users-sub-tabs .sub-tab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#users-sub-tabs .sub-tab").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentUserSub = btn.dataset.sub;
+    usersPage = 1;
+
+    const filtersEl = document.getElementById("users-filters");
+    if (currentUserSub === "banned" || currentUserSub === "new" || currentUserSub === "no-vault") {
+      filtersEl.classList.add("hidden");
+    } else {
+      filtersEl.classList.remove("hidden");
+    }
+
+    loadUsersTab();
+  });
+});
+
+function loadUsersTab() {
+  if (currentUserSub === "banned") {
+    loadBannedUsers();
+  } else {
+    loadUsers();
+  }
+}
 
 function usersFilters() {
   return {
@@ -386,14 +417,26 @@ async function loadUsers(page) {
   const client = getClient();
   if (!client) return;
   const f = usersFilters();
+
+  const params = {
+    p_search: f.search || null,
+    p_status: f.status === "all" ? null : f.status,
+    p_subscription: f.subscription === "all" ? null : f.subscription,
+    p_limit: USERS_PER_PAGE,
+    p_offset: (usersPage - 1) * USERS_PER_PAGE,
+  };
+
+  // Apply sub-tab specific filters
+  if (currentUserSub === "active") {
+    params.p_status = "active";
+  } else if (currentUserSub === "new") {
+    params.p_created_since = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+  } else if (currentUserSub === "no-vault") {
+    params.p_had_vault_activity = false;
+  }
+
   try {
-    const { data, error } = await client.rpc("admin_list_users", {
-      p_search: f.search || null,
-      p_status: f.status === "all" ? null : f.status,
-      p_subscription: f.subscription === "all" ? null : f.subscription,
-      p_limit: USERS_PER_PAGE,
-      p_offset: (usersPage - 1) * USERS_PER_PAGE,
-    });
+    const { data, error } = await client.rpc("admin_list_users", params);
     if (error) throw error;
     const rows = data?.users || [];
     usersTotal = data?.total || 0;
@@ -401,12 +444,78 @@ async function loadUsers(page) {
       container.innerHTML = '<div class="empty">No users found.</div>';
       return;
     }
-    container.innerHTML = renderUsersTable(rows) + renderPagination(usersPage, usersTotal, USERS_PER_PAGE, "users");
+    container.innerHTML = `<div class="table-responsive">${renderUsersTable(rows)}</div>` +
+      renderPagination(usersPage, usersTotal, USERS_PER_PAGE, "users");
     bindUsersEvents();
   } catch (err) {
     container.innerHTML = '<div class="empty">Failed to load users.</div>';
     showToast(err.message || "Users error", "error");
   }
+}
+
+async function loadBannedUsers() {
+  const container = document.getElementById("users-content");
+  container.innerHTML = '<div class="loading">Loading banned emails...</div>';
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { data, error } = await client.rpc("admin_list_banned");
+    if (error) throw error;
+    const banned = data || [];
+
+    // Update sub-tab count
+    const subBtn = document.querySelector('#users-sub-tabs .sub-tab[data-sub="banned"]');
+    if (subBtn) {
+      subBtn.textContent = `Banned (${fmtNum(banned.length)})`;
+    }
+
+    if (banned.length === 0) {
+      container.innerHTML = '<div class="empty">No banned emails.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead><tr><th>Email</th><th>Banned</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${banned.map((b) => `
+              <tr>
+                <td>${esc(b.email)}</td>
+                <td title="${esc(formatDate(b.banned_at))}">${timeAgo(b.banned_at)}</td>
+                <td class="actions-cell">
+                  <button class="btn btn--sm btn--accent action-unban" data-email="${esc(b.email)}">Unban</button>
+                </td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`;
+    bindBannedEvents();
+  } catch (err) {
+    container.innerHTML = '<div class="empty">Failed to load banned emails.</div>';
+    showToast(err.message || "Banned list error", "error");
+  }
+}
+
+function bindBannedEvents() {
+  document.querySelectorAll(".action-unban").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const email = btn.dataset.email;
+      const confirmed = await showModal(
+        "Unban Email",
+        `<p>Remove <strong>${esc(email)}</strong> from the ban list? They will be able to sign up again.</p>`,
+        "Unban"
+      );
+      if (!confirmed) return;
+      try {
+        const { error } = await getClient().rpc("admin_unban_user", { p_email: email });
+        if (error) throw error;
+        showToast(`${email} has been unbanned.`, "success");
+        loadBannedUsers();
+      } catch (err) {
+        showToast(err.message || "Unban failed", "error");
+      }
+    });
+  });
 }
 
 function statusBadge(status) {
@@ -433,7 +542,7 @@ function renderUsersTable(rows) {
     <table class="data-table">
       <thead>
         <tr>
-          <th>Email</th><th>Sender Name</th><th>Status</th><th>Subscription</th>
+          <th>Email</th><th>Name</th><th>Status</th><th>Tier</th>
           <th>Mode</th><th>Entries</th><th>Timer</th><th>Last Check-in</th>
           <th>Joined</th><th>Actions</th>
         </tr>
@@ -451,10 +560,7 @@ function renderUsersTable(rows) {
             <td title="${esc(formatDate(r.last_check_in))}">${timeAgo(r.last_check_in)}</td>
             <td title="${esc(formatDate(r.created_at))}">${timeAgo(r.created_at)}</td>
             <td class="actions-cell">
-              ${r.status === "archived"
-                ? `<button class="btn btn--sm action-unban" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Unban</button>`
-                : `<button class="btn btn--sm btn--accent action-ban" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Ban</button>`
-              }
+              <button class="btn btn--sm btn--accent action-ban" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Ban</button>
               <button class="btn btn--sm btn--danger action-delete-user" data-id="${esc(r.id)}" data-email="${esc(r.email)}">Delete</button>
             </td>
           </tr>`).join("")}
@@ -463,7 +569,6 @@ function renderUsersTable(rows) {
 }
 
 function bindUsersEvents() {
-  // Row click -> detail view
   document.querySelectorAll(".user-row").forEach((row) => {
     row.addEventListener("click", (e) => {
       if (e.target.closest("button")) return;
@@ -471,51 +576,27 @@ function bindUsersEvents() {
     });
   });
 
-  // Ban buttons
   document.querySelectorAll(".action-ban").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
       const email = btn.dataset.email;
       const confirmed = await showModal(
         "Ban User",
-        `<p>Are you sure you want to ban <strong>${esc(email)}</strong>?</p>`,
-        "Ban"
+        `<p>This will <strong>permanently delete</strong> all data for <strong>${esc(email)}</strong> and block them from signing up again.</p>`,
+        "Ban & Delete"
       );
       if (!confirmed) return;
       try {
         const { error } = await getClient().rpc("admin_ban_user", { p_user_id: btn.dataset.id });
         if (error) throw error;
         showToast(`${email} has been banned.`, "success");
-        loadUsers();
+        loadUsersTab();
       } catch (err) {
         showToast(err.message || "Ban failed", "error");
       }
     });
   });
 
-  // Unban buttons
-  document.querySelectorAll(".action-unban").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      const email = btn.dataset.email;
-      const confirmed = await showModal(
-        "Unban User",
-        `<p>Are you sure you want to unban <strong>${esc(email)}</strong>?</p>`,
-        "Unban"
-      );
-      if (!confirmed) return;
-      try {
-        const { error } = await getClient().rpc("admin_unban_user", { p_user_id: btn.dataset.id });
-        if (error) throw error;
-        showToast(`${email} has been unbanned.`, "success");
-        loadUsers();
-      } catch (err) {
-        showToast(err.message || "Unban failed", "error");
-      }
-    });
-  });
-
-  // Delete buttons
   document.querySelectorAll(".action-delete-user").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -530,7 +611,7 @@ function bindUsersEvents() {
         const { error } = await getClient().rpc("admin_delete_user", { p_user_id: btn.dataset.id });
         if (error) throw error;
         showToast(`${email} has been deleted.`, "success");
-        loadUsers();
+        loadUsersTab();
       } catch (err) {
         showToast(err.message || "Delete failed", "error");
       }
@@ -541,15 +622,15 @@ function bindUsersEvents() {
 // Users search & filter bindings
 const usersSearch = document.getElementById("users-search");
 if (usersSearch) {
-  usersSearch.addEventListener("input", debounce(() => loadUsers(1), 300));
+  usersSearch.addEventListener("input", debounce(() => { usersPage = 1; loadUsers(); }, 300));
 }
 const usersStatusSelect = document.getElementById("users-status");
 if (usersStatusSelect) {
-  usersStatusSelect.addEventListener("change", () => loadUsers(1));
+  usersStatusSelect.addEventListener("change", () => { usersPage = 1; loadUsers(); });
 }
 const usersSubSelect = document.getElementById("users-subscription");
 if (usersSubSelect) {
-  usersSubSelect.addEventListener("change", () => loadUsers(1));
+  usersSubSelect.addEventListener("change", () => { usersPage = 1; loadUsers(); });
 }
 
 // ---------------------------------------------------------------------------
@@ -569,7 +650,7 @@ async function loadUserDetail(userId) {
       return;
     }
     container.innerHTML = renderUserDetail(data);
-    document.getElementById("back-to-users")?.addEventListener("click", () => loadUsers());
+    document.getElementById("back-to-users")?.addEventListener("click", () => loadUsersTab());
   } catch (err) {
     container.innerHTML = '<div class="empty">Failed to load user detail.</div>';
     showToast(err.message || "User detail error", "error");
@@ -607,6 +688,7 @@ function renderUserDetail(d) {
     <div class="detail-section">
       <h3>Entries (${entries.length})</h3>
       ${entries.length > 0 ? `
+        <div class="table-responsive">
         <table class="data-table">
           <thead><tr><th>Title</th><th>Type</th><th>Mode</th><th>Status</th><th>Action</th><th>Scheduled At</th><th>Sent At</th><th>Created At</th></tr></thead>
           <tbody>
@@ -622,12 +704,14 @@ function renderUserDetail(d) {
                 <td title="${esc(formatDate(e.created_at))}">${timeAgo(e.created_at)}</td>
               </tr>`).join("")}
           </tbody>
-        </table>` : '<div class="empty">No entries.</div>'}
+        </table>
+        </div>` : '<div class="empty">No entries.</div>'}
     </div>
 
     <div class="detail-section">
       <h3>Devices (${devices.length})</h3>
       ${devices.length > 0 ? `
+        <div class="table-responsive">
         <table class="data-table">
           <thead><tr><th>Platform</th><th>Created</th><th>Updated</th></tr></thead>
           <tbody>
@@ -638,12 +722,14 @@ function renderUserDetail(d) {
                 <td>${formatDate(d.updated_at)}</td>
               </tr>`).join("")}
           </tbody>
-        </table>` : '<div class="empty">No devices.</div>'}
+        </table>
+        </div>` : '<div class="empty">No devices.</div>'}
     </div>
 
     <div class="detail-section">
       <h3>Tombstones (${tombstones.length})</h3>
       ${tombstones.length > 0 ? `
+        <div class="table-responsive">
         <table class="data-table">
           <thead><tr><th>Entry ID</th><th>Sender Name</th><th>Sent At</th><th>Expired At</th></tr></thead>
           <tbody>
@@ -655,7 +741,8 @@ function renderUserDetail(d) {
                 <td>${formatDate(t.expired_at)}</td>
               </tr>`).join("")}
           </tbody>
-        </table>` : '<div class="empty">No tombstones.</div>'}
+        </table>
+        </div>` : '<div class="empty">No tombstones.</div>'}
     </div>`;
 }
 
@@ -664,7 +751,6 @@ function detailField(label, value) {
 }
 
 function filterSensitiveEntry(entry) {
-  // Remove sensitive fields from entry objects before rendering
   HIDDEN_FIELDS.forEach((f) => delete entry[f]);
   return true;
 }
@@ -714,7 +800,8 @@ async function loadEntries(page) {
       container.innerHTML = '<div class="empty">No entries found.</div>';
       return;
     }
-    container.innerHTML = renderEntriesTable(rows) + renderPagination(entriesPage, entriesTotal, ENTRIES_PER_PAGE, "entries");
+    container.innerHTML = `<div class="table-responsive">${renderEntriesTable(rows)}</div>` +
+      renderPagination(entriesPage, entriesTotal, ENTRIES_PER_PAGE, "entries");
     bindEntriesEvents();
   } catch (err) {
     container.innerHTML = '<div class="empty">Failed to load entries.</div>';
@@ -772,7 +859,6 @@ function bindEntriesEvents() {
   });
 }
 
-// Entries filter bindings
 ["entries-status", "entries-mode", "entries-type", "entries-action"].forEach((id) => {
   const el = document.getElementById(id);
   if (el) el.addEventListener("change", () => loadEntries(1));
@@ -878,7 +964,6 @@ function hbMetric(label, value) {
 }
 
 function bindHeartbeatEvents() {
-  // Delete single run
   document.querySelectorAll(".action-delete-run").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const confirmed = await showModal(
@@ -898,7 +983,6 @@ function bindHeartbeatEvents() {
     });
   });
 
-  // Clear all runs
   const clearBtn = document.getElementById("clear-all-runs");
   if (clearBtn) {
     clearBtn.addEventListener("click", async () => {
@@ -921,7 +1005,7 @@ function bindHeartbeatEvents() {
 }
 
 // ---------------------------------------------------------------------------
-// 9. Settings tab
+// 9. Settings tab (admin management only)
 // ---------------------------------------------------------------------------
 
 async function loadSettings() {
@@ -934,7 +1018,7 @@ async function loadSettings() {
     if (error) throw error;
     const admins = data || [];
     container.innerHTML = renderSettings(admins);
-    bindSettingsEvents(admins);
+    bindSettingsEvents();
   } catch (err) {
     container.innerHTML = '<div class="empty">Failed to load settings.</div>';
     showToast(err.message || "Settings error", "error");
@@ -945,6 +1029,7 @@ function renderSettings(admins) {
   return `
     <div class="settings-section">
       <h3>Admin Users</h3>
+      <div class="table-responsive">
       <table class="data-table">
         <thead><tr><th>Email</th><th>Added</th><th>Actions</th></tr></thead>
         <tbody>
@@ -960,6 +1045,7 @@ function renderSettings(admins) {
             </tr>`).join("")}
         </tbody>
       </table>
+      </div>
       <div class="add-admin-form">
         <input type="email" id="new-admin-email" placeholder="Email address" class="input" />
         <button class="btn btn--accent" id="add-admin-btn">Add Admin</button>
@@ -968,7 +1054,6 @@ function renderSettings(admins) {
 }
 
 function bindSettingsEvents() {
-  // Remove admin buttons
   document.querySelectorAll(".action-remove-admin").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const email = btn.dataset.email;
@@ -989,7 +1074,6 @@ function bindSettingsEvents() {
     });
   });
 
-  // Add admin
   const addBtn = document.getElementById("add-admin-btn");
   const emailInput = document.getElementById("new-admin-email");
   if (addBtn && emailInput) {
@@ -1038,15 +1122,9 @@ document.addEventListener("click", (e) => {
   const scope = pagination.dataset.scope;
   const delta = prev ? -1 : 1;
   switch (scope) {
-    case "users":
-      loadUsers(usersPage + delta);
-      break;
-    case "entries":
-      loadEntries(entriesPage + delta);
-      break;
-    case "heartbeat":
-      loadHeartbeat(heartbeatPage + delta);
-      break;
+    case "users": loadUsers(usersPage + delta); break;
+    case "entries": loadEntries(entriesPage + delta); break;
+    case "heartbeat": loadHeartbeat(heartbeatPage + delta); break;
   }
 });
 
