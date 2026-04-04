@@ -909,7 +909,7 @@ function bindHeartbeatEvents() {
       );
       if (!confirmed) return;
       try {
-        const { data, error } = await getClient().rpc("admin_clear_heartbeat_runs");
+        const { data, error } = await getClient().rpc("admin_clear_heartbeat_runs", { p_confirm: "DELETE ALL" });
         if (error) throw error;
         showToast(`${data} run(s) deleted.`, "success");
         loadHeartbeat();
