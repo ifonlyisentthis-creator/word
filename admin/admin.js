@@ -444,9 +444,9 @@ async function loadUsers(page) {
   if (currentUserSub === "active") {
     params.p_status = "active";
   } else if (currentUserSub === "new") {
-    params.p_created_since = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+    params.p_status = "new_today";
   } else if (currentUserSub === "no-vault") {
-    params.p_had_vault_activity = false;
+    params.p_status = "no_vault";
   }
 
   try {

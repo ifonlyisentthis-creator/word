@@ -129,7 +129,9 @@ BEGIN
   AND (
     p_status IS NULL
     OR (p_status = 'grace' AND p.warning_sent_at IS NOT NULL AND p.protocol_executed_at IS NULL)
-    OR (p_status <> 'grace' AND p.status = p_status)
+    OR (p_status = 'new_today' AND p.created_at >= date_trunc('day', now()))
+    OR (p_status = 'no_vault' AND p.had_vault_activity = false)
+    OR (p_status NOT IN ('grace', 'new_today', 'no_vault') AND p.status = p_status)
   )
   AND (p_subscription IS NULL OR p.subscription_status = p_subscription);
 
@@ -155,7 +157,9 @@ BEGIN
     AND (
       p_status IS NULL
       OR (p_status = 'grace' AND p.warning_sent_at IS NOT NULL AND p.protocol_executed_at IS NULL)
-      OR (p_status <> 'grace' AND p.status = p_status)
+      OR (p_status = 'new_today' AND p.created_at >= date_trunc('day', now()))
+      OR (p_status = 'no_vault' AND p.had_vault_activity = false)
+      OR (p_status NOT IN ('grace', 'new_today', 'no_vault') AND p.status = p_status)
     )
     AND (p_subscription IS NULL OR p.subscription_status = p_subscription)
     ORDER BY p.created_at DESC
