@@ -9,7 +9,7 @@
     />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com"
+      content="default-src 'self'; base-uri 'none'; form-action 'self' https://*.supabase.co; frame-ancestors 'none'; object-src 'none'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com"
     />
     <title>Afterword &middot; Admin</title>
 
@@ -43,6 +43,12 @@
           <input id="login-password" type="password" placeholder="Password" />
         </div>
         <button id="login-btn" class="primary">Sign In</button>
+        <div style="display:flex;align-items:center;gap:12px;margin:4px 0">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span style="color:var(--muted);font-size:0.8rem">or</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+        <button id="google-btn" class="primary" style="background:var(--panel);color:var(--text);border:1px solid var(--border)">Sign in with Google</button>
         <div id="login-status" class="status"></div>
       </div>
     </div>

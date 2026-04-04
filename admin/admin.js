@@ -142,10 +142,10 @@ const HIDDEN_FIELDS = new Set([
 const loginScreen = document.getElementById("login-screen");
 const deniedScreen = document.getElementById("denied-screen");
 const adminPanel = document.getElementById("admin-panel");
-const loginForm = document.getElementById("login-form");
-const loginError = document.getElementById("login-error");
-const userEmailDisplay = document.getElementById("user-email");
-const signOutBtn = document.getElementById("sign-out");
+const loginForm = document.getElementById("login-screen");
+const loginError = document.getElementById("login-status");
+const userEmailDisplay = document.getElementById("admin-email");
+const signOutBtn = document.getElementById("signout-btn");
 
 let currentSession = null;
 let currentUserEmail = null;
@@ -202,12 +202,13 @@ async function init() {
   await handleSession(session);
 }
 
-if (loginForm) {
-  loginForm.addEventListener("submit", async (e) => {
+const loginBtn = document.getElementById("login-btn");
+if (loginBtn) {
+  loginBtn.addEventListener("click", async (e) => {
     e.preventDefault();
     loginError.textContent = "";
-    const email = document.getElementById("email").value.trim();
-    const password = document.getElementById("password").value;
+    const email = document.getElementById("login-email").value.trim();
+    const password = document.getElementById("login-password").value;
     if (!email || !password) {
       loginError.textContent = "Please enter email and password.";
       return;
@@ -224,8 +225,34 @@ if (loginForm) {
   });
 }
 
+const googleBtn = document.getElementById("google-btn");
+if (googleBtn) {
+  googleBtn.addEventListener("click", async () => {
+    const client = getClient();
+    if (!client) return;
+    try {
+      const { error } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
+      });
+      if (error) throw error;
+    } catch (err) {
+      if (loginError) loginError.textContent = err.message || "Google sign-in failed.";
+    }
+  });
+}
+
 if (signOutBtn) {
   signOutBtn.addEventListener("click", async () => {
+    const client = getClient();
+    if (client) await client.auth.signOut();
+    showScreen(loginScreen);
+  });
+}
+
+const deniedSignOutBtn = document.getElementById("denied-signout");
+if (deniedSignOutBtn) {
+  deniedSignOutBtn.addEventListener("click", async () => {
     const client = getClient();
     if (client) await client.auth.signOut();
     showScreen(loginScreen);
