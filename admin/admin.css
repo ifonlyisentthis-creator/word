@@ -347,6 +347,12 @@ body {
   color: var(--danger);
 }
 
+.badge.muted {
+  border-color: var(--muted);
+  color: var(--muted);
+  opacity: 0.6;
+}
+
 /* ═══ Action Buttons ═══ */
 .btn {
   display: inline-flex;

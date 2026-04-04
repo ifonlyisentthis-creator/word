@@ -446,7 +446,7 @@ function renderUsersTable(rows) {
             <td>${statusBadge(r.status)}</td>
             <td>${subBadge(r.subscription_status)}</td>
             <td>${esc(r.app_mode || "vault")}</td>
-            <td>${fmtNum(r.total_entry_count)}</td>
+            <td>${fmtNum(r.entry_count)}</td>
             <td>${timerDisplay(r)}</td>
             <td title="${esc(formatDate(r.last_check_in))}">${timeAgo(r.last_check_in)}</td>
             <td title="${esc(formatDate(r.created_at))}">${timeAgo(r.created_at)}</td>
