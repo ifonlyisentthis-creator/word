@@ -2,6 +2,16 @@
   "rewrites": [
     {
       "source": "/",
+      "has": [{ "type": "host", "value": "admin.afterword-app.com" }],
+      "destination": "/admin/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "admin.afterword-app.com" }],
+      "destination": "/admin/$1"
+    },
+    {
+      "source": "/",
       "has": [{ "type": "host", "value": "view.afterword-app.com" }],
       "destination": "/viewer/index.html"
     },

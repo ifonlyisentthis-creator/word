@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Afterword Admin Panel — manage users, entries, and system health."
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com"
+    />
+    <title>Afterword &middot; Admin</title>
+
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Work+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body>
+
+    <!-- Login screen (shown when not authed) -->
+    <div id="login-screen" class="login-container">
+      <div class="card">
+        <h1 style="font-family:Cinzel,serif;text-align:center">Afterword</h1>
+        <p style="color:var(--muted);text-align:center;font-size:0.9rem">Admin Panel</p>
+        <div class="field">
+          <label for="login-email">Email</label>
+          <input id="login-email" type="email" placeholder="admin@example.com" />
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" placeholder="Password" />
+        </div>
+        <button id="login-btn" class="primary">Sign In</button>
+        <div id="login-status" class="status"></div>
+      </div>
+    </div>
+
+    <!-- Access denied screen -->
+    <div id="denied-screen" class="login-container hidden">
+      <div class="card" style="text-align:center">
+        <h2 style="color:var(--danger)">Access Denied</h2>
+        <p style="color:var(--muted)">Your account is not authorized to access the admin panel.</p>
+        <button id="denied-signout" class="primary">Sign Out</button>
+      </div>
+    </div>
+
+    <!-- Admin panel (shown when authed + admin) -->
+    <div id="admin-panel" class="admin hidden">
+      <div class="topbar">
+        <span class="topbar__brand">Afterword Admin</span>
+        <div class="topbar__right">
+          <span id="admin-email" class="topbar__email"></span>
+          <button id="signout-btn" class="btn btn--ghost">Sign Out</button>
+        </div>
+      </div>
+
+      <nav class="tabs">
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="users">Users</button>
+        <button class="tab" data-tab="entries">Entries</button>
+        <button class="tab" data-tab="heartbeat">Heartbeat</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </nav>
+
+      <main class="content">
+        <section id="tab-dashboard" class="tab-content"></section>
+        <section id="tab-users" class="tab-content hidden"></section>
+        <section id="tab-entries" class="tab-content hidden"></section>
+        <section id="tab-heartbeat" class="tab-content hidden"></section>
+        <section id="tab-settings" class="tab-content hidden"></section>
+      </main>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+      <div class="modal">
+        <h3 id="modal-title"></h3>
+        <p id="modal-body"></p>
+        <div class="modal__actions">
+          <button id="modal-cancel" class="btn btn--ghost">Cancel</button>
+          <button id="modal-confirm" class="btn btn--danger">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.1/dist/umd/supabase.js"
+      integrity="sha384-UQqa4F22t61OBek5p1lbENZrwKyvyv2zZ3/9D1u3HdkoEz/0mHwAuIQyFoH+NGVM"
+      crossorigin="anonymous"
+    ></script>
+    <script src="config.js"></script>
+    <script src="admin.js"></script>
+  </body>
+</html>

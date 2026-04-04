@@ -1,0 +1,4 @@
+window.AFTERWORD_ADMIN_CONFIG = {
+  supabaseUrl: "https://abxduxfiwhsjsqicrbru.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFieGR1eGZpd2hzanNxaWNyYnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxODQ4MzYsImV4cCI6MjA4NDc2MDgzNn0.N4FzFC_U3vlLTZRPCldQJZaHMGVyhaSA3ErDhFMXa4k",
+};

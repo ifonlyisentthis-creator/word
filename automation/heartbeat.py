@@ -82,6 +82,52 @@ FREE_SOUL_FIRES = frozenset({"etherealOrb", "goldenPulse", "nebulaHeart", None})
 _HTTP_SESSION: requests.Session | None = None
 _resend_quota_exhausted = False  # set True when Resend daily limit (100/day free) is hit
 
+# ── Heartbeat run metrics (populated during execution, stored in DB at end) ──
+_metrics = {
+    "emails_sent": 0,
+    "emails_failed": 0,
+    "pushes_sent": 0,
+    "pushes_failed": 0,
+    "entries_delivered": 0,
+    "entries_destroyed": 0,
+    "entries_cleaned_up": 0,
+    "bots_cleaned_up": 0,
+    "recurring_sent": 0,
+    "scheduled_delivered": 0,
+    "downgrades_processed": 0,
+    "rc_verifications": 0,
+    "errors": [],
+    "warnings": [],
+}
+
+
+def _reset_metrics():
+    """Reset all metrics for a fresh heartbeat run."""
+    _metrics["emails_sent"] = 0
+    _metrics["emails_failed"] = 0
+    _metrics["pushes_sent"] = 0
+    _metrics["pushes_failed"] = 0
+    _metrics["entries_delivered"] = 0
+    _metrics["entries_destroyed"] = 0
+    _metrics["entries_cleaned_up"] = 0
+    _metrics["bots_cleaned_up"] = 0
+    _metrics["recurring_sent"] = 0
+    _metrics["scheduled_delivered"] = 0
+    _metrics["downgrades_processed"] = 0
+    _metrics["rc_verifications"] = 0
+    _metrics["errors"] = []
+    _metrics["warnings"] = []
+
+
+def _record_error(msg: str):
+    """Record a CRITICAL-level event."""
+    _metrics["errors"].append(msg[:500])
+
+
+def _record_warning(msg: str):
+    """Record a WARNING-level event."""
+    _metrics["warnings"].append(msg[:500])
+
 
 def _mark_resend_quota_exhausted(response: "requests.Response") -> bool:
     """Check if a Resend response indicates the daily quota is exhausted.
@@ -681,8 +727,11 @@ def send_email(
     )
 
     if response.status_code >= 400:
+        _metrics["emails_failed"] += 1
         _mark_resend_quota_exhausted(response)
         raise RuntimeError(f"Resend error: {response.status_code} {response.text}")
+
+    _metrics["emails_sent"] += 1
 
 
 
@@ -830,7 +879,7 @@ def send_push_v1(
 
 
 
-    return _post_json_with_retries(
+    response = _post_json_with_retries(
 
         url,
 
@@ -845,6 +894,13 @@ def send_push_v1(
         payload=payload,
 
     )
+
+    if response.status_code < 400:
+        _metrics["pushes_sent"] += 1
+    else:
+        _metrics["pushes_failed"] += 1
+
+    return response
 
 
 
@@ -1403,6 +1459,7 @@ def claim_entry_for_sending(client, entry_id: str) -> bool:
     verify = client.table("vault_entries").select("status").eq("id", entry_id).execute()
     if not verify.data or verify.data[0].get("status") != "sending":
         print(f"CRITICAL: claim_entry_for_sending write was silently reverted for {entry_id} — trigger or DB issue")
+        _record_error(f"claim_entry_for_sending write was silently reverted for {entry_id} — trigger or DB issue")
         return False
     return True
 
@@ -1434,6 +1491,7 @@ def mark_entry_sent(client, entry_id: str, sent_at: datetime) -> bool:
     verify = client.table("vault_entries").select("status").eq("id", entry_id).execute()
     if not verify.data or verify.data[0].get("status") != "sent":
         print(f"CRITICAL: mark_entry_sent write was silently reverted for {entry_id} — trigger or DB issue")
+        _record_error(f"mark_entry_sent write was silently reverted for {entry_id} — trigger or DB issue")
         return False
     return True
 
@@ -1648,8 +1706,10 @@ def process_expired_entries(
             hmac_key_bytes = decrypt_with_server_secret(hmac_key_encrypted, server_secret)
         except Exception as exc:  # noqa: BLE001
             print(f"WARNING: Failed to decrypt HMAC key for user {user_id}: {exc} — delivery will proceed without HMAC check")
+            _record_warning(f"Failed to decrypt HMAC key for user {user_id}: {exc}")
     elif input_send_count > 0:
         print(f"WARNING: User {user_id} has {input_send_count} send entries but hmac_key_encrypted is NULL — delivery will proceed without HMAC check")
+        _record_warning(f"User {user_id} has {input_send_count} send entries but hmac_key_encrypted is NULL")
 
     # Counters for post-loop integrity summary
     hmac_mismatches = 0
@@ -1680,6 +1740,7 @@ def process_expired_entries(
                 except Exception:  # noqa: BLE001
                     pass
                 delete_entry(client, entry)
+                _metrics["entries_destroyed"] += 1
                 continue
 
             # ── SEND entry validation ──
@@ -1705,6 +1766,7 @@ def process_expired_entries(
 
             if not recipient_encrypted:
                 print(f"CRITICAL: Empty recipient for send entry {entry_id} user {user_id} — entry preserved")
+                _record_error(f"Empty recipient for send entry {entry_id} user {user_id}")
                 release_entry_lock(client, entry_id)
                 continue
 
@@ -1716,12 +1778,14 @@ def process_expired_entries(
                 ).decode("utf-8").strip()
             except Exception as dec_exc:  # noqa: BLE001
                 print(f"CRITICAL: Failed to decrypt recipient for send entry {entry_id} user {user_id}: {dec_exc}")
+                _record_error(f"Failed to decrypt recipient for send entry {entry_id} user {user_id}: {dec_exc}")
                 decryption_failures += 1
                 release_entry_lock(client, entry_id)
                 continue
 
             if not _EMAIL_RE.match(recipient_email):
                 print(f"CRITICAL: Invalid recipient email format for send entry {entry_id} user {user_id} — entry preserved")
+                _record_error(f"Invalid recipient email format for send entry {entry_id} user {user_id}")
                 release_entry_lock(client, entry_id)
                 continue
 
@@ -1742,6 +1806,7 @@ def process_expired_entries(
                 data_key_encrypted = entry.get("data_key_encrypted")
                 if not data_key_encrypted:
                     print(f"CRITICAL: Missing data_key_encrypted for send entry {entry_id} user {user_id} — entry preserved")
+                    _record_error(f"Missing data_key_encrypted for send entry {entry_id} user {user_id}")
                     release_entry_lock(client, entry_id)
                     continue
 
@@ -1750,6 +1815,7 @@ def process_expired_entries(
                     data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
                 except Exception as dk_exc:  # noqa: BLE001
                     print(f"CRITICAL: Failed to decrypt data_key for send entry {entry_id} user {user_id}: {dk_exc}")
+                    _record_error(f"Failed to decrypt data_key for send entry {entry_id} user {user_id}: {dk_exc}")
                     decryption_failures += 1
                     release_entry_lock(client, entry_id)
                     continue
@@ -1843,7 +1909,9 @@ def process_expired_entries(
                         time.sleep(1)
                 if not marked:
                     print(f"WARNING: Could not mark entry {entry_id} as sent — will be requeued")
+                    _record_warning(f"Could not mark entry {entry_id} as sent — will be requeued")
                 had_send = True
+                _metrics["entries_delivered"] += 1
                 try:
                     send_executed_push(
                         client, profile["id"], entry_id, entry_title, fcm_ctx,
@@ -1870,6 +1938,7 @@ def process_expired_entries(
             f"failure(s) detected — possible data corruption or tampering. "
             f"HMAC mismatches: {hmac_mismatches}."
         )
+        _record_error(f"User {user_id}: {decryption_failures} entry decryption failure(s) — possible tampering. HMAC mismatches: {hmac_mismatches}")
         _try_send_tampering_notification(
             client=client,
             profile=profile,
@@ -1933,6 +2002,7 @@ def process_scheduled_entries(
             hmac_key_bytes = decrypt_with_server_secret(hmac_key_encrypted, server_secret)
         except Exception as exc:  # noqa: BLE001
             print(f"WARNING: Failed to decrypt HMAC key for scheduled user {user_id}: {exc}")
+            _record_warning(f"Failed to decrypt HMAC key for scheduled user {user_id}: {exc}")
 
     prepared_sends: list[tuple[str, str, str, str, str | None, dict]] = []
 
@@ -1947,6 +2017,7 @@ def process_scheduled_entries(
             if action == "destroy":
                 entry_title = entry.get("title") or "Untitled"
                 delete_entry(client, entry)
+                _metrics["entries_destroyed"] += 1
                 continue
 
             # Decrypt recipient email
@@ -1964,6 +2035,7 @@ def process_scheduled_entries(
 
             if not recipient_encrypted:
                 print(f"CRITICAL: Empty recipient for scheduled entry {entry_id} user {user_id}")
+                _record_error(f"Empty recipient for scheduled entry {entry_id} user {user_id}")
                 release_entry_lock(client, entry_id)
                 continue
 
@@ -1974,12 +2046,14 @@ def process_scheduled_entries(
                 ).decode("utf-8").strip()
             except Exception as dec_exc:  # noqa: BLE001
                 print(f"CRITICAL: Failed to decrypt recipient for scheduled entry {entry_id}: {dec_exc}")
+                _record_error(f"Failed to decrypt recipient for scheduled entry {entry_id}: {dec_exc}")
                 decryption_failures += 1
                 release_entry_lock(client, entry_id)
                 continue
 
             if not _EMAIL_RE.match(recipient_email):
                 print(f"CRITICAL: Invalid recipient email format for scheduled entry {entry_id}")
+                _record_error(f"Invalid recipient email format for scheduled entry {entry_id}")
                 release_entry_lock(client, entry_id)
                 continue
 
@@ -1998,6 +2072,7 @@ def process_scheduled_entries(
                 data_key_encrypted = entry.get("data_key_encrypted")
                 if not data_key_encrypted:
                     print(f"CRITICAL: Missing data_key for scheduled entry {entry_id}")
+                    _record_error(f"Missing data_key for scheduled entry {entry_id}")
                     release_entry_lock(client, entry_id)
                     continue
 
@@ -2006,6 +2081,7 @@ def process_scheduled_entries(
                     data_key_bytes = decrypt_with_server_secret(data_key_ciphertext, server_secret)
                 except Exception as dk_exc:  # noqa: BLE001
                     print(f"CRITICAL: Failed to decrypt data_key for scheduled entry {entry_id}: {dk_exc}")
+                    _record_error(f"Failed to decrypt data_key for scheduled entry {entry_id}: {dk_exc}")
                     decryption_failures += 1
                     release_entry_lock(client, entry_id)
                     continue
@@ -2096,6 +2172,7 @@ def process_scheduled_entries(
                                         break
                                     else:
                                         print(f"WARNING: grace_until write silently reverted for {entry_id} (attempt {_gu_attempt + 1})")
+                                        _record_warning(f"grace_until write silently reverted for {entry_id} (attempt {_gu_attempt + 1})")
                                 except Exception:  # noqa: BLE001
                                     if _gu_attempt < 2:
                                         time.sleep(0.5)
@@ -2105,6 +2182,7 @@ def process_scheduled_entries(
                                 # Missing grace_until just means the entry won't
                                 # auto-cleanup, which is far safer than re-sending.
                                 print(f"WARNING: grace_until failed for scheduled entry {entry_id}, keeping status=sent (no revert)")
+                                _record_warning(f"grace_until failed for scheduled entry {entry_id}, keeping status=sent")
                             marked = True
                             break
                     except Exception as mark_exc:  # noqa: BLE001
@@ -2114,6 +2192,7 @@ def process_scheduled_entries(
                         time.sleep(1)
                 if marked:
                     sent_count += 1
+                    _metrics["scheduled_delivered"] += 1
 
             if chunk_start + RESEND_BATCH_LIMIT < len(prepared_sends):
                 time.sleep(RESEND_INTER_CHUNK_DELAY)
@@ -2141,6 +2220,7 @@ def process_scheduled_entries(
             f"entry decryption failure(s) detected — possible data "
             f"corruption or tampering. HMAC mismatches: {hmac_mismatches}."
         )
+        _record_error(f"User {user_id} (scheduled): {decryption_failures} entry decryption failure(s) — possible tampering. HMAC mismatches: {hmac_mismatches}")
         _try_send_tampering_notification(
             client=client,
             profile=profile,
@@ -2251,6 +2331,7 @@ def process_recurring_entries(
             except Exception as rec_dec_exc:
                 decryption_failures += 1
                 print(f"CRITICAL: Recipient decryption failed for recurring entry {entry_id}: {rec_dec_exc}")
+                _record_error(f"Recipient decryption failed for recurring entry {entry_id}: {rec_dec_exc}")
                 continue
 
             if not _EMAIL_RE.match(recipient_email):
@@ -2262,11 +2343,13 @@ def process_recurring_entries(
             # Forever Letters cannot use ZK mode — skip if misconfigured
             if entry.get("is_zero_knowledge", False):
                 print(f"CRITICAL: Recurring entry {entry_id} has is_zero_knowledge=True — Forever Letters do not support ZK mode, skipping")
+                _record_error(f"Recurring entry {entry_id} has is_zero_knowledge=True — Forever Letters do not support ZK mode")
                 continue
 
             data_key_encrypted = entry.get("data_key_encrypted")
             if not data_key_encrypted:
                 print(f"CRITICAL: Missing data_key for recurring entry {entry_id}")
+                _record_error(f"Missing data_key for recurring entry {entry_id}")
                 continue
 
             data_key_ciphertext = extract_server_ciphertext(data_key_encrypted)
@@ -2275,6 +2358,7 @@ def process_recurring_entries(
             except Exception as dec_exc:
                 decryption_failures += 1
                 print(f"CRITICAL: AES-GCM decryption failed for recurring entry {entry_id}: {dec_exc}")
+                _record_error(f"AES-GCM decryption failed for recurring entry {entry_id}: {dec_exc}")
                 continue
             security_key = base64.b64encode(data_key_bytes).decode("utf-8")
             email_payload = build_unlock_email_payload(
@@ -2317,13 +2401,16 @@ def process_recurring_entries(
                         break
                     else:
                         print(f"WARNING: last_sent_year write silently reverted for recurring entry {entry_id} (attempt {_yr_attempt + 1})")
+                        _record_warning(f"last_sent_year write silently reverted for recurring entry {entry_id} (attempt {_yr_attempt + 1})")
                 except Exception as yr_exc:  # noqa: BLE001
                     if _yr_attempt == 2:
                         print(f"WARNING: Failed to update last_sent_year for recurring entry {entry_id} after 3 attempts: {yr_exc}")
+                        _record_warning(f"Failed to update last_sent_year for recurring entry {entry_id} after 3 attempts: {yr_exc}")
                 if _yr_attempt < 2:
                     time.sleep(1)
 
             sent_count += 1
+            _metrics["recurring_sent"] += 1
             print(f"Recurring entry {entry_id} ('{entry_title}') sent for year {current_year}{'' if year_updated else ' (last_sent_year update FAILED — may re-send)'}")
 
         except Exception as exc:  # noqa: BLE001
@@ -2341,6 +2428,7 @@ def process_recurring_entries(
             f"entry decryption failure(s) detected — possible data "
             f"corruption or tampering."
         )
+        _record_error(f"User {user_id} (recurring): {decryption_failures} entry decryption failure(s) — possible tampering")
         _try_send_tampering_notification(
             client=client,
             profile=profile,
@@ -2468,6 +2556,7 @@ def cleanup_sent_entries(client) -> None:
                                 tombstone_ok = True
                             else:
                                 print(f"CRITICAL: Tombstone insert failed for entry {entry.get('id', '?')}: {tomb_exc} — skipping delete to preserve history")
+                                _record_error(f"Tombstone insert failed for entry {entry.get('id', '?')}: {tomb_exc}")
 
                         if tombstone_ok:
                             try:
@@ -2581,6 +2670,7 @@ def cleanup_sent_entries(client) -> None:
                     tombstone_ok = True
                 else:
                     print(f"CRITICAL: Per-entry tombstone failed for {eid}: {tomb_exc}")
+                    _record_error(f"Per-entry tombstone failed for {eid}: {tomb_exc}")
 
             if tombstone_ok:
                 try:
@@ -2594,6 +2684,8 @@ def cleanup_sent_entries(client) -> None:
             f"cleanup_sent_entries: done (per-entry grace) — "
             f"tombstoned={per_entry_tombstoned} deleted={per_entry_deleted}"
         )
+
+    _metrics["entries_cleaned_up"] += total_deleted + per_entry_deleted
 
 
 def cleanup_bot_accounts(client, now: datetime) -> None:
@@ -2673,6 +2765,7 @@ def cleanup_bot_accounts(client, now: datetime) -> None:
                 # No activity at all — delete the auth user (cascades to profile + push_devices)
                 try:
                     client.auth.admin.delete_user(uid)
+                    _metrics["bots_cleaned_up"] += 1
                     print(f"Deleted inactive bot account: {uid}")
                 except Exception as exc:  # noqa: BLE001
                     print(f"Failed to delete bot account {uid}: {exc}")
@@ -3118,6 +3211,7 @@ def handle_subscription_downgrade(
             # Email failed — downgrade_email_pending stays True for retry
             print(f"Failed to send downgrade email to {uid}: {exc} — will retry next run")
 
+    _metrics["downgrades_processed"] += 1
     return True
 
 
@@ -3143,6 +3237,7 @@ def main() -> int:
     rc_api_secret = os.getenv("REVENUECAT_API_SECRET", "")
     if not rc_api_secret:
         print("WARNING: REVENUECAT_API_SECRET not set — server-side subscription verification disabled")
+        _record_warning("REVENUECAT_API_SECRET not set — server-side subscription verification disabled")
 
     client = create_client(supabase_url, supabase_key)
 
@@ -3163,6 +3258,8 @@ def main() -> int:
     processed_entries = 0
 
     start_time = time.monotonic()
+    run_started_at = datetime.now(timezone.utc).isoformat()
+    _reset_metrics()
 
     for profile_batch in iter_active_profiles(client):
 
@@ -3249,6 +3346,7 @@ def main() -> int:
                   if sc_needs_rc:
                       try:
                           rc_status = verify_subscription_with_revenuecat(rc_api_secret, user_id)
+                          _metrics["rc_verifications"] += 1
                           if rc_status is not None and rc_status != sub_status:
                               if sub_status in PAID_STATUSES and rc_status == "free":
                                   print(
@@ -3315,6 +3413,7 @@ def main() -> int:
 
           if last_check_in is None:
               print(f"WARN: User {user_id} has NULL last_check_in — skipping (timer cannot be computed)")
+              _record_warning(f"User {user_id} has NULL last_check_in — skipping")
               continue
 
 
@@ -3365,6 +3464,7 @@ def main() -> int:
                       rc_status = verify_subscription_with_revenuecat(
                           rc_api_secret, user_id,
                       )
+                      _metrics["rc_verifications"] += 1
                       if rc_status is not None and rc_status != sub_status:
                           # Safety audit: log paid→free transitions prominently
                           if sub_status in PAID_STATUSES and rc_status == "free":
@@ -3917,6 +4017,38 @@ def main() -> int:
         cleanup_bot_accounts(client, now)
     except Exception as exc:  # noqa: BLE001
         print(f"cleanup_bot_accounts failed: {exc}")
+
+    # ── Store heartbeat run summary in DB ──
+    try:
+        client.table("heartbeat_runs").insert({
+            "started_at": run_started_at,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "runtime_seconds": round(elapsed_total, 1),
+            "profiles_processed": processed_profiles,
+            "entries_seen": processed_entries,
+            "emails_sent": _metrics["emails_sent"],
+            "emails_failed": _metrics["emails_failed"],
+            "pushes_sent": _metrics["pushes_sent"],
+            "pushes_failed": _metrics["pushes_failed"],
+            "entries_delivered": _metrics["entries_delivered"],
+            "entries_destroyed": _metrics["entries_destroyed"],
+            "entries_cleaned_up": _metrics["entries_cleaned_up"],
+            "bots_cleaned_up": _metrics["bots_cleaned_up"],
+            "recurring_sent": _metrics["recurring_sent"],
+            "scheduled_delivered": _metrics["scheduled_delivered"],
+            "downgrades_processed": _metrics["downgrades_processed"],
+            "rc_verifications": _metrics["rc_verifications"],
+            "errors": json.dumps(_metrics["errors"][-50:]),
+            "warnings": json.dumps(_metrics["warnings"][-50:]),
+            "cleanup_stats": json.dumps({
+                "entries_cleaned_up": _metrics["entries_cleaned_up"],
+                "bots_cleaned_up": _metrics["bots_cleaned_up"],
+            }),
+            "resend_quota_exhausted": _resend_quota_exhausted,
+            "exit_reason": "completed",
+        }).execute()
+    except Exception as _db_exc:
+        print(f"Failed to store heartbeat run summary: {_db_exc}")
 
     return 0
 
