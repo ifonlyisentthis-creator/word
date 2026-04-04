@@ -128,7 +128,10 @@ BEGIN
   ))
   AND (
     p_status IS NULL
-    OR (p_status = 'grace' AND p.warning_sent_at IS NOT NULL AND p.protocol_executed_at IS NULL)
+    OR (p_status = 'grace' AND (
+      (p.warning_sent_at IS NOT NULL AND p.protocol_executed_at IS NULL)
+      OR EXISTS (SELECT 1 FROM vault_entries ve WHERE ve.user_id = p.id AND ve.status = 'sent' AND ve.grace_until IS NOT NULL AND ve.grace_until > now())
+    ))
     OR (p_status = 'new_today' AND p.created_at >= date_trunc('day', now()))
     OR (p_status = 'no_vault' AND p.had_vault_activity = false)
     OR (p_status NOT IN ('grace', 'new_today', 'no_vault') AND p.status = p_status)
@@ -156,7 +159,10 @@ BEGIN
     ))
     AND (
       p_status IS NULL
-      OR (p_status = 'grace' AND p.warning_sent_at IS NOT NULL AND p.protocol_executed_at IS NULL)
+      OR (p_status = 'grace' AND (
+        (p.warning_sent_at IS NOT NULL AND p.protocol_executed_at IS NULL)
+        OR EXISTS (SELECT 1 FROM vault_entries ve WHERE ve.user_id = p.id AND ve.status = 'sent' AND ve.grace_until IS NOT NULL AND ve.grace_until > now())
+      ))
       OR (p_status = 'new_today' AND p.created_at >= date_trunc('day', now()))
       OR (p_status = 'no_vault' AND p.had_vault_activity = false)
       OR (p_status NOT IN ('grace', 'new_today', 'no_vault') AND p.status = p_status)
