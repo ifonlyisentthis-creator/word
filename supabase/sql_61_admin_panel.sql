@@ -192,7 +192,10 @@ BEGIN
 
     -- App mode breakdown
     'vault_mode_users',     (SELECT count(*) FROM profiles WHERE COALESCE(app_mode, 'vault') = 'vault'),
-    'scheduled_mode_users', (SELECT count(*) FROM profiles WHERE app_mode = 'scheduled')
+    'scheduled_mode_users', (SELECT count(*) FROM profiles WHERE app_mode = 'scheduled'),
+
+    -- Activity
+    'no_vault_activity',    (SELECT count(*) FROM profiles WHERE had_vault_activity = false)
   ) INTO result;
 
   RETURN result;

@@ -350,6 +350,7 @@ async function loadDashboard() {
       <div class="stat-grid">
         ${statCard("Vault Mode Users", s.vault_mode_users)}
         ${statCard("Scheduled Mode Users", s.scheduled_mode_users)}
+        ${statCard("No Vault Activity", s.no_vault_activity, s.total_users)}
       </div>`;
   } catch (err) {
     container.innerHTML = '<div class="empty">Failed to load dashboard.</div>';
