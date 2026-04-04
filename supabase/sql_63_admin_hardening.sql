@@ -128,11 +128,18 @@ BEGIN
   ))
   AND (
     p_status IS NULL
-    OR (p_status = 'grace'
-        AND COALESCE(p.app_mode, 'vault') = 'vault'
-        AND p.status IN ('inactive', 'archived')
-        AND p.protocol_executed_at IS NOT NULL
-        AND p.protocol_executed_at + interval '30 days' > now())
+    OR (p_status = 'grace' AND (
+      -- Guardian: profile-level grace (protocol fired, inactive, within 30 days)
+      (COALESCE(p.app_mode, 'vault') = 'vault'
+       AND p.status IN ('inactive', 'archived')
+       AND p.protocol_executed_at IS NOT NULL
+       AND p.protocol_executed_at + interval '30 days' > now())
+      OR
+      -- Time Capsule: has entries with active grace_until
+      EXISTS (SELECT 1 FROM vault_entries ve
+              WHERE ve.user_id = p.id AND ve.status = 'sent'
+              AND ve.grace_until IS NOT NULL AND ve.grace_until > now())
+    ))
     OR (p_status = 'new_today' AND p.created_at >= date_trunc('day', now()))
     OR (p_status = 'no_vault' AND p.had_vault_activity = false)
     OR (p_status NOT IN ('grace', 'new_today', 'no_vault') AND p.status = p_status)
@@ -161,11 +168,16 @@ BEGIN
     ))
     AND (
       p_status IS NULL
-      OR (p_status = 'grace'
-          AND COALESCE(p.app_mode, 'vault') = 'vault'
-          AND p.status IN ('inactive', 'archived')
-          AND p.protocol_executed_at IS NOT NULL
-          AND p.protocol_executed_at + interval '30 days' > now())
+      OR (p_status = 'grace' AND (
+        (COALESCE(p.app_mode, 'vault') = 'vault'
+         AND p.status IN ('inactive', 'archived')
+         AND p.protocol_executed_at IS NOT NULL
+         AND p.protocol_executed_at + interval '30 days' > now())
+        OR
+        EXISTS (SELECT 1 FROM vault_entries ve
+                WHERE ve.user_id = p.id AND ve.status = 'sent'
+                AND ve.grace_until IS NOT NULL AND ve.grace_until > now())
+      ))
       OR (p_status = 'new_today' AND p.created_at >= date_trunc('day', now()))
       OR (p_status = 'no_vault' AND p.had_vault_activity = false)
       OR (p_status NOT IN ('grace', 'new_today', 'no_vault') AND p.status = p_status)
