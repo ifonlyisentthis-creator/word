@@ -549,6 +549,30 @@ body {
 .hb-errors ul { color: var(--danger); }
 .hb-warnings ul { color: var(--warning); }
 
+.hb-log {
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.hb-log summary {
+  color: var(--muted);
+}
+
+.hb-log-pre {
+  margin-top: 8px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--muted);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
 /* ═══ Modal ═══ */
 .modal-overlay {
   position: fixed;

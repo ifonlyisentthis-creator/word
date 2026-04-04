@@ -857,6 +857,11 @@ function renderHeartbeatTimeline(rows) {
               <summary>${warnings.length} warning${warnings.length !== 1 ? "s" : ""}</summary>
               <ul>${warnings.map((w) => `<li><span class="hb-warn-ts">${esc(w.timestamp || "")}</span> ${esc(w.message || w)}</li>`).join("")}</ul>
             </details>` : ""}
+          ${r.stdout_log ? `
+            <details class="hb-expandable hb-log">
+              <summary>Full Log</summary>
+              <pre class="hb-log-pre">${esc(r.stdout_log)}</pre>
+            </details>` : ""}
         </div>`;
     }).join("")}
   </div>`;

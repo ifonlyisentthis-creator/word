@@ -16,6 +16,8 @@ import re
 
 import sys
 
+import io
+
 import time
 
 from datetime import datetime, timedelta, timezone
@@ -81,6 +83,25 @@ FREE_SOUL_FIRES = frozenset({"etherealOrb", "goldenPulse", "nebulaHeart", None})
 
 _HTTP_SESSION: requests.Session | None = None
 _resend_quota_exhausted = False  # set True when Resend daily limit (100/day free) is hit
+
+# ── Stdout capture (tee to buffer + real stdout) ──
+class _TeeWriter:
+    """Writes to both a StringIO buffer and the original stdout."""
+    def __init__(self, original):
+        self._original = original
+        self._buffer = io.StringIO()
+
+    def write(self, s):
+        self._original.write(s)
+        self._buffer.write(s)
+
+    def flush(self):
+        self._original.flush()
+
+    def getvalue(self):
+        return self._buffer.getvalue()
+
+_log_buffer: _TeeWriter | None = None
 
 # ── Heartbeat run metrics (populated during execution, stored in DB at end) ──
 _metrics = {
@@ -3261,6 +3282,11 @@ def main() -> int:
     run_started_at = datetime.now(timezone.utc).isoformat()
     _reset_metrics()
 
+    # Install stdout tee to capture full log
+    global _log_buffer
+    _log_buffer = _TeeWriter(sys.stdout)
+    sys.stdout = _log_buffer
+
     for profile_batch in iter_active_profiles(client):
 
       # Refresh `now` each batch so timestamps stay accurate during multi-hour runs
@@ -4046,9 +4072,15 @@ def main() -> int:
             }),
             "resend_quota_exhausted": _resend_quota_exhausted,
             "exit_reason": "completed",
+            "stdout_log": _log_buffer.getvalue()[-100000:] if _log_buffer else "",
         }).execute()
     except Exception as _db_exc:
         print(f"Failed to store heartbeat run summary: {_db_exc}")
+
+    # Restore original stdout
+    if _log_buffer:
+        sys.stdout = _log_buffer._original
+        _log_buffer = None
 
     # ── Purge old heartbeat run logs (keep 90 days) ──
     try:
