@@ -4050,6 +4050,15 @@ def main() -> int:
     except Exception as _db_exc:
         print(f"Failed to store heartbeat run summary: {_db_exc}")
 
+    # ── Purge old heartbeat run logs (keep 90 days) ──
+    try:
+        cutoff_90d = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        client.table("heartbeat_runs").delete().lt(
+            "started_at", cutoff_90d
+        ).execute()
+    except Exception as _purge_exc:
+        print(f"Failed to purge old heartbeat runs: {_purge_exc}")
+
     return 0
 
 
