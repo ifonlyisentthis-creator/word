@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import 'package:intl/intl.dart';
 
@@ -438,7 +439,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                 physics: const AlwaysScrollableScrollPhysics(),
 
-                scrollCacheExtent: 500,
+                scrollCacheExtent: ScrollCacheExtent.pixels(500),
 
                 padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
 

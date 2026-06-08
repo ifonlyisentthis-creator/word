@@ -137,8 +137,8 @@ class RevenueCatController extends ChangeNotifier {
         productChangeInfo: isAndroidUpgrade
             ? StoreProductChangeInfo(
                 oldProductId,
-                prorationMode:
-                    StoreReplacementMode.immediateWithTimeProration,
+                replacementMode:
+                    StoreReplacementMode.withTimeProration,
               )
             : null,
       );
