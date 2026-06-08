@@ -438,7 +438,7 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
 
                 physics: const AlwaysScrollableScrollPhysics(),
 
-                cacheExtent: 500,
+                scrollCacheExtent: 500,
 
                 padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
 

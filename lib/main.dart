@@ -72,7 +72,7 @@ Future<void> _initServices() async {
         Firebase.initializeApp(),
       Supabase.initialize(
         url: config.supabaseUrl,
-        anonKey: config.supabaseAnonKey,
+        publishableKey: config.supabaseAnonKey,
         authOptions: FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
         debug: kDebugMode,
       ),

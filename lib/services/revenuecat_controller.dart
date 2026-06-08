@@ -134,11 +134,11 @@ class RevenueCatController extends ChangeNotifier {
 
       final params = PurchaseParams.package(
         package,
-        googleProductChangeInfo: isAndroidUpgrade
-            ? GoogleProductChangeInfo(
+        productChangeInfo: isAndroidUpgrade
+            ? StoreProductChangeInfo(
                 oldProductId,
                 prorationMode:
-                    GoogleProrationMode.immediateWithTimeProration,
+                    StoreReplacementMode.immediateWithTimeProration,
               )
             : null,
       );
